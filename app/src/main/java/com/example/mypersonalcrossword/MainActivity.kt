@@ -1113,9 +1113,35 @@ fun CrosswordApp() {
         else AmbientMusicPlayer.stop()
     }
 
-    // Stop music when app is backgrounded
+    // Tear down music + Firebase listener when the composition is destroyed.
+    // Last-resort safety net for activity-destroy / process-death paths;
+    // normal navigation should call endOnlineGame() so cleanup happens immediately.
     DisposableEffect(Unit) {
-        onDispose { AmbientMusicPlayer.release() }
+        onDispose {
+            AmbientMusicPlayer.release()
+            onlineListener?.let { l ->
+                if (onlineCode.isNotEmpty()) FirebaseGameManager.stopListening(onlineCode, l)
+            }
+        }
+    }
+
+    // Single source of truth for ending an online game. Always call this — never poke
+    // isOnlineGame / onlineCode / onlineListener individually from a navigation handler.
+    val endOnlineGame: () -> Unit = {
+        onlineListener?.let { l ->
+            if (onlineCode.isNotEmpty()) FirebaseGameManager.stopListening(onlineCode, l)
+        }
+        onlineListener      = null
+        if (isOnlineGame && onlineRole == OnlineRole.HOST && onlineCode.isNotEmpty()) {
+            FirebaseGameManager.closeGame(onlineCode)
+        }
+        isOnlineGame        = false
+        onlineRole          = null
+        onlineCode          = ""
+        onlineStatus        = ""
+        remoteInputs        = emptyMap()
+        remoteIsAnswering   = false
+        remoteAnsweringName = ""
     }
 
     // Timer — ticks every second while puzzle is active
@@ -1688,6 +1714,7 @@ fun CrosswordApp() {
                     streakMilestone = null
                     vindPhase = VindicativePhase.PICK_OWN
                     dailyPromptShown = false   // reset so prompt fires again on next login
+                    if (isOnlineGame) endOnlineGame()
                     appMode = AppMode.LOGIN
                 },
                 onQuit                = { (context as? Activity)?.finish() },
@@ -1745,10 +1772,7 @@ fun CrosswordApp() {
                     }
                     GradientBtn("Cancel", redGradient, onClick = {
                         vibrateLight(context)
-                        onlineListener?.let { FirebaseGameManager.stopListening(onlineCode, it) }
-                        onlineListener = null
-                        if (onlineRole == OnlineRole.HOST) FirebaseGameManager.closeGame(onlineCode)
-                        isOnlineGame = false; onlineRole = null; onlineCode = ""
+                        endOnlineGame()
                         appMode = AppMode.CATEGORY_SELECT
                     }, modifier = Modifier.fillMaxWidth())
                 }
@@ -1815,6 +1839,7 @@ fun CrosswordApp() {
                                     wordToInput = null
                                     showWrongFlash = false
                                     streakMilestone = null
+                                    if (isOnlineGame) endOnlineGame()
                                     appMode = AppMode.CATEGORY_SELECT
                                 }) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -2627,6 +2652,7 @@ fun CrosswordApp() {
                         wordToInput = null
                         showWrongFlash = false
                         streakMilestone = null
+                        if (isOnlineGame) endOnlineGame()
                         appMode = AppMode.CATEGORY_SELECT
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -3470,6 +3496,9 @@ fun CrosswordApp() {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                     showTurnDialog = false; vindPassDialogVisible = false
                     pendingTurnDialog = false; wordToInput = null; showConfetti = false
+                    // Online games end with the puzzle — the next puzzle is a fresh local one.
+                    // To play another online round, the host re-creates the game.
+                    if (isOnlineGame) endOnlineGame()
                     launchPuzzle(activeCategory, activeDifficulty)
                 }, modifier = Modifier.fillMaxWidth())
             },
@@ -3479,6 +3508,7 @@ fun CrosswordApp() {
                         vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                         puzzleSolved = false; showConfetti = false; showTurnDialog = false
                         vindPassDialogVisible = false; pendingTurnDialog = false; wordToInput = null
+                        if (isOnlineGame) endOnlineGame()
                         appMode = AppMode.CATEGORY_SELECT
                     }, modifier = Modifier.fillMaxWidth())
                     GradientBtn("Main Menu", appBtnGradient, onClick = {
@@ -3488,6 +3518,7 @@ fun CrosswordApp() {
                         vindPassDialogVisible = false; pendingTurnDialog = false; wordToInput = null
                         showWrongFlash = false; streakMilestone = null
                         vindPhase = VindicativePhase.PICK_OWN; dailyPromptShown = false
+                        if (isOnlineGame) endOnlineGame()
                         appMode = AppMode.LOGIN
                     }, modifier = Modifier.fillMaxWidth())
                 }
