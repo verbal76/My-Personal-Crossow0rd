@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "817461310001",
+    "project_id": "mypersonalcrossword",
+    "storage_bucket": "mypersonalcrossword.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:817461310001:android:3cbe7e9681847114bf1b10",
+        "android_client_info": {
+          "package_name": "com.hag.mypersonalcrossword"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdJJ_Tr8fSWKIQ_FoUIF8gUA61i8dFynk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
