@@ -1273,7 +1273,9 @@ fun CrosswordApp() {
             }.filter { it.value != ' ' }
             if (rawInputs != remoteInputs) {
                 remoteInputs = rawInputs
-                userInputs   = userInputs + rawInputs   // merge; local wins on same key
+                // Map.plus takes the right-hand side on collision, so to keep
+                // local entries authoritative we put userInputs second.
+                userInputs   = rawInputs + userInputs
             }
 
             // Sync turn and scores (team + vindictive both use hostScore/guestScore)
