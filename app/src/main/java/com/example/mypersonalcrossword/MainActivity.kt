@@ -39,6 +39,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -1115,6 +1118,21 @@ fun CrosswordApp() {
     LaunchedEffect(musicEnabled, musicVolume) {
         if (musicEnabled) AmbientMusicPlayer.start(musicVolume)
         else AmbientMusicPlayer.stop()
+    }
+
+    // Pause music when the app is backgrounded; resume it when it returns
+    // (only if the user hasn't toggled music off in the meantime).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE  -> AmbientMusicPlayer.stop()
+                Lifecycle.Event.ON_RESUME -> if (musicEnabled) AmbientMusicPlayer.start(musicVolume)
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Tear down music + Firebase listener when the composition is destroyed.
