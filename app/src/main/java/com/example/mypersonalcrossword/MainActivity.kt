@@ -1096,11 +1096,28 @@ fun CrosswordApp() {
             val pts = if (isDailyPuzzle) 20 else pointsForDifficulty(activeDifficulty)
             val netPts = (pts - hintsUsedThisPuzzle).coerceAtLeast(0)
 
+            // For combined-category puzzles, credit each word to its real
+            // category so the per-category 'used' set and "% explored" stay
+            // accurate. Daily uses a single "Daily" bucket on purpose so
+            // re-played daily words still influence future daily generation.
+            val creditByRealCategory = combinedCategories.isNotEmpty() && !isDailyPuzzle
+            val wordsByCategory: Map<String, List<String>> =
+                if (creditByRealCategory) {
+                    val lookup = allEntries.associateBy { it.answer }
+                    placedWords
+                        .mapNotNull { pw -> lookup[pw.word]?.category?.let { it to pw.word } }
+                        .groupBy({ it.first }, { it.second })
+                } else {
+                    mapOf(activeCategory to placedWords.map { it.word })
+                }
+
             when (activeGameMode) {
                 GameMode.SINGLE, GameMode.DAILY -> {
                     saveManager.addScore(playerName, netPts)
                     saveManager.addCompleted(playerName)
-                    saveManager.addUsedWords(playerName, activeCategory, placedWords.map { it.word })
+                    wordsByCategory.forEach { (cat, words) ->
+                        saveManager.addUsedWords(playerName, cat, words)
+                    }
                     saveManager.clearPuzzle(playerName, activeCategory, activeDifficulty)
                     saveManager.clearElapsed(playerName, activeCategory, activeDifficulty)
                     // Save stat record
@@ -1115,8 +1132,10 @@ fun CrosswordApp() {
                     saveManager.addCompleted(playerName)
                     saveManager.addScore(player2Name, netPts)
                     saveManager.addCompleted(player2Name)
-                    saveManager.addUsedWords(playerName, activeCategory, placedWords.map { it.word })
-                    saveManager.addUsedWords(player2Name, activeCategory, placedWords.map { it.word })
+                    wordsByCategory.forEach { (cat, words) ->
+                        saveManager.addUsedWords(playerName,  cat, words)
+                        saveManager.addUsedWords(player2Name, cat, words)
+                    }
                     // Each player's stat shows their own hint count
                     saveManager.saveStat(playerName, StatRecord(
                         activeCategory, activeDifficulty.name, "TEAM",
