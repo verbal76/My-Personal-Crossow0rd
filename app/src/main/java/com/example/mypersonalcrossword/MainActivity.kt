@@ -349,11 +349,29 @@ class SaveManager(context: Context) {
 
     fun deletePlayer(name: String) {
         if (name.isBlank()) return
-        val current = (prefs.getStringSet("all_players", emptySet()) ?: emptySet()).toMutableSet()
-        current.remove(name)
-        prefs.edit { putStringSet("all_players", current) }
-        // Note: leaves score/stat/save data in prefs (orphaned but harmless).
-        // If re-created, the profile starts fresh because getAllPlayerNames won't list it.
+        // Collect every key tied to this player so re-creating the profile
+        // really does start fresh (the previous version left orphaned scores,
+        // stats, in-progress saves, color prefs, etc.).
+        val exactKeys = setOf(
+            "score_$name", "completed_$name",
+            "cellcolor_$name", "btncolor_$name", "recentcolors_$name",
+            "statkeys_$name", "saves_$name"
+        )
+        val prefixKeys = listOf(
+            "used_${name}_",
+            "puzzle_${name}_",
+            "elapsed_${name}_",
+            "stat_${name}_"
+        )
+        val toRemove = prefs.all.keys.filter { k ->
+            k in exactKeys || prefixKeys.any { k.startsWith(it) }
+        }
+        val players = (prefs.getStringSet("all_players", emptySet()) ?: emptySet()).toMutableSet()
+        players.remove(name)
+        prefs.edit {
+            putStringSet("all_players", players)
+            toRemove.forEach { remove(it) }
+        }
     }
 
     // Returns list of (category, difficulty) pairs for in-progress saves for this player
