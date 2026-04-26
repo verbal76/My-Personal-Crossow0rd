@@ -1018,7 +1018,8 @@ fun CrosswordApp() {
     LaunchedEffect(Unit) {
         (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         AmbientMusicPlayer.init(context)
-        FirebaseGameManager.signInAnonymously {}   // sign in silently; no-op if already signed in
+        // Firebase anonymous sign-in is deferred until the user actually picks
+        // Host/Join — a strictly offline session never makes a network call.
         profileList = saveManager.getAllPlayerNames()
         if (saveManager.isFirstLaunch()) {
             showHowToPlay = true
