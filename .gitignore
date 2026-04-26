@@ -11,3 +11,8 @@
 .cxx
 local.properties
 .claude/
+
+# Firebase config — contains API key, must not be committed.
+# Each developer downloads their own from the Firebase console:
+# Project settings → Your apps → Android → google-services.json
+app/google-services.json
