@@ -28,13 +28,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-**Single-file, single-activity Jetpack Compose app.** Nearly all logic lives in `app/src/main/java/com/example/mypersonalcrossword/MainActivity.kt` (~4,700 lines). There is no ViewModel, no navigation library, and no Room database — state lives entirely in Compose state containers.
+**Single-file, single-activity Jetpack Compose app.** Nearly all logic lives in `app/src/main/java/com/example/mypersonalcrossword/MainActivity.kt` (~5,700 lines). There is no ViewModel, no navigation library, and no Room database — state lives entirely in Compose state containers. The source path is still `com/example/...` even though the namespace is `com.hag.mypersonalcrossword`.
 
 ### App Navigation (AppMode enum)
-Four screens managed by a top-level `when(appMode)` branch in `MainActivity`:
+Five screens managed by a top-level `when(appMode)` branch in `MainActivity`:
 - `LOGIN` — player profile selection/creation
 - `STATS` — per-player statistics
 - `CATEGORY_SELECT` — category and game mode picker
+- `ONLINE_LOBBY` — host code display / guest "connecting…" view while waiting for the puzzle
 - `DASHBOARD` — active puzzle gameplay
 
 ### Game Modes (GameMode enum)
@@ -67,7 +68,13 @@ Serialization uses custom delimiters: `§` between fields within a record, `|` b
 **Key SaveManager behaviors:**
 - `saveStat()` keeps the **best record only** — overwrites only if `score` improves, then `hintsUsed` (lower better), then `timeSeconds` (lower better). Does not unconditionally overwrite.
 - `clearPuzzle()` is **atomic** — removes all five keys (`_words`, `_inputs`, `_bg`, `_bgimg`, `_time`) plus the save-set entry in a single `prefs.edit {}` block. Always include `_bgimg` removal or the background image key leaks.
+- `deletePlayer()` **purges every key tied to that player** in a single edit (score/completed/colors/recent/used/puzzle/elapsed/stat/statkeys/saves), so re-creating the profile actually starts fresh.
 - First-use tutorial flags: `isFirstSingle()` / `markSingleSeen()`, `isFirstTeam()` / `markTeamSeen()`, `isFirstVindictive()` / `markVindictiveSeen()` — Boolean flags in SharedPreferences.
+
+### Win flow / used-words bookkeeping
+- The `LaunchedEffect(isWinner)` block credits puzzle completion: scores, completed counts, used-word sets, stat records, and clearing the in-progress save.
+- For **combined-category** puzzles, `activeCategory` is a synthetic label (`FOOD+CITIES` or `3 Categories`); used-words are credited per **real** category by looking each placed word up in `allEntries` and grouping by `RawEntry.category`. Single-category puzzles still write to one bucket. The daily puzzle deliberately uses its own `Daily` bucket so generation logic can deprioritize already-played daily words without leaking that into per-category exploration.
+- All four game modes record stats now: SINGLE/DAILY, TEAM (one record per player), and VINDICTIVE (one record per player with `partner`/`partnerScore`/`won` populated; tie counts as a loss for both).
 
 ### Tutorial / First-Use Flow
 Every game mode shows a tutorial dialog the first time it is selected. The dialog is triggered inside `onGameModeChange`:
@@ -96,8 +103,17 @@ Category buttons display `"• X% explored"` only when `used > 0` (words complet
 
 ### Audio
 - **`SoundPlayer` (object)** — synthesizes sound effects (correct/wrong/clap/celebration) via `AudioTrack` using raw PCM math.
-- **`AmbientMusicPlayer` (object)** — streams MP3s from `assets/Music/` via `MediaPlayer`, shuffles and auto-advances the playlist, pauses on app background.
+- **`AmbientMusicPlayer` (object)** — streams MP3s from `assets/Music/` via `MediaPlayer`, shuffles and auto-advances the playlist.
   - `currentTrackName` is declared as `var currentTrackName by mutableStateOf("")` — **must stay Compose state** so the skip-button track name display recomposes when the track changes. A plain `var` will not trigger recomposition from a singleton object.
+  - Background/foreground pausing is driven by a `LifecycleEventObserver` in `CrosswordApp` (ON_PAUSE → `stop()`, ON_RESUME → `start()` if `musicEnabled`). The previous `DisposableEffect(Unit) { onDispose { release() } }` only fired on composition disposal, not on Activity onPause, so music kept playing when the app was minimised.
+
+### Online Multiplayer (Firebase)
+- Built on Firebase Auth (anonymous) + Firebase Realtime Database. The Google Services plugin is applied in `app/build.gradle.kts`.
+- `app/google-services.json` is **gitignored**; each developer downloads their own from the Firebase console (Project settings → Your apps → Android). A `.template` stub lives next to it.
+- `FirebaseGameManager` (object) wraps all RTDB operations: `createGame`, `joinGame`, `writePuzzle`, `writeInput`, `writeState`, `listen`, `stopListening`, `closeGame`, plus a 6-letter code generator.
+- Anonymous sign-in is **lazy** — only Host and Join wrap their main call in `signInAnonymously {}`. The cold-start `LaunchedEffect(Unit)` deliberately does **not** sign in, so an offline session never makes a network call.
+- The single Firebase value-event listener is registered in `LaunchedEffect(onlineCode, isOnlineGame)` and **cleaned up via `endOnlineGame()`** — a single helper inside `CrosswordApp` that stops the listener, calls `closeGame()` if the local device is host, and resets all online state. Every navigation away from an online game (dashboard back, Save & Quit, win-dialog buttons, lobby Cancel, `onChangeUser`) calls this helper. A `DisposableEffect(Unit)` mirrors the cleanup on composition disposal as a last-resort safety net.
+- Remote inputs merge into local inputs as `userInputs = rawInputs + userInputs` so **local entries win on collision** (Map.plus takes the right-hand operand). Reversing this — as the original code did — let stale remote snapshots clobber the letter the user just typed.
 
 ### Key Composable Functions
 Major screen-level composables (all in `MainActivity.kt`):
@@ -123,7 +139,7 @@ Major screen-level composables (all in `MainActivity.kt`):
 ## Important Constraints
 - **Release builds are not minified** — `isMinifyEnabled = false`; ProGuard/R8 is configured but disabled. Do not enable it without testing, as asset loading and reflection paths may break.
 - **Portrait-only** — orientation locked in manifest; the `LaunchedEffect(Unit)` that sets orientation carries `@Suppress("SourceLockedOrientationActivity")`.
-- **No networking** — fully offline; no HTTP clients or cloud sync.
+- **Networking** — single-player and pass-the-phone modes are fully offline. Online multiplayer uses Firebase RTDB; see *Online Multiplayer* above. There are no HTTP clients beyond the Firebase SDK.
 - **Single activity** — no Fragments; all screens are Composables switched by `appMode`.
 - `test.csv` uses a plain CSV format without quoting; entries must not contain commas or the `§`/`|`/`;` delimiter characters.
 - **`@SuppressLint("StaticFieldLeak")`** for `AmbientMusicPlayer`'s `context` field must be placed on the **object declaration**, not the field itself, and requires `import android.annotation.SuppressLint` (short form). Using the fully-qualified `@android.annotation.SuppressLint` triggers a separate "redundant qualifier" warning.
