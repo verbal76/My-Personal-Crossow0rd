@@ -1025,9 +1025,12 @@ fun CrosswordApp() {
             saveManager.markLaunched()
         }
         // Try the renamed file first, fall back to the original name
-        // so the app works whether or not test.csv has been renamed yet
-        val raw = loadCsv(context, "word-hints.csv").ifEmpty {
-            loadCsv(context, "test.csv")
+        // so the app works whether or not test.csv has been renamed yet.
+        // Read off the main thread — useLines on an asset stream is sync I/O.
+        val raw = withContext(Dispatchers.IO) {
+            loadCsv(context, "word-hints.csv").ifEmpty {
+                loadCsv(context, "test.csv")
+            }
         }
         allEntries = raw
         categories = raw.map { it.category }.distinct().sorted()
