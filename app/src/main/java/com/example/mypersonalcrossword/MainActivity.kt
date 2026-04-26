@@ -1144,7 +1144,41 @@ fun CrosswordApp() {
                         activeCategory, activeDifficulty.name, "TEAM",
                         0, elapsedSeconds, netPts, playerName))   // hint tracking per-player TBD
                 }
-                GameMode.VINDICTIVE -> { /* handled separately */ }
+                GameMode.VINDICTIVE -> {
+                    // Vindictive: each player's stat shows their own score and the
+                    // opponent's. won = strictly greater than opponent (a tie is
+                    // recorded as a loss for both, matching the in-game framing).
+                    val p1Won = vindP1Score >  vindP2Score
+                    val p2Won = vindP2Score >  vindP1Score
+                    saveManager.addCompleted(playerName)
+                    saveManager.addCompleted(player2Name)
+                    wordsByCategory.forEach { (cat, words) ->
+                        saveManager.addUsedWords(playerName,  cat, words)
+                        saveManager.addUsedWords(player2Name, cat, words)
+                    }
+                    saveManager.saveStat(playerName, StatRecord(
+                        category    = activeCategory,
+                        diffName    = activeDifficulty.name,
+                        gameMode    = "VINDICTIVE",
+                        hintsUsed   = hintsUsedThisPuzzle,
+                        timeSeconds = elapsedSeconds,
+                        score       = vindP1Score,
+                        partner     = player2Name,
+                        partnerScore = vindP2Score,
+                        won          = p1Won
+                    ))
+                    saveManager.saveStat(player2Name, StatRecord(
+                        category    = activeCategory,
+                        diffName    = activeDifficulty.name,
+                        gameMode    = "VINDICTIVE",
+                        hintsUsed   = 0,   // hint tracking per-player TBD
+                        timeSeconds = elapsedSeconds,
+                        score       = vindP2Score,
+                        partner     = playerName,
+                        partnerScore = vindP1Score,
+                        won          = p2Won
+                    ))
+                }
             }
             currentScore = saveManager.getScore(playerName)
             currentCompleted = saveManager.getCompleted(playerName)
