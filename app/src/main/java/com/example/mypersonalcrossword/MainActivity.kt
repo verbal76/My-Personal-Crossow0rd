@@ -4051,7 +4051,7 @@ fun CategoryScreen(
             contentPadding        = PaddingValues(
                 start = 16.dp, end = 16.dp,
                 top = 8.dp,
-                bottom = bottomBarHeight + 16.dp   // leave room for anchored bar
+                bottom = bottomBarHeight + 40.dp   // room for anchored bar + scroll-past whitespace under PLAY MODE
             )
         ) {
 
