@@ -120,6 +120,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.hag.mypersonalcrossword.ui.theme.MyPersonalCrosswordTheme
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlin.math.abs as kabs
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -4200,81 +4203,67 @@ fun CategoryScreen(
                 .background(btnColor)
         )
 
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding        = PaddingValues(
-                start = 16.dp, end = 16.dp,
-                top = 8.dp,
-                bottom = bottomBarHeight + 24.dp
-            )
+                .statusBarsPadding()
+                .padding(
+                    start = 16.dp, end = 16.dp,
+                    top = 8.dp,
+                    bottom = bottomBarHeight + 16.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
             // ── HEADER ───────────────────────────────────────────────────────
-            item {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(btnGradient)
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(btnGradient)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                BevelHighlight()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment     = Alignment.CenterVertically
                 ) {
-                    BevelHighlight()
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment     = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Welcome, $playerName",
-                                fontSize   = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = Color.White,
-                                maxLines   = 1
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            // Stats inline: score • puzzles • streak (if active)
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Text(
-                                    "🏆 $score",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White
-                                )
-                                Text(
-                                    "🧩 $completed",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White.copy(alpha = 0.85f)
-                                )
-                                if (currentStreak > 0) {
-                                    Text(
-                                        "🔥 $currentStreak",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFFFD580)
-                                    )
-                                }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Welcome, $playerName",
+                            fontSize   = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color      = Color.White,
+                            maxLines   = 1
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("🏆 $score", fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold, color = Color.White)
+                            Text("🧩 $completed", fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White.copy(alpha = 0.85f))
+                            if (currentStreak > 0) {
+                                Text("🔥 $currentStreak", fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold, color = Color(0xFFFFD580))
                             }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = onChangeUser) {
-                                Text("Logout", fontSize = 14.sp, color = Color.White)
-                            }
-                            IconButton(onClick = onQuit) {
-                                Icon(
-                                    imageVector        = Icons.Default.PowerSettingsNew,
-                                    contentDescription = "Quit",
-                                    tint               = Color.White.copy(alpha = 0.85f)
-                                )
-                            }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = onChangeUser) {
+                            Text("Logout", fontSize = 14.sp, color = Color.White)
+                        }
+                        IconButton(onClick = onQuit) {
+                            Icon(
+                                imageVector        = Icons.Default.PowerSettingsNew,
+                                contentDescription = "Quit",
+                                tint               = Color.White.copy(alpha = 0.85f)
+                            )
                         }
                     }
                 }
@@ -4283,49 +4272,47 @@ fun CategoryScreen(
             // ── CONTINUE LAST PUZZLE (if any in-progress save) ─────────────
             val lastInProgress = inProgressList.firstOrNull()
             if (lastInProgress != null) {
-                item {
-                    val (cat, diff) = lastInProgress
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .shadow(4.dp, RoundedCornerShape(12.dp))
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.secondaryContainer)
-                            .clickable {
-                                vibrateLight(context)
-                                if (soundEnabled) SoundPlayer.playClick()
-                                onResume(cat, diff)
-                            }
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "▶  Continue $cat — ${diff.label}",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    "Tap to resume where you left off",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                )
-                            }
-                            Text("▶", fontSize = 20.sp,
-                                color = MaterialTheme.colorScheme.primary)
+                val (cat, diff) = lastInProgress
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(4.dp, RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .clickable {
+                            vibrateLight(context)
+                            if (soundEnabled) SoundPlayer.playClick()
+                            onResume(cat, diff)
                         }
+                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "▶  Continue $cat — ${diff.label}",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                maxLines = 1
+                            )
+                            Text(
+                                "Tap to resume where you left off",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                        Text("▶", fontSize = 20.sp,
+                            color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
 
             // ── DAILY PUZZLE ────────────────────────────────────────────────
-            item {
+            run {
                 val dailyGradient = Brush.verticalGradient(
                     listOf(Color(0xFFFFE566), Color(0xFFFFD700), Color(0xFFCCAA00))
                 )
@@ -4357,168 +4344,194 @@ fun CategoryScreen(
             }
 
             // ── PLAY MODE + START ──────────────────────────────────────────
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(btnGradient)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(btnGradient)
+            ) {
+                BevelHighlight()
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    BevelHighlight()
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            "PLAY MODE",
-                            fontSize   = 12.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color      = Color.White.copy(alpha = 0.75f),
-                            letterSpacing = 1.5.sp,
-                            modifier   = Modifier.padding(bottom = 4.dp)
-                        )
+                    Text(
+                        "PLAY MODE",
+                        fontSize   = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color      = Color.White.copy(alpha = 0.75f),
+                        letterSpacing = 1.5.sp,
+                        modifier   = Modifier.padding(bottom = 4.dp)
+                    )
 
-                        listOf(
-                            GameMode.SINGLE     to "👤  Single Player",
-                            GameMode.TEAM       to "🤝  Team Mode",
-                            GameMode.VINDICTIVE to "⚔️  Vindictive Mode"
-                        ).forEach { (mode, label) ->
+                    listOf(
+                        GameMode.SINGLE     to "👤  Single Player",
+                        GameMode.TEAM       to "🤝  Team Mode",
+                        GameMode.VINDICTIVE to "⚔️  Vindictive Mode"
+                    ).forEach { (mode, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onGameModeChange(mode) }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = activeGameMode == mode,
+                                onClick  = { onGameModeChange(mode) },
+                                colors   = RadioButtonDefaults.colors(
+                                    selectedColor   = Color.White,
+                                    unselectedColor = Color.White.copy(alpha = 0.55f)
+                                )
+                            )
+                            Text(
+                                label,
+                                fontSize = 14.sp,
+                                color    = Color.White,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = activeGameMode != GameMode.SINGLE) {
+                        if (player2Name.isBlank()) {
+                            TextButton(
+                                onClick  = { onRequestPlayer2Setup() },
+                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                            ) {
+                                Text(
+                                    "👥 Tap to set Player 2 name…",
+                                    fontSize = 13.sp,
+                                    color    = Color.White.copy(alpha = 0.85f)
+                                )
+                            }
+                        } else {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .padding(top = 4.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onGameModeChange(mode) }
-                                    .padding(vertical = 2.dp),
+                                    .background(Color.White.copy(alpha = 0.18f))
+                                    .clickable { onRequestPlayer2Setup() }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                RadioButton(
-                                    selected = activeGameMode == mode,
-                                    onClick  = { onGameModeChange(mode) },
-                                    colors   = RadioButtonDefaults.colors(
-                                        selectedColor   = Color.White,
-                                        unselectedColor = Color.White.copy(alpha = 0.55f)
-                                    )
-                                )
                                 Text(
-                                    label,
+                                    "👥 Player 2: $player2Name",
                                     fontSize = 14.sp,
-                                    color    = Color.White,
-                                    modifier = Modifier.padding(start = 4.dp)
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White
                                 )
+                                Text("Change", fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.75f))
                             }
                         }
+                    }
 
-                        // Player 2 name chip — only relevant for non-single
-                        AnimatedVisibility(visible = activeGameMode != GameMode.SINGLE) {
-                            if (player2Name.isBlank()) {
-                                TextButton(
-                                    onClick  = { onRequestPlayer2Setup() },
-                                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
-                                ) {
-                                    Text(
-                                        "👥 Tap to set Player 2 name…",
-                                        fontSize = 13.sp,
-                                        color    = Color.White.copy(alpha = 0.85f)
-                                    )
-                                }
-                            } else {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 4.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(Color.White.copy(alpha = 0.18f))
-                                        .clickable { onRequestPlayer2Setup() }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        "👥 Player 2: $player2Name",
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        "Change",
-                                        fontSize = 12.sp,
-                                        color = Color.White.copy(alpha = 0.75f)
-                                    )
-                                }
-                            }
-                        }
+                    Spacer(Modifier.height(8.dp))
 
-                        Spacer(Modifier.height(8.dp))
-
-                        // ── START button — primary action ──────────────────
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .shadow(6.dp, RoundedCornerShape(12.dp))
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White)
-                                .clickable {
-                                    vibrateLight(context)
-                                    if (soundEnabled) SoundPlayer.playClick()
-                                    onStartPlay()
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "▶  START",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = btnColor,
-                                letterSpacing = 2.sp
-                            )
-                        }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .shadow(6.dp, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White)
+                            .clickable {
+                                vibrateLight(context)
+                                if (soundEnabled) SoundPlayer.playClick()
+                                onStartPlay()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "▶  START",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = btnColor,
+                            letterSpacing = 2.sp
+                        )
                     }
                 }
             }
 
-            // ── YOUR CATEGORIES — read-only progress strip ──────────────────
-            item {
-                Text(
-                    "YOUR CATEGORIES",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 1.5.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
-                )
-            }
-            item {
+            // ── Vertically center the carousel in remaining space ──────────
+            Spacer(Modifier.weight(1f))
+
+            // ── YOUR CATEGORIES — snap-to-center carousel with focus pop ───
+            Text(
+                "YOUR CATEGORIES",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.5.sp,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+            )
+
+            val carouselListState = rememberLazyListState()
+            val carouselFling     = rememberSnapFlingBehavior(carouselListState)
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val cardWidth   = 132.dp
+                // Side padding so first/last items can sit at viewport center.
+                val sidePadding = ((maxWidth - cardWidth) / 2).coerceAtLeast(8.dp)
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding        = PaddingValues(vertical = 4.dp)
+                    state               = carouselListState,
+                    flingBehavior       = carouselFling,
+                    contentPadding      = PaddingValues(horizontal = sidePadding, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(categories) { category ->
+                    items(count = categories.size) { idx ->
+                        val category = categories[idx]
                         val total = categoryCounts[category] ?: 0
                         val used  = usedWordCounts[category] ?: 0
                         val pct   = if (total > 0) (used * 100 / total).coerceIn(0, 100) else 0
                         val icon  = categoryIcons[category] ?: "📝"
+
+                        // Distance from viewport center → scale (0.84 edge → 1.10 center).
+                        val targetScale by remember {
+                            derivedStateOf {
+                                val info = carouselListState.layoutInfo
+                                val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2f
+                                val item = info.visibleItemsInfo.firstOrNull { it.index == idx }
+                                if (item == null) 0.84f
+                                else {
+                                    val itemCenter = item.offset + item.size / 2f
+                                    val maxDist = (info.viewportEndOffset - info.viewportStartOffset) / 2f
+                                    val t = (1f - kabs(itemCenter - viewportCenter) / maxDist).coerceIn(0f, 1f)
+                                    0.84f + 0.26f * t
+                                }
+                            }
+                        }
+                        val animatedScale by animateFloatAsState(
+                            targetValue   = targetScale,
+                            animationSpec = tween(120),
+                            label         = "carouselScale"
+                        )
+
                         Box(
                             modifier = Modifier
-                                .width(108.dp)
-                                .height(78.dp)
-                                .shadow(2.dp, RoundedCornerShape(10.dp))
-                                .clip(RoundedCornerShape(10.dp))
+                                .width(cardWidth)
+                                .height(96.dp)
+                                .graphicsLayer(scaleX = animatedScale, scaleY = animatedScale)
+                                .shadow(4.dp, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.surface)
                                 .border(
                                     1.dp,
                                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
-                                    RoundedCornerShape(10.dp)
+                                    RoundedCornerShape(12.dp)
                                 )
-                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                                .padding(horizontal = 10.dp, vertical = 10.dp)
                         ) {
                             Column(modifier = Modifier.fillMaxSize()) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(icon, fontSize = 16.sp, modifier = Modifier.padding(end = 4.dp))
+                                    Text(icon, fontSize = 18.sp, modifier = Modifier.padding(end = 5.dp))
                                     Text(
                                         category,
-                                        fontSize = 11.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1
@@ -4540,15 +4553,17 @@ fun CategoryScreen(
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     if (used == 0) "Untouched" else "$pct% explored",
-                                    fontSize = 9.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                 )
                             }
                         }
                     }
                 }
             }
-        }   // end LazyColumn
+
+            Spacer(Modifier.weight(1f))
+        }   // end Column
 
         // ── ANCHORED BOTTOM BAR ───────────────────────────────────────────────
         Column(
