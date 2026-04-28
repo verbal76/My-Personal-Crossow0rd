@@ -4480,7 +4480,7 @@ fun CategoryScreen(
                 LazyRow(
                     state               = carouselListState,
                     flingBehavior       = carouselFling,
-                    contentPadding      = PaddingValues(horizontal = sidePadding, vertical = 18.dp),
+                    contentPadding      = PaddingValues(horizontal = sidePadding, vertical = 22.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     items(count = categories.size) { idx ->
@@ -4516,7 +4516,7 @@ fun CategoryScreen(
                         Box(
                             modifier = Modifier
                                 .width(cardWidth)
-                                .height(96.dp)
+                                .height(116.dp)
                                 .graphicsLayer(scaleX = animatedScale, scaleY = animatedScale)
                                 .shadow(8.dp, RoundedCornerShape(14.dp))
                                 .clip(RoundedCornerShape(14.dp))
