@@ -4480,8 +4480,8 @@ fun CategoryScreen(
                 LazyRow(
                     state               = carouselListState,
                     flingBehavior       = carouselFling,
-                    contentPadding      = PaddingValues(horizontal = sidePadding, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding      = PaddingValues(horizontal = sidePadding, vertical = 18.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     items(count = categories.size) { idx ->
                         val category = categories[idx]
@@ -4496,12 +4496,14 @@ fun CategoryScreen(
                                 val info = carouselListState.layoutInfo
                                 val viewportCenter = (info.viewportStartOffset + info.viewportEndOffset) / 2f
                                 val item = info.visibleItemsInfo.firstOrNull { it.index == idx }
-                                if (item == null) 0.84f
+                                if (item == null) 0.75f
                                 else {
                                     val itemCenter = item.offset + item.size / 2f
                                     val maxDist = (info.viewportEndOffset - info.viewportStartOffset) / 2f
                                     val t = (1f - kabs(itemCenter - viewportCenter) / maxDist).coerceIn(0f, 1f)
-                                    0.84f + 0.26f * t
+                                    // 0.75 at the edges → 1.22 dead-center.
+                                    // Big focus pop, neighbors visibly recede.
+                                    0.75f + 0.47f * t
                                 }
                             }
                         }
@@ -4516,13 +4518,18 @@ fun CategoryScreen(
                                 .width(cardWidth)
                                 .height(96.dp)
                                 .graphicsLayer(scaleX = animatedScale, scaleY = animatedScale)
-                                .shadow(4.dp, RoundedCornerShape(12.dp))
-                                .clip(RoundedCornerShape(12.dp))
+                                .shadow(8.dp, RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(MaterialTheme.colorScheme.surface)
+                                // Two-tone border: a soft inner halo from the player's
+                                // button color plus a crisp outer line for definition.
                                 .border(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
-                                    RoundedCornerShape(12.dp)
+                                    width = 2.dp,
+                                    brush = Brush.verticalGradient(listOf(
+                                        btnColor.copy(alpha = 0.55f),
+                                        btnColor.copy(alpha = 0.30f)
+                                    )),
+                                    shape = RoundedCornerShape(14.dp)
                                 )
                                 .padding(horizontal = 10.dp, vertical = 10.dp)
                         ) {
