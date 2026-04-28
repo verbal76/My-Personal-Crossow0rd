@@ -38,18 +38,6 @@ android {
     buildFeatures {
         compose = true
     }
-    sourceSets {
-        getByName("main") {
-            assets {
-                srcDirs("src\\main\\assets", "src\\main\\assets\\images",
-                    "src\\main\\assets",
-                    "src\\main\\assets\\2", "src\\main\\assets", "src\\main\\assets\\icons",
-                    "src\\main\\assets",
-                    "src\\main\\assets\\Music"
-                )
-            }
-        }
-    }
 }
 
 dependencies {
