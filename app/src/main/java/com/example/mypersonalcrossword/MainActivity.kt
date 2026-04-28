@@ -1004,10 +1004,12 @@ fun CrosswordApp() {
     var vindTimerSeconds        by rememberSaveable { mutableIntStateOf(30) }  // selected timer (15/30/60)
     var showVindTimerDialog     by remember { mutableStateOf(false) }  // timer selection popup
     var showVindCategoryDialog  by remember { mutableStateOf(false) }  // category selection after p2 setup
-    // When the Vindictive/Team setup → "Combine Categories" path sends the user
-    // back to CATEGORY_SELECT, this forces the screen to open in combine-mode
-    // so the first tap multi-selects instead of launching a single category.
-    var forceCombineMode        by remember { mutableStateOf(false) }
+    // Multi-category combine flow — modal dialog launched from inside the
+    // category-pick dialog. Selection lives here so the difficulty step can
+    // read it after the multi-select dialog closes.
+    var showMultiCategoryDialog by remember { mutableStateOf(false) }
+    var showCombineDiffDialog   by remember { mutableStateOf(false) }
+    var combineSelection        by remember { mutableStateOf<List<String>>(emptyList()) }
     // Passive-aggressive wrong responses — cycles through 20 taunts
     val tauntIndex              = remember { mutableIntStateOf(0) }
     var vindP1Score         by rememberSaveable { mutableIntStateOf(0) }
@@ -1732,56 +1734,50 @@ fun CrosswordApp() {
                 playerName        = playerName,
                 score             = currentScore,
                 completed         = currentCompleted,
-                savedKeys         = saveManager.getSavedKeys(playerName),
+                currentStreak     = currentStreak,
                 activeGameMode    = activeGameMode,
-                onGameModeChange  = { newMode ->
-                    activeGameMode = newMode
-                    if (newMode == GameMode.SINGLE) {
-                        if (saveManager.isFirstSingle()) {
-                            showSingleTutorial = true
-                            saveManager.markSingleSeen()
-                        }
-                    } else {
-                        player2Name = ""
-                        when {
-                            newMode == GameMode.VINDICTIVE && saveManager.isFirstVindictive() -> {
-                                showVindictiveTutorial = true
-                                saveManager.markVindictiveSeen()
-                            }
-                            newMode == GameMode.TEAM && saveManager.isFirstTeam() -> {
-                                showTeamTutorial = true
-                                saveManager.markTeamSeen()
-                            }
-                            else -> showPlayer2SetupDialog = true
-                        }
-                    }
-                },
+                // Mode tap = just set the mode. Tutorials/setup fire on START.
+                onGameModeChange  = { newMode -> activeGameMode = newMode },
                 player2Name       = player2Name,
-                onPlayer2Change   = { player2Name = it },
                 allEntries        = allEntries,
                 usedWordCounts    = categories.associateWith { cat ->
                     saveManager.getUsedWords(playerName, cat).size
                 },
-                onSelect          = { cat -> difficultyPickCategory = cat },
-                onCombinedPlay    = { cats, diff ->
-                    val label = if (cats.size <= 3) cats.joinToString("+")
-                    else "${cats.size} Categories"
-                    if (isOnlineGame && onlineRole == OnlineRole.HOST) {
-                        // Online host: stash combined cats + difficulty, write to Firebase,
-                        // go to lobby. Puzzle generates when guest joins.
-                        activeCategory     = label
-                        activeDifficulty   = diff
-                        combinedCategories = cats
-                        FirebaseGameManager.writeState(onlineCode, mapOf(
-                            "category" to label, "difficulty" to diff.name
-                        ))
-                        appMode = AppMode.ONLINE_LOBBY
-                    } else {
-                        launchPuzzle(label, diff, combined = cats)
+                inProgressList    = saveManager.getInProgressPuzzles(playerName),
+                onResume          = { cat, diff -> launchPuzzle(cat, diff, resume = true) },
+                onStartPlay       = {
+                    when (activeGameMode) {
+                        GameMode.SINGLE -> {
+                            if (saveManager.isFirstSingle()) {
+                                showSingleTutorial = true
+                                saveManager.markSingleSeen()
+                            } else {
+                                showVindCategoryDialog = true
+                            }
+                        }
+                        GameMode.TEAM -> {
+                            when {
+                                saveManager.isFirstTeam() -> {
+                                    showTeamTutorial = true
+                                    saveManager.markTeamSeen()
+                                }
+                                player2Name.isBlank() -> showPlayer2SetupDialog = true
+                                else -> showVindCategoryDialog = true
+                            }
+                        }
+                        GameMode.VINDICTIVE -> {
+                            when {
+                                saveManager.isFirstVindictive() -> {
+                                    showVindictiveTutorial = true
+                                    saveManager.markVindictiveSeen()
+                                }
+                                player2Name.isBlank() -> showPlayer2SetupDialog = true
+                                else -> showVindTimerDialog = true
+                            }
+                        }
+                        GameMode.DAILY -> launchDailyPuzzle()
                     }
                 },
-                forceCombineMode       = forceCombineMode,
-                onForceCombineConsumed = { forceCombineMode = false },
                 onDailyPuzzle     = { launchDailyPuzzle() },
                 onChangeUser      = {
                     saveManager.setLastUser("")
@@ -3056,7 +3052,9 @@ fun CrosswordApp() {
             },
             confirmButton = {
                 GradientBtn("Got it — Let's Play! 🎉", appBtnGradient, onClick = {
-                    vibrateLight(context); if (soundEnabled) SoundPlayer.playClick(); showSingleTutorial = false
+                    vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                    showSingleTutorial = false
+                    showVindCategoryDialog = true
                 }, modifier = Modifier.fillMaxWidth())
             },
             dismissButton = {}
@@ -3350,13 +3348,13 @@ fun CrosswordApp() {
             title = { Text("Choose Category", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Combine button — enters combine-mode on the main category screen
-                    // so the first tap multi-selects instead of opening difficulty picker.
+                    // Combine button — opens a multi-select dialog rather than
+                    // navigating away from the current setup flow.
                     GradientBtn("🔀 Combine Categories…", appBtnGradient, onClick = {
                         vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                         showVindCategoryDialog = false
-                        forceCombineMode = true
-                        appMode = AppMode.CATEGORY_SELECT
+                        combineSelection = emptyList()
+                        showMultiCategoryDialog = true
                     }, modifier = Modifier.fillMaxWidth())
                     HorizontalDivider()
                     LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
@@ -3375,6 +3373,155 @@ fun CrosswordApp() {
             dismissButton = {
                 GradientBtn("Cancel", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick(); showVindCategoryDialog = false
+                }, modifier = Modifier.fillMaxWidth())
+            }
+        )
+    }
+
+    // ── MULTI-CATEGORY SELECT DIALOG ─────────────────────────────────────────────
+    // Toggle multiple categories, then advance to the difficulty picker.
+    if (showMultiCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showMultiCategoryDialog = false },
+            title = { Text("🔀 Combine Categories", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        if (combineSelection.isEmpty())
+                            "Pick two or more categories to combine into one puzzle."
+                        else
+                            "${combineSelection.size} selected — tap Next to choose difficulty.",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                    LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                        items(categories) { cat ->
+                            val selected = combineSelection.contains(cat)
+                            val icon     = categoryIcons[cat] ?: "📝"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        vibrateLight(context)
+                                        combineSelection = if (selected)
+                                            combineSelection - cat
+                                        else combineSelection + cat
+                                    }
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primaryContainer
+                                        else Color.Transparent
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(icon, fontSize = 18.sp)
+                                Text(cat, fontSize = 15.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    modifier = Modifier.weight(1f))
+                                if (selected) Text("✓", fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                GradientBtn(
+                    text     = "Next  ▶",
+                    gradient = appBtnGradient,
+                    enabled  = combineSelection.size >= 2,
+                    onClick  = {
+                        vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                        showMultiCategoryDialog = false
+                        showCombineDiffDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            dismissButton = {
+                GradientBtn("Cancel", appBtnGradient, onClick = {
+                    vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                    showMultiCategoryDialog = false
+                    combineSelection = emptyList()
+                }, modifier = Modifier.fillMaxWidth())
+            }
+        )
+    }
+
+    // ── COMBINE DIFFICULTY DIALOG ────────────────────────────────────────────────
+    // Final step of the combine flow: pick a difficulty, launch (or hand off to lobby).
+    if (showCombineDiffDialog) {
+        AlertDialog(
+            onDismissRequest = { showCombineDiffDialog = false },
+            title = { Text("Choose Difficulty", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "${combineSelection.size} categories selected",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                    Difficulty.entries.forEach { diff ->
+                        val tagline = when (diff) {
+                            Difficulty.EASY   -> "Quick warm-up"
+                            Difficulty.MEDIUM -> "A pleasant solve"
+                            Difficulty.HARD   -> "A real challenge"
+                            Difficulty.EXPERT -> "For the dedicated"
+                            Difficulty.GENIUS -> "Bring your A-game"
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(64.dp)
+                                .shadow(4.dp, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(appBtnGradient)
+                                .clickable {
+                                    vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                                    showCombineDiffDialog = false
+                                    val cats = combineSelection
+                                    combineSelection = emptyList()
+                                    val label = if (cats.size <= 3) cats.joinToString("+")
+                                    else "${cats.size} Categories"
+                                    if (isOnlineGame && onlineRole == OnlineRole.HOST) {
+                                        activeCategory     = label
+                                        activeDifficulty   = diff
+                                        combinedCategories = cats
+                                        FirebaseGameManager.writeState(onlineCode, mapOf(
+                                            "category" to label, "difficulty" to diff.name
+                                        ))
+                                        appMode = AppMode.ONLINE_LOBBY
+                                    } else {
+                                        launchPuzzle(label, diff, combined = cats)
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BevelHighlight()
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("${diff.emoji}  ${diff.label}", fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text(tagline, fontSize = 11.sp,
+                                        color = Color.White.copy(alpha = 0.7f))
+                                }
+                                Text("${diff.wordCount} words", fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.85f))
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                GradientBtn("Back", appBtnGradient, onClick = {
+                    vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                    showCombineDiffDialog = false
+                    showMultiCategoryDialog = true
                 }, modifier = Modifier.fillMaxWidth())
             }
         )
@@ -3453,9 +3600,12 @@ fun CrosswordApp() {
                                     vibrateLight(context)
                                     if (soundEnabled) SoundPlayer.playClick()
                                     if (isOnlineGame && onlineRole == OnlineRole.HOST) {
-                                        // Online host: launch puzzle then go to lobby while guest joins
-                                        activeCategory   = cat
-                                        activeDifficulty = diff
+                                        // Online host: launch puzzle then go to lobby while guest joins.
+                                        // Clear combinedCategories — single-category path must override
+                                        // any leftover combined state from an earlier flow.
+                                        activeCategory     = cat
+                                        activeDifficulty   = diff
+                                        combinedCategories = emptyList()
                                         FirebaseGameManager.writeState(onlineCode, mapOf("category" to cat, "difficulty" to diff.name))
                                         difficultyPickCategory = null
                                         appMode = AppMode.ONLINE_LOBBY
@@ -3998,15 +4148,15 @@ fun CategoryScreen(
     playerName:       String,
     score:            Int,
     completed:        Int,
-    savedKeys:        Set<String>,
+    currentStreak:    Int,
     activeGameMode:   GameMode,
     onGameModeChange: (GameMode) -> Unit,
     player2Name:      String,
-    onPlayer2Change:  (String) -> Unit,
     allEntries:       List<RawEntry>,
     usedWordCounts:    Map<String, Int>,
-    onSelect:          (String) -> Unit,
-    onCombinedPlay:         (List<String>, Difficulty) -> Unit,
+    inProgressList:    List<Pair<String, Difficulty>>,
+    onResume:          (String, Difficulty) -> Unit,
+    onStartPlay:       () -> Unit,
     onDailyPuzzle:          () -> Unit,
     onChangeUser:           () -> Unit,
     onQuit:                 () -> Unit,
@@ -4016,9 +4166,7 @@ fun CategoryScreen(
     musicVolume:            Float   = 0.7f,
     onMusicToggle:          () -> Unit = {},
     onVolumeChange:         (Float) -> Unit = {},
-    btnColorArgb:           Int = 0xFF6650A4.toInt(),
-    forceCombineMode:        Boolean = false,
-    onForceCombineConsumed:  () -> Unit = {}
+    btnColorArgb:           Int = 0xFF6650A4.toInt()
 ) {
     val context  = LocalContext.current
     val btnColor    = Color(btnColorArgb.toLong() and 0xFFFFFFFFL)
@@ -4040,30 +4188,9 @@ fun CategoryScreen(
         allEntries.groupBy { it.category }.mapValues { it.value.size }
     }
 
-    // Combine mode state — local to this screen
-    var combineMode               by remember { mutableStateOf(false) }
-    var selectedCombineCategories by remember { mutableStateOf(setOf<String>()) }
-    var showCombineDiffDialog     by remember { mutableStateOf(false) }
-
-    // Triggered when an upstream flow (e.g. Vindictive setup → Combine) navigates
-    // here expecting the screen to already be in multi-select mode.
-    LaunchedEffect(forceCombineMode) {
-        if (forceCombineMode) {
-            combineMode = true
-            selectedCombineCategories = emptySet()
-            onForceCombineConsumed()
-        }
-    }
-
-    // Bottom bar height — accounts for music strip, combine mode, and system nav bar inset.
-    // WindowInsets.navigationBars gives the real inset so the last grid item always scrolls
-    // fully clear of the anchored bar regardless of device nav-bar height.
+    // Anchored bottom bar height — accounts for music card + system nav bar inset.
     val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomBarHeight = when {
-        combineMode  -> 170.dp + navBarInset
-        musicEnabled -> 150.dp + navBarInset
-        else         -> 100.dp + navBarInset
-    }
+    val bottomBarHeight = (if (musicEnabled) 100.dp else 16.dp) + navBarInset
 
     Box(Modifier.fillMaxSize()) {
         // Status bar color bleed — matches top of the gradient header card
@@ -4073,55 +4200,69 @@ fun CategoryScreen(
                 .background(btnColor)
         )
 
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding(),
-            verticalArrangement   = Arrangement.spacedBy(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding        = PaddingValues(
                 start = 16.dp, end = 16.dp,
                 top = 8.dp,
-                bottom = bottomBarHeight + 40.dp   // room for anchored bar + scroll-past whitespace under PLAY MODE
+                bottom = bottomBarHeight + 24.dp
             )
         ) {
 
             // ── HEADER ───────────────────────────────────────────────────────
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            item {
                 Box(
                     Modifier
                         .fillMaxWidth()
                         .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
                         .clip(RoundedCornerShape(12.dp))
                         .background(btnGradient)
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    // Bevel highlight — matches category buttons
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.5.dp)
-                            .background(Color.White.copy(alpha = 0.25f))
-                            .align(Alignment.TopCenter)
-                    )
+                    BevelHighlight()
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 "Welcome, $playerName",
                                 fontSize   = 22.sp,
                                 fontWeight = FontWeight.Bold,
-                                color      = Color.White
+                                color      = Color.White,
+                                maxLines   = 1
                             )
-                            Text(
-                                "Score: $score  |  Puzzles: $completed",
-                                fontSize = 13.sp,
-                                color    = Color.White.copy(alpha = 0.75f)
-                            )
+                            Spacer(Modifier.height(4.dp))
+                            // Stats inline: score • puzzles • streak (if active)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    "🏆 $score",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    "🧩 $completed",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White.copy(alpha = 0.85f)
+                                )
+                                if (currentStreak > 0) {
+                                    Text(
+                                        "🔥 $currentStreak",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFFFD580)
+                                    )
+                                }
+                            }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = onChangeUser) {
@@ -4139,121 +4280,84 @@ fun CategoryScreen(
                 }
             }
 
-            // ── DAILY CATEGORY BUTTON ────────────────────────────────────────
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            // ── CONTINUE LAST PUZZLE (if any in-progress save) ─────────────
+            val lastInProgress = inProgressList.firstOrNull()
+            if (lastInProgress != null) {
+                item {
+                    val (cat, diff) = lastInProgress
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(4.dp, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                            .clickable {
+                                vibrateLight(context)
+                                if (soundEnabled) SoundPlayer.playClick()
+                                onResume(cat, diff)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "▶  Continue $cat — ${diff.label}",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    "Tap to resume where you left off",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                )
+                            }
+                            Text("▶", fontSize = 20.sp,
+                                color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+
+            // ── DAILY PUZZLE ────────────────────────────────────────────────
+            item {
                 val dailyGradient = Brush.verticalGradient(
                     listOf(Color(0xFFFFE566), Color(0xFFFFD700), Color(0xFFCCAA00))
                 )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(64.dp)
+                        .height(68.dp)
                         .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
                         .clip(RoundedCornerShape(12.dp))
                         .background(dailyGradient)
                         .clickable { vibrateLight(context); if (soundEnabled) SoundPlayer.playClick(); onDailyPuzzle() }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.5.dp)
-                            .background(Color.White.copy(alpha = 0.35f))
-                            .align(Alignment.TopCenter)
-                    )
+                    BevelHighlight(alpha = 0.35f)
                     Column(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("📅", fontSize = 16.sp, modifier = Modifier.padding(end = 6.dp))
-                                Text("DAILY", fontSize = 13.sp, maxLines = 1,
-                                    color = Color.Black, fontWeight = FontWeight.SemiBold)
-                            }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("📅", fontSize = 18.sp, modifier = Modifier.padding(end = 8.dp))
+                            Text("DAILY PUZZLE", fontSize = 14.sp,
+                                color = Color.Black, fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.sp)
                         }
-                        Text("All categories • 20 words • 20 pts", fontSize = 10.sp,
+                        Text("All categories • 20 words • 20 pts", fontSize = 11.sp,
                             color = Color.Black.copy(alpha = 0.65f))
                     }
                 }
             }
 
-            // ── CATEGORY BUTTONS (2-column) ───────────────────────────────────
-            gridItems(categories) { category ->
-                val hasSave    = Difficulty.entries.any { savedKeys.contains("${category}__${it.name}") }
-                val total      = categoryCounts[category] ?: 0
-                val used       = usedWordCounts[category] ?: 0
-                val pctText    = if (total > 0 && used > 0) " • ${(used * 100 / total).coerceIn(0, 100)}% explored" else ""
-                val isSelected = selectedCombineCategories.contains(category)
-                val catIcon = categoryIcons[category] ?: "📝"
-                val selectedGrad = Brush.verticalGradient(listOf(
-                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f),
-                    MaterialTheme.colorScheme.tertiary,
-                    MaterialTheme.colorScheme.tertiary.copy(red = (MaterialTheme.colorScheme.tertiary.red*0.75f).coerceIn(0f,1f),
-                        green=(MaterialTheme.colorScheme.tertiary.green*0.75f).coerceIn(0f,1f),
-                        blue=(MaterialTheme.colorScheme.tertiary.blue*0.75f).coerceIn(0f,1f))
-                ))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (combineMode && isSelected) selectedGrad else btnGradient)
-                        .clickable {
-                            vibrateLight(context)
-                            if (soundEnabled) SoundPlayer.playClick()
-                            if (combineMode) {
-                                selectedCombineCategories = if (isSelected)
-                                    selectedCombineCategories - category
-                                else
-                                    selectedCombineCategories + category
-                            } else {
-                                onSelect(category)
-                            }
-                        }
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    // Bevel highlight — thin lighter line at top edge
-                    Box(modifier = Modifier.fillMaxWidth().height(1.5.dp)
-                        .background(Color.White.copy(alpha = 0.25f))
-                        .align(Alignment.TopCenter))
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment     = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)) {
-                                Text(catIcon, fontSize = 16.sp,
-                                    modifier = Modifier.padding(end = 6.dp))
-                                Text(category, fontSize = 13.sp, maxLines = 1,
-                                    color = Color.White, fontWeight = FontWeight.SemiBold)
-                            }
-                            when {
-                                combineMode && isSelected -> Text("✓", fontSize = 14.sp, color = Color.White)
-                                !combineMode && hasSave   -> Text("▶", fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f))
-                            }
-                        }
-                        Text("$total words$pctText", fontSize = 10.sp,
-                            color = Color.White.copy(alpha = 0.65f))
-                    }
-                }
-            }
-
-            // ── PLAY MODE ────────────────────────────────────────────────────
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            // ── PLAY MODE + START ──────────────────────────────────────────
+            item {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -4261,21 +4365,17 @@ fun CategoryScreen(
                         .clip(RoundedCornerShape(12.dp))
                         .background(btnGradient)
                 ) {
-                    // Bevel highlight
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth().height(1.5.dp)
-                            .background(Color.White.copy(alpha = 0.25f))
-                            .align(Alignment.TopCenter)
-                    )
+                    BevelHighlight()
                     Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             "PLAY MODE",
                             fontSize   = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color      = Color.White.copy(alpha = 0.75f),
+                            letterSpacing = 1.5.sp,
                             modifier   = Modifier.padding(bottom = 4.dp)
                         )
 
@@ -4309,7 +4409,7 @@ fun CategoryScreen(
                             }
                         }
 
-                        // Player 2 name chip
+                        // Player 2 name chip — only relevant for non-single
                         AnimatedVisibility(visible = activeGameMode != GameMode.SINGLE) {
                             if (player2Name.isBlank()) {
                                 TextButton(
@@ -4348,10 +4448,107 @@ fun CategoryScreen(
                                 }
                             }
                         }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // ── START button — primary action ──────────────────
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .shadow(6.dp, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White)
+                                .clickable {
+                                    vibrateLight(context)
+                                    if (soundEnabled) SoundPlayer.playClick()
+                                    onStartPlay()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "▶  START",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = btnColor,
+                                letterSpacing = 2.sp
+                            )
+                        }
                     }
                 }
             }
-        }   // end LazyVerticalGrid
+
+            // ── YOUR CATEGORIES — read-only progress strip ──────────────────
+            item {
+                Text(
+                    "YOUR CATEGORIES",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 1.5.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
+            item {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding        = PaddingValues(vertical = 4.dp)
+                ) {
+                    items(categories) { category ->
+                        val total = categoryCounts[category] ?: 0
+                        val used  = usedWordCounts[category] ?: 0
+                        val pct   = if (total > 0) (used * 100 / total).coerceIn(0, 100) else 0
+                        val icon  = categoryIcons[category] ?: "📝"
+                        Box(
+                            modifier = Modifier
+                                .width(108.dp)
+                                .height(78.dp)
+                                .shadow(2.dp, RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
+                                    RoundedCornerShape(10.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(icon, fontSize = 16.sp, modifier = Modifier.padding(end = 4.dp))
+                                    Text(
+                                        category,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1
+                                    )
+                                }
+                                Spacer(Modifier.weight(1f))
+                                Text(
+                                    "$total words",
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { pct / 100f },
+                                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                    color = btnColor,
+                                    trackColor = btnColor.copy(alpha = 0.18f)
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    if (used == 0) "Untouched" else "$pct% explored",
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }   // end LazyColumn
 
         // ── ANCHORED BOTTOM BAR ───────────────────────────────────────────────
         Column(
@@ -4424,146 +4621,6 @@ fun CategoryScreen(
                     }
                 }
             }
-            if (!combineMode) {
-                // ── Normal state: single "Combine Categories" button ──────────
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(btnGradient)
-                        .clickable { vibrateLight(context); if (soundEnabled) SoundPlayer.playClick(); combineMode = true; selectedCombineCategories = emptySet() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.5.dp)
-                            .background(Color.White.copy(alpha = 0.25f))
-                            .align(Alignment.TopCenter)
-                    )
-                    Text("🔀  Combine Categories", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                }
-            } else {
-                // ── Combine mode: summary text + cancel/play buttons ──────────
-                val count = selectedCombineCategories.size
-                Text(
-                    if (count == 0) "Click the categories you want to combine, then hit Play Combined"
-                    else "$count ${if (count == 1) "category" else "categories"} selected — choose a difficulty to play",
-                    fontSize = 13.sp,
-                    color    = if (count == 0) Color.Gray else MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp)
-                            .shadow(4.dp, RoundedCornerShape(12.dp))
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(btnGradient)
-                            .clickable { vibrateLight(context); if (soundEnabled) SoundPlayer.playClick(); combineMode = false; selectedCombineCategories = emptySet() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth().height(1.5.dp)
-                                .background(Color.White.copy(alpha = 0.25f))
-                                .align(Alignment.TopCenter)
-                        )
-                        Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White)
-                    }
-
-                    val playEnabled = selectedCombineCategories.isNotEmpty()
-                    Box(
-                        modifier = Modifier
-                            .weight(2f)
-                            .height(48.dp)
-                            .shadow(elevation = if (playEnabled) 4.dp else 0.dp, shape = RoundedCornerShape(12.dp))
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (playEnabled) btnGradient else Brush.verticalGradient(listOf(Color.Gray.copy(alpha = 0.25f), Color.Gray.copy(alpha = 0.25f))))
-                            .clickable(enabled = playEnabled) { vibrateLight(context); if (soundEnabled) SoundPlayer.playClick(); showCombineDiffDialog = true },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (playEnabled) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.5.dp)
-                                    .background(Color.White.copy(alpha = 0.25f))
-                                    .align(Alignment.TopCenter)
-                            )
-                        }
-                        Text(
-                            "▶  Play Combined",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (playEnabled) Color.White else Color.Gray
-                        )
-                    }
-                }
-            }
-        }
-
-        // ── COMBINE DIFFICULTY PICKER DIALOG ──────────────────────────────────
-        // Same style as the single-category difficulty picker in CrosswordApp.
-        if (showCombineDiffDialog) {
-            AlertDialog(
-                onDismissRequest = { showCombineDiffDialog = false },
-                title = { Text("Choose Difficulty", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            "${selectedCombineCategories.size} ${if (selectedCombineCategories.size == 1) "category" else "categories"} selected",
-                            fontSize = 13.sp, color = Color.Gray
-                        )
-                        Difficulty.entries.forEach { diff ->
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(52.dp)
-                                    .shadow(4.dp, RoundedCornerShape(12.dp))
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(btnGradient)
-                                    .clickable {
-                                        vibrateLight(context)
-                                        if (soundEnabled) SoundPlayer.playClick()
-                                        showCombineDiffDialog = false
-                                        combineMode = false
-                                        val cats = selectedCombineCategories.toList()
-                                        selectedCombineCategories = emptySet()
-                                        onCombinedPlay(cats, diff)
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth().height(1.5.dp)
-                                        .background(Color.White.copy(alpha = 0.25f))
-                                        .align(Alignment.TopCenter)
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("${diff.emoji}  ${diff.label}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    Text("${diff.wordCount} words", fontSize = 12.sp, color = Color.White.copy(alpha = 0.75f))
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(onClick = { showCombineDiffDialog = false }) { Text("Cancel") }
-                }
-            )
         }
     }
 }
