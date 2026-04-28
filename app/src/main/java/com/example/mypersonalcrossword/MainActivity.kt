@@ -1004,6 +1004,10 @@ fun CrosswordApp() {
     var vindTimerSeconds        by rememberSaveable { mutableIntStateOf(30) }  // selected timer (15/30/60)
     var showVindTimerDialog     by remember { mutableStateOf(false) }  // timer selection popup
     var showVindCategoryDialog  by remember { mutableStateOf(false) }  // category selection after p2 setup
+    // When the Vindictive/Team setup → "Combine Categories" path sends the user
+    // back to CATEGORY_SELECT, this forces the screen to open in combine-mode
+    // so the first tap multi-selects instead of launching a single category.
+    var forceCombineMode        by remember { mutableStateOf(false) }
     // Passive-aggressive wrong responses — cycles through 20 taunts
     val tauntIndex              = remember { mutableIntStateOf(0) }
     var vindP1Score         by rememberSaveable { mutableIntStateOf(0) }
@@ -1762,8 +1766,22 @@ fun CrosswordApp() {
                 onCombinedPlay    = { cats, diff ->
                     val label = if (cats.size <= 3) cats.joinToString("+")
                     else "${cats.size} Categories"
-                    launchPuzzle(label, diff, combined = cats)
+                    if (isOnlineGame && onlineRole == OnlineRole.HOST) {
+                        // Online host: stash combined cats + difficulty, write to Firebase,
+                        // go to lobby. Puzzle generates when guest joins.
+                        activeCategory     = label
+                        activeDifficulty   = diff
+                        combinedCategories = cats
+                        FirebaseGameManager.writeState(onlineCode, mapOf(
+                            "category" to label, "difficulty" to diff.name
+                        ))
+                        appMode = AppMode.ONLINE_LOBBY
+                    } else {
+                        launchPuzzle(label, diff, combined = cats)
+                    }
                 },
+                forceCombineMode       = forceCombineMode,
+                onForceCombineConsumed = { forceCombineMode = false },
                 onDailyPuzzle     = { launchDailyPuzzle() },
                 onChangeUser      = {
                     saveManager.setLastUser("")
@@ -3332,10 +3350,12 @@ fun CrosswordApp() {
             title = { Text("Choose Category", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Combine button
+                    // Combine button — enters combine-mode on the main category screen
+                    // so the first tap multi-selects instead of opening difficulty picker.
                     GradientBtn("🔀 Combine Categories…", appBtnGradient, onClick = {
                         vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                         showVindCategoryDialog = false
+                        forceCombineMode = true
                         appMode = AppMode.CATEGORY_SELECT
                     }, modifier = Modifier.fillMaxWidth())
                     HorizontalDivider()
@@ -3996,7 +4016,9 @@ fun CategoryScreen(
     musicVolume:            Float   = 0.7f,
     onMusicToggle:          () -> Unit = {},
     onVolumeChange:         (Float) -> Unit = {},
-    btnColorArgb:           Int = 0xFF6650A4.toInt()
+    btnColorArgb:           Int = 0xFF6650A4.toInt(),
+    forceCombineMode:        Boolean = false,
+    onForceCombineConsumed:  () -> Unit = {}
 ) {
     val context  = LocalContext.current
     val btnColor    = Color(btnColorArgb.toLong() and 0xFFFFFFFFL)
@@ -4022,6 +4044,16 @@ fun CategoryScreen(
     var combineMode               by remember { mutableStateOf(false) }
     var selectedCombineCategories by remember { mutableStateOf(setOf<String>()) }
     var showCombineDiffDialog     by remember { mutableStateOf(false) }
+
+    // Triggered when an upstream flow (e.g. Vindictive setup → Combine) navigates
+    // here expecting the screen to already be in multi-select mode.
+    LaunchedEffect(forceCombineMode) {
+        if (forceCombineMode) {
+            combineMode = true
+            selectedCombineCategories = emptySet()
+            onForceCombineConsumed()
+        }
+    }
 
     // Bottom bar height — accounts for music strip, combine mode, and system nav bar inset.
     // WindowInsets.navigationBars gives the real inset so the last grid item always scrolls
