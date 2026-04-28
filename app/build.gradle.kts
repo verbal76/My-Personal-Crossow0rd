@@ -22,6 +22,18 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Override the default debug signing config to use our committed keystore.
+    // Without this, every CI runner generates its own debug key and Android
+    // refuses to install a new APK over the previous one ("App not installed").
+    signingConfigs {
+        getByName("debug") {
+            storeFile     = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias      = "androiddebugkey"
+            keyPassword   = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
