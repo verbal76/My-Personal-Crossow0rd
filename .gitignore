@@ -11,3 +11,10 @@
 .cxx
 local.properties
 .claude/
+
+# Firebase config — contains an API key. The committed copy was leaked at
+# initial commit; mitigation requires rotating the key in Firebase Console
+# (see SECURITY.md). This entry stops *future* updates to the file from
+# being tracked.
+app/google-services.json
+google-services.json

@@ -876,7 +876,14 @@ object FirebaseGameManager {
     fun listen(code: String, onUpdate: (DataSnapshot) -> Unit): ValueEventListener {
         val listener = object : ValueEventListener {
             override fun onDataChange(snap: DataSnapshot) { onUpdate(snap) }
-            override fun onCancelled(e: DatabaseError) {}
+            override fun onCancelled(e: DatabaseError) {
+                // Was a silent empty body — permission failures, network errors,
+                // and rule rejections were undetectable. Log so adb logcat shows
+                // them during testing; user-facing toast is intentionally not
+                // added here (would interrupt gameplay for transient errors).
+                android.util.Log.w("CrosswordFirebase",
+                    "Listener cancelled for game $code: ${e.message}", e.toException())
+            }
         }
         gameRef(code).addValueEventListener(listener)
         return listener
@@ -1569,25 +1576,15 @@ fun CrosswordApp() {
     // ── SYSTEM BACK HANDLING ────────────────────────────────────────────────────
     // Routes Android's back gesture to the same destinations as in-app back arrows.
     // LOGIN: let the system handle (exit app).
-    BackHandler(enabled = appMode != AppMode.LOGIN) {
+    // Back at LOGIN: let system handle (exit). Back at CATEGORY_SELECT
+    // (the home hub): also let system handle so back closes the app like a
+    // regular Android home — silently logging the user out on a stray gesture
+    // was bad UX. The user can still log out via the Logout button.
+    BackHandler(enabled = appMode != AppMode.LOGIN && appMode != AppMode.CATEGORY_SELECT) {
         vibrateLight(context)
         when (appMode) {
             AppMode.STATS -> appMode = AppMode.LOGIN
-            AppMode.CATEGORY_SELECT -> {
-                saveManager.setLastUser("")
-                playerName = ""
-                puzzleSolved = false
-                showConfetti = false
-                showTurnDialog = false
-                vindPassDialogVisible = false
-                pendingTurnDialog = false
-                wordToInput = null
-                showWrongFlash = false
-                streakMilestone = null
-                vindPhase = VindicativePhase.PICK_OWN
-                dailyPromptShown = false
-                appMode = AppMode.LOGIN
-            }
+            AppMode.CATEGORY_SELECT -> { /* unreachable — handler disabled */ }
             AppMode.ONLINE_LOBBY -> {
                 cleanupOnlineSession()
                 appMode = AppMode.CATEGORY_SELECT
@@ -1848,6 +1845,17 @@ fun CrosswordApp() {
         }
 
         AppMode.CATEGORY_SELECT -> {
+            // Cache derived prefs reads so they don't fire on every recompose
+            // (timer tick, score update, etc.). The keys recompute these only
+            // when the player changes or completes a puzzle.
+            val cachedUsedWordCounts = remember(playerName, currentCompleted, categories) {
+                categories.associateWith { cat ->
+                    saveManager.getUsedWords(playerName, cat).size
+                }
+            }
+            val cachedInProgress = remember(playerName, currentCompleted) {
+                saveManager.getInProgressPuzzles(playerName)
+            }
             CategoryScreen(
                 categories        = categories,
                 playerName        = playerName,
@@ -1856,13 +1864,24 @@ fun CrosswordApp() {
                 currentStreak     = currentStreak,
                 activeGameMode    = activeGameMode,
                 // Mode tap = just set the mode. Tutorials/setup fire on START.
-                onGameModeChange  = { newMode -> activeGameMode = newMode },
+                onGameModeChange  = { newMode ->
+                    activeGameMode = newMode
+                    // Reset mode-specific state so a stale score from a prior
+                    // session doesn't leak into the next puzzle. Without this,
+                    // visiting STATS between mode switches stranded leftover
+                    // vindP1Score / teamP1Score / tauntIndex values.
+                    vindP1Score = 0; vindP2Score = 0
+                    teamP1Score = 0; teamP2Score = 0
+                    tauntIndex.intValue = 0
+                    vindAssignedWord = null
+                    vindPhase = VindicativePhase.PICK_OWN
+                    teamCurrentPlayer = 0
+                    vindCurrentPlayer = 0
+                },
                 player2Name       = player2Name,
                 allEntries        = allEntries,
-                usedWordCounts    = categories.associateWith { cat ->
-                    saveManager.getUsedWords(playerName, cat).size
-                },
-                inProgressList    = saveManager.getInProgressPuzzles(playerName),
+                usedWordCounts    = cachedUsedWordCounts,
+                inProgressList    = cachedInProgress,
                 onResume          = { cat, diff -> launchPuzzle(cat, diff, resume = true) },
                 onStartPlay       = {
                     when (activeGameMode) {
@@ -2501,11 +2520,18 @@ fun CrosswordApp() {
                                 }
                                 userInputs = newMap
                                 if (vindCurrentPlayer == 0) vindP1Score++ else vindP2Score++
-                                if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf(
-                                    "hostScore" to vindP1Score, "guestScore" to vindP2Score,
-                                    "vindPhase" to VindicativePhase.ASSIGN_CLUE.name,
-                                    "vindCurrentPlayer" to vindCurrentPlayer
-                                ))
+                                if (isOnlineGame) {
+                                    // Only write our own side. Writing both would let
+                                    // a stale local copy of the opposite side clobber
+                                    // a near-simultaneous remote update.
+                                    val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
+                                    val myVal = if (onlineRole == OnlineRole.HOST) vindP1Score else vindP2Score
+                                    FirebaseGameManager.writeState(onlineCode, mapOf(
+                                        myKey to myVal,
+                                        "vindPhase" to VindicativePhase.ASSIGN_CLUE.name,
+                                        "vindCurrentPlayer" to vindCurrentPlayer
+                                    ))
+                                }
                                 if (soundEnabled) SoundPlayer.playCorrect()
                                 cellsToAnimate = word.word.indices.map { idx ->
                                     if (word.isHorizontal) Pair(word.startX + idx, word.startY)
@@ -2551,12 +2577,13 @@ fun CrosswordApp() {
                             vindAssignedWord = null
                             vindPhase = VindicativePhase.ASSIGN_CLUE
                             if (isOnlineGame) {
+                                val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
+                                val myVal = if (onlineRole == OnlineRole.HOST) vindP1Score else vindP2Score
                                 FirebaseGameManager.writeState(onlineCode, mapOf(
                                     "vindPhase"           to VindicativePhase.ASSIGN_CLUE.name,
                                     "vindAssignedWordIdx" to -1,
                                     "vindCurrentPlayer"  to vindCurrentPlayer,
-                                    "hostScore"          to vindP1Score,
-                                    "guestScore"         to vindP2Score
+                                    myKey                 to myVal
                                 ))
                             } else {
                                 if (!showWrongFlash) showTurnDialog = true
@@ -2586,12 +2613,17 @@ fun CrosswordApp() {
                                 val nextTeamName = if (teamCurrentPlayer == 0) onlineP0Name else onlineP1Name
                                 turnDialogMessage = "✋ Pass to $nextTeamName\n$onlineP0Name: ${teamP1Score} right  |  $onlineP1Name: ${teamP2Score} right"
                                 showTurnDialog = !isOnlineGame   // online: no pass-the-phone dialog
-                                // Sync turn + scores to Firebase
-                                if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf(
-                                    "turn" to teamCurrentPlayer,
-                                    "hostScore" to teamP1Score,
-                                    "guestScore" to teamP2Score
-                                ))
+                                // Sync turn + own-side score to Firebase. Each device
+                                // owns its own score field — writing both would let
+                                // a stale local copy clobber the opponent's update.
+                                if (isOnlineGame) {
+                                    val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
+                                    val myVal = if (onlineRole == OnlineRole.HOST) teamP1Score else teamP2Score
+                                    FirebaseGameManager.writeState(onlineCode, mapOf(
+                                        "turn" to teamCurrentPlayer,
+                                        myKey  to myVal
+                                    ))
+                                }
                             }
                             currentStreak++
                             val milestone = checkStreakMilestone(currentStreak)
@@ -3057,12 +3089,13 @@ fun CrosswordApp() {
                     vindPhase = VindicativePhase.ASSIGN_CLUE
                     pendingTurnDialog = false
                     if (isOnlineGame) {
+                        val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
+                        val myVal = if (onlineRole == OnlineRole.HOST) vindP1Score else vindP2Score
                         FirebaseGameManager.writeState(onlineCode, mapOf(
                             "vindPhase"           to VindicativePhase.ASSIGN_CLUE.name,
                             "vindAssignedWordIdx" to -1,
                             "vindCurrentPlayer"  to vindCurrentPlayer,
-                            "hostScore"          to vindP1Score,
-                            "guestScore"         to vindP2Score
+                            myKey                 to myVal
                         ))
                     } else {
                         val opponentName = if (vindCurrentPlayer == 0) playerName else player2Name
@@ -3901,6 +3934,13 @@ fun CrosswordApp() {
             vindPhase == VindicativePhase.OPPONENT_WAIT &&
             appMode == AppMode.DASHBOARD && !puzzleSolved &&
             !showTurnDialog) {  // wait until player hit I'm Ready
+            // Online: only the answerer's device runs the timer. Otherwise both
+            // devices counted down simultaneously and the time-up wrong-answer
+            // logic fired twice (-4 instead of -2 to the answerer's score).
+            if (isOnlineGame) {
+                val myPlayerIndex = if (onlineRole == OnlineRole.HOST) 0 else 1
+                if (vindCurrentPlayer != myPlayerIndex) return@LaunchedEffect
+            }
             vindPassDialogVisible = false
             vindOpponentCountdown = vindTimerSeconds
             for (i in vindTimerSeconds downTo 1) {
@@ -3918,14 +3958,17 @@ fun CrosswordApp() {
                 showWrongFlash = true
                 vindAssignedWord = null
                 vindPhase = VindicativePhase.ASSIGN_CLUE
-                if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf(
-                    "vindPhase"           to VindicativePhase.ASSIGN_CLUE.name,
-                    "vindAssignedWordIdx" to -1,
-                    "vindCurrentPlayer"   to vindCurrentPlayer,
-                    "hostScore"           to vindP1Score,
-                    "guestScore"          to vindP2Score,
-                    "vindCountdown"       to 0
-                ))
+                if (isOnlineGame) {
+                    val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
+                    val myVal = if (onlineRole == OnlineRole.HOST) vindP1Score else vindP2Score
+                    FirebaseGameManager.writeState(onlineCode, mapOf(
+                        "vindPhase"           to VindicativePhase.ASSIGN_CLUE.name,
+                        "vindAssignedWordIdx" to -1,
+                        "vindCurrentPlayer"   to vindCurrentPlayer,
+                        myKey                 to myVal,
+                        "vindCountdown"       to 0
+                    ))
+                }
             }
         }
     }
@@ -4723,7 +4766,7 @@ fun CategoryScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // ── Music player card ─────────────────────────────────────────
-            if (musicEnabled || !AmbientMusicPlayer.currentTrackName.isEmpty()) {
+            if (musicEnabled) {
                 val dailyGold = Brush.verticalGradient(
                     listOf(Color(0xFFFFE566), Color(0xFFFFD700), Color(0xFFCCAA00))
                 )
