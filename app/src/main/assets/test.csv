@@ -358,7 +358,7 @@ QUITO,Capital of Ecuador,CITIES
 CARACAS,Capital of Venezuela,CITIES
 MONTEVIDEO,Capital of Uruguay (no spaces),CITIES
 ASUNCION,Capital of Paraguay,CITIES
-LA,PAZ Seat of government in Bolivia,CITIES
+LAPAZ,Seat of government in Bolivia,CITIES
 SUCRE,Constitutional capital of Bolivia,CITIES
 SANJUAN,Capital of Puerto Rico,CITIES
 PUNTAARENAS,City in southern Chile (no spaces),CITIES
@@ -457,7 +457,7 @@ DURANT,NBA scorer Kevin (last name),ATHLETES
 ANTETOKOUNMPO,Bucks star Giannis (last name),ATHLETES
 NOWITZKI,Mavericks star Dirk (last name),ATHLETES
 DUNCAN,Spurs legend Tim (last name),ATHLETES
-O,NEAL Lakers center Shaq (last name),ATHLETES
+ONEAL,Lakers center Shaq (last name),ATHLETES
 IVERSON,NBA star Allen (last name),ATHLETES
 BARKLEY,Suns star Charles (last name),ATHLETES
 EWING,Knicks center Patrick (last name),ATHLETES
@@ -557,7 +557,7 @@ GRIFFEY,Sweet-swinging Ken Jr (last name),ATHLETES
 BONDS,Barry home run star (last name),ATHLETES
 MCGWIRE,Cardinals slugger Mark (last name),ATHLETES
 SOSA,Cubs slugger Sammy (last name),ATHLETES
-A,ROD Yankees slugger Alex (last name),ATHLETES
+AROD,Yankees slugger Alex (last name),ATHLETES
 CABRERA,Tigers star Miguel (last name),ATHLETES
 VERLANDER,Tigers and Astros ace Justin (last name),ATHLETES
 SCHERZER,Intense ace Max (last name),ATHLETES
@@ -2380,7 +2380,7 @@ MAKIMA,Mysterious boss in Chainsaw Man,ANIME
 SAITAMA,Hero who wins with one punch,ANIME
 GENOS,Cyborg hero who follows Saitama,ANIME
 LIGHT,Death Note genius with a notebook,ANIME
-L,Death Note detective with one-letter name,ANIME
+LAWLIET,Death Note detective whose alias is just L,ANIME
 MISA,Death Note model who loves Light,ANIME
 RYUK,Shinigami from Death Note,ANIME
 EDWARD,Metal-armed brother from Fullmetal Alchemist,ANIME
