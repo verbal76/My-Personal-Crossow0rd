@@ -428,11 +428,15 @@ class SaveManager(context: Context) {
         val line = "${record.category}§${record.diffName}§${record.gameMode}§${record.hintsUsed}" +
                 "§${record.timeSeconds}§${record.score}§${record.partner}" +
                 "§${record.partnerScore}§${record.won}"
-        prefs.edit { putString(k, line) }
-        // Track which stat keys this player has
+        // One atomic edit. The previous two-edit version could be torn by a
+        // process kill — leaving the stat record visible without its index
+        // entry, or vice-versa.
         val keys = (prefs.getStringSet("statkeys_$player", emptySet()) ?: emptySet()).toMutableSet()
         keys.add("${record.category}__${record.diffName}")
-        prefs.edit { putStringSet("statkeys_$player", keys) }
+        prefs.edit {
+            putString(k, line)
+            putStringSet("statkeys_$player", keys)
+        }
     }
 
     fun getAllStats(player: String): List<StatRecord> {
@@ -1060,7 +1064,7 @@ fun CrosswordApp() {
     var showCombineDiffDialog   by remember { mutableStateOf(false) }
     var combineSelection        by remember { mutableStateOf<List<String>>(emptyList()) }
     // Passive-aggressive wrong responses — cycles through 20 taunts
-    val tauntIndex              = remember { mutableIntStateOf(0) }
+    val tauntIndex              = rememberSaveable { mutableIntStateOf(0) }
     var vindP1Score         by rememberSaveable { mutableIntStateOf(0) }
     var vindP2Score         by rememberSaveable { mutableIntStateOf(0) }
     var showWrongFlash      by remember { mutableStateOf(false) }
@@ -1077,7 +1081,7 @@ fun CrosswordApp() {
     var selectedHintWord    by remember { mutableStateOf<PlacedWord?>(null) }
 
     // ── STREAK ────────────────────────────────────────────────────────────────
-    var currentStreak       by remember { mutableIntStateOf(0) }
+    var currentStreak       by rememberSaveable { mutableIntStateOf(0) }
     var streakMilestone     by remember { mutableStateOf<String?>(null) }
 
     // ── ANIMATION ─────────────────────────────────────────────────────────────
@@ -1537,7 +1541,10 @@ fun CrosswordApp() {
     }
 
     fun launchDailyPuzzle() {
-        val cal  = Calendar.getInstance()
+        // Use UTC so two players in different timezones see the same daily
+        // puzzle. Local-zone Calendar.getInstance() drifted the seed by up
+        // to 26h between users in UTC-12 vs UTC+14.
+        val cal  = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
         val seed = cal.get(Calendar.YEAR) * 10000L +
                 cal.get(Calendar.MONTH) * 100L +
                 cal.get(Calendar.DAY_OF_MONTH)
@@ -1583,7 +1590,11 @@ fun CrosswordApp() {
     BackHandler(enabled = appMode != AppMode.LOGIN && appMode != AppMode.CATEGORY_SELECT) {
         vibrateLight(context)
         when (appMode) {
-            AppMode.STATS -> appMode = AppMode.LOGIN
+            AppMode.STATS -> {
+                viewingProfile = ""
+                dailyPromptShown = false
+                appMode = AppMode.LOGIN
+            }
             AppMode.CATEGORY_SELECT -> { /* unreachable — handler disabled */ }
             AppMode.ONLINE_LOBBY -> {
                 cleanupOnlineSession()
@@ -1840,7 +1851,11 @@ fun CrosswordApp() {
                 onResume         = { cat, diff ->
                     launchPuzzle(cat, diff, resume = true)
                 },
-                onBack           = { appMode = AppMode.LOGIN }
+                onBack           = {
+                    viewingProfile = ""
+                    dailyPromptShown = false
+                    appMode = AppMode.LOGIN
+                }
             )
         }
 
@@ -1888,7 +1903,7 @@ fun CrosswordApp() {
                         GameMode.SINGLE -> {
                             if (saveManager.isFirstSingle()) {
                                 showSingleTutorial = true
-                                saveManager.markSingleSeen()
+                                // mark on dismiss, not on show — see tutorial confirm handlers
                             } else {
                                 showVindCategoryDialog = true
                             }
@@ -1901,7 +1916,7 @@ fun CrosswordApp() {
                         GameMode.TEAM -> {
                             if (saveManager.isFirstTeam()) {
                                 showTeamTutorial = true
-                                saveManager.markTeamSeen()
+                                // mark on dismiss
                             } else {
                                 showPlayer2SetupDialog = true
                             }
@@ -1909,7 +1924,7 @@ fun CrosswordApp() {
                         GameMode.VINDICTIVE -> {
                             if (saveManager.isFirstVindictive()) {
                                 showVindictiveTutorial = true
-                                saveManager.markVindictiveSeen()
+                                // mark on dismiss
                             } else {
                                 showPlayer2SetupDialog = true
                             }
@@ -1919,8 +1934,29 @@ fun CrosswordApp() {
                 },
                 onDailyPuzzle     = { launchDailyPuzzle() },
                 onChangeUser      = {
+                    cleanupOnlineSession()
                     saveManager.setLastUser("")
                     playerName = ""
+                    viewingProfile = ""
+                    // Wipe puzzle-side state so the next user doesn't inherit it.
+                    placedWords = emptyList()
+                    gridCells = emptyList()
+                    userInputs = emptyMap()
+                    activeCategory = ""
+                    combinedCategories = emptyList()
+                    isDailyPuzzle = false
+                    dailyEntries = emptyList()
+                    elapsedSeconds = 0L
+                    timerRunning = false
+                    hintsUsedThisPuzzle = 0
+                    teamP1Hints = 0
+                    currentStreak = 0
+                    tauntIndex.intValue = 0
+                    vindP1Score = 0; vindP2Score = 0
+                    teamP1Score = 0; teamP2Score = 0
+                    teamCurrentPlayer = 0
+                    vindCurrentPlayer = 0
+                    vindAssignedWord = null
                     puzzleSolved = false
                     showConfetti = false
                     showTurnDialog = false
@@ -2024,6 +2060,14 @@ fun CrosswordApp() {
         }
 
         AppMode.DASHBOARD -> {
+            // Pick a top-bar accent that stays readable against the surface
+            // even when the user has chosen a near-white or near-black brand
+            // color. Used for the back arrow, Puzzles count, Score, and
+            // Settings icon.
+            val brandLum    = cellLuminance(appBtnColor)
+            val safeAccent  = if (brandLum < 0.2f || brandLum > 0.7f)
+                MaterialTheme.colorScheme.onSurface
+            else appBtnColor
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     TopAppBar(
@@ -2086,36 +2130,40 @@ fun CrosswordApp() {
                                     streakMilestone = null
                                     appMode = AppMode.CATEGORY_SELECT
                                 }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = appBtnColor)
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = safeAccent)
                                 }
-                                Text("Puzzles: $currentCompleted", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = appBtnColor)
+                                Text("Puzzles: $currentCompleted", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = safeAccent)
                             }
                         },
                         actions = {
-                            // Persistent streak chip — appears once a streak begins
+                            // Persistent streak chip — appears once a streak begins.
+                            // Theme-aware: uses tertiaryContainer/onTertiaryContainer
+                            // so the chip stays readable in both light + dark schemes.
                             if (currentStreak > 0) {
                                 Box(
                                     modifier = Modifier
                                         .padding(end = 6.dp)
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0xFFFFEBA0))
+                                        .background(MaterialTheme.colorScheme.tertiaryContainer)
                                         .padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
                                     Text(
                                         "🔥 $currentStreak",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF8A4500)
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 }
                             }
-                            Text("Score: $currentScore", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = appBtnColor)
+                            Text("Score: $currentScore", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = safeAccent)
                             IconButton(onClick = { showSettings = true }) {
-                                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = appBtnColor)
+                                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = safeAccent)
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = appBtnColor.copy(alpha = 0.10f)
+                            // Stronger 14% wash so the bar is distinguishable
+                            // from the page background in dark mode.
+                            containerColor = appBtnColor.copy(alpha = 0.14f)
                         )
                     )
 
@@ -2358,7 +2406,7 @@ fun CrosswordApp() {
                                 Text(
                                     "♪ ${AmbientMusicPlayer.currentTrackName.ifEmpty { "No track" }.take(32)}",
                                     fontSize = 11.sp,
-                                    color    = Color.Gray,
+                                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f),
                                     maxLines = 1
                                 )
@@ -2381,7 +2429,10 @@ fun CrosswordApp() {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Red.copy(alpha = 0.18f)),
+                            // Vivid red wash, alpha tuned to be readable against
+                            // both light and dark surfaces. Color.Red at 18%
+                            // muddied to a brown-purple in dark mode.
+                            .background(Color(0xFFD32F2F).copy(alpha = 0.28f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Card(
@@ -2659,7 +2710,7 @@ fun CrosswordApp() {
             title = { Text("🌐 Join Online Game", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Enter the 6-letter code from the host:", fontSize = 14.sp, color = Color.Gray)
+                    Text("Enter the 6-letter code from the host:", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(
                         value = onlineJoinInput,
                         onValueChange = { onlineJoinInput = it.uppercase().take(6); onlineJoinError = "" },
@@ -2736,7 +2787,7 @@ fun CrosswordApp() {
                         Text(
                             if (soundEnabled) "Plays taps, correct, wrong, and celebration cues"
                             else "Off",
-                            fontSize = 12.sp, color = Color.Gray
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Switch(
@@ -2869,11 +2920,11 @@ fun CrosswordApp() {
                                 Column {
                                     Text("Cell Color", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                     Text("Change the color of crossword cells",
-                                        fontSize = 11.sp, color = Color.Gray)
+                                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
 
-                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
 
                             // Button Color option
                             Row(
@@ -2899,11 +2950,11 @@ fun CrosswordApp() {
                                 Column {
                                     Text("Button Color", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                     Text("Change the color of category buttons",
-                                        fontSize = 11.sp, color = Color.Gray)
+                                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
 
-                            HorizontalDivider(color = Color.Gray.copy(alpha = 0.3f))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
 
                             // Background Image option
                             Row(
@@ -2929,7 +2980,7 @@ fun CrosswordApp() {
                                 Column {
                                     Text("Background Image", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                     Text("Choose the puzzle background",
-                                        fontSize = 11.sp, color = Color.Gray)
+                                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -3066,7 +3117,7 @@ fun CrosswordApp() {
                         fontSize = 16.sp, fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     Text("${vindAssignedWord?.word?.length ?: 0} letters",
-                        fontSize = 13.sp, color = Color.Gray)
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
                     Text("Time's up! Answer for +1 pt, or pass for -1 pt",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center, fontWeight = FontWeight.Medium)
@@ -3129,7 +3180,7 @@ fun CrosswordApp() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                                 modifier = Modifier.width(100.dp))
-                            Text(desc, fontSize = 13.sp, color = Color.Gray,
+                            Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.weight(1f))
                         }
                     }
@@ -3164,7 +3215,7 @@ fun CrosswordApp() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                                 modifier = Modifier.width(90.dp))
-                            Text(desc, fontSize = 13.sp, color = Color.Gray,
+                            Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.weight(1f))
                         }
                     }
@@ -3173,6 +3224,7 @@ fun CrosswordApp() {
             confirmButton = {
                 GradientBtn("Got it — Set Up Players ▶", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                    saveManager.markVindictiveSeen()
                     showVindictiveTutorial = false; showPlayer2SetupDialog = true
                 }, modifier = Modifier.fillMaxWidth())
             },
@@ -3201,7 +3253,7 @@ fun CrosswordApp() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                                 modifier = Modifier.width(100.dp))
-                            Text(desc, fontSize = 13.sp, color = Color.Gray,
+                            Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.weight(1f))
                         }
                     }
@@ -3210,6 +3262,7 @@ fun CrosswordApp() {
             confirmButton = {
                 GradientBtn("Got it — Let's Play! 🎉", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                    saveManager.markSingleSeen()
                     showSingleTutorial = false
                     showVindCategoryDialog = true
                 }, modifier = Modifier.fillMaxWidth())
@@ -3238,7 +3291,7 @@ fun CrosswordApp() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                                 modifier = Modifier.width(90.dp))
-                            Text(desc, fontSize = 13.sp, color = Color.Gray,
+                            Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.weight(1f))
                         }
                     }
@@ -3247,6 +3300,7 @@ fun CrosswordApp() {
             confirmButton = {
                 GradientBtn("Got it — Set Up Players ▶", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                    saveManager.markTeamSeen()
                     showTeamTutorial = false; showPlayer2SetupDialog = true
                 }, modifier = Modifier.fillMaxWidth())
             },
@@ -3265,7 +3319,7 @@ fun CrosswordApp() {
                     Spacer(Modifier.height(2.dp))
                     Text("Want to jump straight into today's puzzle?", fontWeight = FontWeight.Medium)
                     Text("(You can also find it as the yellow Daily button in the category list.)",
-                        fontSize = 12.sp, color = Color.Gray)
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
@@ -3301,7 +3355,7 @@ fun CrosswordApp() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp,
                                 modifier = Modifier.width(105.dp))
-                            Text(desc, fontSize = 13.sp, color = Color.Gray,
+                            Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.weight(1f))
                         }
                     }
@@ -3368,9 +3422,9 @@ fun CrosswordApp() {
 
                     // ── Two devices (online) — shown first, most prominent ─
                     Text("Two devices (online)", fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Host sets the rules. Guest just enters the code.",
-                        fontSize = 12.sp, color = Color.Gray)
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -3404,7 +3458,7 @@ fun CrosswordApp() {
 
                     // ── Same device (pass the phone) ──────────────────────
                     Text("Same device (pass the phone)", fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(
                         value = p2NameInput,
                         onValueChange = { p2NameInput = sanitizeName(it) },
@@ -3466,7 +3520,7 @@ fun CrosswordApp() {
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text("How long does each player get to answer?",
-                        fontSize = 13.sp, color = Color.Gray)
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     listOf(15 to "⚡ 15 seconds — Lightning round",
                         30 to "🕐 30 seconds — Standard",
                         60 to "🐢 60 seconds — Relaxed").forEach { (secs, label) ->
@@ -3559,7 +3613,7 @@ fun CrosswordApp() {
                             "Pick two or more categories to combine into one puzzle."
                         else
                             "${combineSelection.size} selected — tap Next to choose difficulty.",
-                        fontSize = 12.sp, color = Color.Gray
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                         items(categories) { cat ->
@@ -3608,10 +3662,13 @@ fun CrosswordApp() {
                 )
             },
             dismissButton = {
-                GradientBtn("Cancel", appBtnGradient, onClick = {
+                GradientBtn("Back", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                     showMultiCategoryDialog = false
                     combineSelection = emptyList()
+                    // Restore the category-pick dialog so the user can keep
+                    // picking instead of being dropped to a bare home screen.
+                    showVindCategoryDialog = true
                 }, modifier = Modifier.fillMaxWidth())
             }
         )
@@ -3630,7 +3687,7 @@ fun CrosswordApp() {
                 ) {
                     Text(
                         "${combineSelection.size} categories selected",
-                        fontSize = 12.sp, color = Color.Gray
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Difficulty.entries.forEach { diff ->
                         val tagline = when (diff) {
@@ -3929,7 +3986,12 @@ fun CrosswordApp() {
     // 5-second countdown then show pass/answer dialog for opponent
     // 30-second countdown — cancels if player answers early (wordToInput set)
     // Countdown only starts AFTER the "I'm Ready" handoff dialog is dismissed
-    LaunchedEffect(vindPhase, vindCurrentPlayer, showTurnDialog) {
+    // Re-keyed only on vindPhase / showTurnDialog. Including vindCurrentPlayer
+    // in the key list caused the remote-sync echo (the listener writes the
+    // exact same player index back to local state) to cancel and restart the
+    // countdown at full duration, giving the answerer a fresh timer on every
+    // Firebase tick.
+    LaunchedEffect(vindPhase, showTurnDialog) {
         if (activeGameMode == GameMode.VINDICTIVE &&
             vindPhase == VindicativePhase.OPPONENT_WAIT &&
             appMode == AppMode.DASHBOARD && !puzzleSolved &&
@@ -3988,8 +4050,8 @@ fun CrosswordApp() {
                     Text("Nice work, $playerName!", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     Text("+$winNet point(s) earned", fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
-                    Text(hintLabel, fontSize = 12.sp, color = Color.Gray)
-                    Text("Time: $timeLabel", fontSize = 12.sp, color = Color.Gray)
+                    Text(hintLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Time: $timeLabel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
@@ -4663,7 +4725,7 @@ fun CategoryScreen(
                 LazyRow(
                     state               = carouselListState,
                     flingBehavior       = carouselFling,
-                    contentPadding      = PaddingValues(horizontal = sidePadding, vertical = 22.dp),
+                    contentPadding      = PaddingValues(horizontal = sidePadding, vertical = 28.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     items(count = categories.size) { idx ->
@@ -4871,7 +4933,7 @@ fun FullHintsList(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Progress", fontSize = 11.sp, color = Color.Gray)
+                        Text("Progress", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
                             "$solvedCount / $totalCount",
                             fontSize = 11.sp,
@@ -4937,8 +4999,13 @@ fun ClueItem(
             .fillMaxWidth()
             .background(if (isHighlight) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent)
             .pointerInput(word) {
+                // onPress fires immediately on touch-down — no waiting for the
+                // 300 ms double-tap window. The single-tap action (centre +
+                // highlight) is non-destructive, so firing it as the first
+                // half of a double-tap is harmless. Double-tap still opens
+                // the answer dialog.
                 detectTapGestures(
-                    onTap       = { onSingleTap(word) },
+                    onPress     = { onSingleTap(word) },
                     onDoubleTap = { onDoubleTap(word) }
                 )
             }
@@ -4982,7 +5049,7 @@ fun ClueItem(
             }
         }
         if (!solved) {
-            Text(text = "(${word.word.length} letters)", fontSize = 12.sp, color = Color.Gray)
+            Text(text = "(${word.word.length} letters)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         HorizontalDivider(modifier = Modifier.padding(top = 8.dp), thickness = 0.5.dp, color = Color.LightGray)
     }
@@ -5119,7 +5186,10 @@ fun findBestPlacement(
     var bestWord:  PlacedWord? = null
     var bestScore              = Int.MIN_VALUE
 
-    for (posInWord in 0..14) {
+    // Bumped from 0..14 → 0..29 so words >15 chars can cross past their first
+    // 15 letters, and answers up to ~30 chars (longest in test.csv is 28) can
+    // still be considered as crossing words.
+    for (posInWord in 0..29) {
         val sx = cx - posInWord * dx
         val sy = cy - posInWord * dy
 
@@ -5130,7 +5200,9 @@ fun findBestPlacement(
         val knownChars = mutableMapOf(posInWord to crossChar)
         var maxLen = 0
 
-        for (ext in 0..19) {
+        // Bumped from 0..19 → 0..34 so 28-char answers can fit. Cost is one
+        // extra constant-time grid lookup per cell — negligible.
+        for (ext in 0..34) {
             val wx    = sx + ext * dx
             val wy    = sy + ext * dy
             val wPos  = Pair(wx, wy)
@@ -5493,7 +5565,7 @@ fun GradientSlider(
     modifier:      Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        Text(label, fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 4.dp))
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 4.dp))
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
@@ -5594,7 +5666,7 @@ fun ColorPickerSheet(
 
             // ── Preset swatches ────────────────────────────────────────────────
             if (presets.isNotEmpty()) {
-                Text("Presets", fontSize = 13.sp, color = Color.Gray)
+                Text("Presets", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(presets) { argb ->
                         val swatchColor = Color(argb.toLong() and 0xFFFFFFFFL)
@@ -5633,7 +5705,7 @@ fun ColorPickerSheet(
 
             // ── Recent colours row ─────────────────────────────────────────────
             if (recentArgbs.isNotEmpty()) {
-                Text("Recent (tap to apply)", fontSize = 13.sp, color = Color.Gray)
+                Text("Recent (tap to apply)", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(recentArgbs) { argb ->
                         val swatchColor = Color(argb.toLong() and 0xFFFFFFFFL)
@@ -5686,12 +5758,12 @@ fun ColorPickerSheet(
                             .background(pickedColor)
                             .border(1.5.dp, Color.Gray, RoundedCornerShape(12.dp))
                     )
-                    Text("Preview", fontSize = 11.sp, color = Color.Gray)
+                    Text("Preview", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     // Show hex-ish ARGB for the curious
                     Text(
                         text     = "#%06X".format(pickedColor.toArgb() and 0xFFFFFF),
                         fontSize = 11.sp,
-                        color    = Color.Gray
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -5826,10 +5898,10 @@ fun BgPickerScreen(
             if (bgImagePool.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No images found", color = Color.Gray, fontSize = 16.sp)
+                        Text("No images found", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
                         Spacer(Modifier.height(8.dp))
                         Text("Add WebP images to\nassets/images/drawable-xxhdpi/",
-                            color = Color.Gray, fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
                             textAlign = TextAlign.Center)
                     }
                 }
@@ -5951,12 +6023,12 @@ fun StatsScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("$score", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary)
-                Text("Total Score", fontSize = 12.sp, color = Color.Gray)
+                Text("Total Score", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("$done", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.secondary)
-                Text("Puzzles", fontSize = 12.sp, color = Color.Gray)
+                Text("Puzzles", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -5989,7 +6061,7 @@ fun StatsScreen(
                         ) {
                             Column {
                                 Text("$cat — ${diff.label}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("Tap to resume", fontSize = 11.sp, color = Color.Gray)
+                                Text("Tap to resume", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Text("▶", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
                         }
@@ -6017,7 +6089,7 @@ fun StatsScreen(
                             Text(
                                 "Solve a puzzle and your best times and scores will appear here.",
                                 fontSize = 13.sp,
-                                color = Color.Gray,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -6027,11 +6099,16 @@ fun StatsScreen(
                 item {
                     Text("Completed Puzzles",
                         fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
-                        color = Color.Gray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
                 }
                 items(stats) { stat ->
-                    val isDiscontinued = stat.gameMode == "SINGLE" && !allCategoryNames.contains(stat.category)
+                    // Exclude Daily records — their pseudo-category "Daily" is
+                    // never in allCategoryNames so they used to falsely show
+                    // the "★ Legacy" badge on every record.
+                    val isDiscontinued = stat.gameMode == "SINGLE" &&
+                        stat.diffName != "DAILY" &&
+                        !allCategoryNames.contains(stat.category)
                     val bgColor = if (isDiscontinued) Color(0xFFFFF8DC) else MaterialTheme.colorScheme.surface
                     Card(
                         modifier  = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -6062,7 +6139,7 @@ fun StatsScreen(
                                 else ->
                                     "$playerName completed ${stat.category} at ${stat.diffName} using ${stat.hintsUsed} hint(s) in %d:%02d".format(mins, secs)
                             }
-                            Text(desc, fontSize = 12.sp, color = Color.Gray)
+                            Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (isDiscontinued) {
                                 Text("★ Legacy record — category no longer available",
                                     fontSize = 10.sp, color = Color(0xFF8B6914),
