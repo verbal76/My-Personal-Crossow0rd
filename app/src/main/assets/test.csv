@@ -5,21 +5,21 @@ GREATDANE,Massive gentle giant canine (no spaces),PETS
 SAINTBERNARD,Swiss rescue dog (no spaces),PETS
 WHIPPET,Small slender racing dog,PETS
 BASSETHOUND,Short-legged droopy-eared dog (no spaces),PETS
-BLOODHOUND,Exceptional canine tracker (no spaces),PETS
+BLOODHOUND,Exceptional canine tracker,PETS
 SHIHTZU,Little lion toy dog,PETS
 BICHONFRISE,Small curly white dog (no spaces),PETS
 HAVANESE,National dog of Cuba,PETS
 MALAMUTE,Alaskan sled dog,PETS
 CHOWCHOW,Canine with a blue-black tongue,PETS
-PEKINGESE,Ancient Chinese toy breed (no spaces),PETS
-WEIMARANER,Silver-gray hunting dog (no spaces),PETS
+PEKINGESE,Ancient Chinese toy breed,PETS
+WEIMARANER,Silver-gray hunting dog,PETS
 VIZSLA,Hungarian pointer breed,PETS
-NEWFOUNDLAND,Massive water rescue dog (no spaces),PETS
+NEWFOUNDLAND,Massive water rescue dog,PETS
 BERNESE,Swiss mountain dog,PETS
 KELPIE,Australian sheepdog,PETS
 HEELER,Australian cattle dog,PETS
-LABRADOODLE,Lab and poodle mix (no spaces),PETS
-GOLDENDOODLE,Golden retriever and poodle mix (no spaces),PETS
+LABRADOODLE,Lab and poodle mix,PETS
+GOLDENDOODLE,Golden retriever and poodle mix,PETS
 PUGGLE,Pug and beagle cross,PETS
 COCKAPOO,Cocker spaniel and poodle mix,PETS
 BORZOI,Russian hunting sighthound,PETS
@@ -40,9 +40,9 @@ DOGOARGENTINO,Argentine hunting dog (no spaces),PETS
 SHARPEI,Wrinkly Chinese breed,PETS
 KEESHOND,Fluffy Dutch barge dog,PETS
 SAMOYED,Fluffy smiling Siberian dog,PETS
-SCHIPPERKE,Small black Belgian dog (no spaces),PETS
+SCHIPPERKE,Small black Belgian dog,PETS
 TOYPOODLE,Smallest curly-coated canine (no spaces),PETS
-MINIATUREPINCHER,King of toys breed (no spaces),PETS
+MINIATUREPINSCHER,King of toys breed (no spaces),PETS
 YORKIE,Yorkshire toy terrier,PETS
 SILKYTERRIER,Australian toy terrier (no spaces),PETS
 TIBETANMASTIFF,Massive Himalayan guard dog (no spaces),PETS
@@ -52,18 +52,18 @@ PIGLET,Miniature swine pet,PETS
 BEAGLE,Small hound dog with floppy ears,PETS
 BOXER,Strong dog breed with a square face,PETS
 COLLIE,Herding dog like Lassie,PETS
-DACHSHUND,Long-bodied dog with short legs (no spaces),PETS
-DALMATIAN,Spotted dog breed (no spaces),PETS
+DACHSHUND,Long-bodied dog with short legs,PETS
+DALMATIAN,Spotted dog breed,PETS
 DOBERMAN,Guard dog with a sleek body,PETS
 HUSKY,Sled dog with a thick coat,PETS
 MASTIFF,Very large guard dog,PETS
 PAPILLON,Tiny dog with butterfly-like ears,PETS
 POODLE,Curly-coated smart dog,PETS
-POMERANIAN,Tiny fluffy orange dog (no spaces),PETS
-ROTTWEILER,Large black and brown guard dog (no spaces),PETS
+POMERANIAN,Tiny fluffy orange dog,PETS
+ROTTWEILER,Large black and brown guard dog,PETS
 SPANIEL,Dog breed with long ears,PETS
 TERRIER,Small dog bred to hunt pests,PETS
-CHIHUAHUA,Very tiny dog breed (no spaces),PETS
+CHIHUAHUA,Very tiny dog breed,PETS
 PERSIAN,Long-haired cat breed,PETS
 SIAMESE,Cat breed with dark points,PETS
 SPHYNX,Hairless cat breed,PETS
@@ -74,7 +74,7 @@ TABBY,Striped house cat,PETS
 CALICO,Three-colored house cat,PETS
 PARAKEET,Small colorful pet bird,PETS
 CANARY,Yellow singing pet bird,PETS
-COCKATIEL,Small pet bird with a crest (no spaces),PETS
+COCKATIEL,Small pet bird with a crest,PETS
 COCKATOO,Large white parrot with a crest,PETS
 MACAW,Large bright parrot,PETS
 PARROT,Talking tropical bird,PETS
@@ -83,11 +83,11 @@ GOLDFISH,Common orange pet fish,PETS
 BETTA,Fighting fish with flowing fins,PETS
 GUPPY,Small colorful aquarium fish,PETS
 TETRA,Tiny schooling aquarium fish,PETS
-ANGELFISH,Tall flat aquarium fish (no spaces),PETS
+ANGELFISH,Tall flat aquarium fish,PETS
 HAMSTER,Small furry pet that runs on a wheel,PETS
 GERBIL,Small desert rodent pet,PETS
 GUINEAPIG,Round squeaky pet rodent (no spaces),PETS
-CHINCHILLA,Very soft pet rodent (no spaces),PETS
+CHINCHILLA,Very soft pet rodent,PETS
 FERRET,Long playful pet mammal,PETS
 RABBIT,Long-eared hopping pet,PETS
 BUNNY,Another name for a rabbit,PETS
@@ -99,7 +99,7 @@ PYTHON,Large pet snake,PETS
 BOACONSTRICTOR,Large squeezing snake (no spaces),PETS
 CORNSNAKE,Pet snake with orange patterns (no spaces),PETS
 MILKSNAKE,Colorful striped pet snake (no spaces),PETS
-TARANTULA,Large hairy pet spider (no spaces),PETS
+TARANTULA,Large hairy pet spider,PETS
 HEDGEHOG,Small pet with tiny spines,PETS
 SUGARGLIDER,Tiny pet that can glide (no spaces),PETS
 MINIPIG,Small pet pig,PETS
@@ -107,7 +107,7 @@ GOAT,Farm animal sometimes kept as a pet,PETS
 DONKEY,Long-eared farm animal,PETS
 PONY,Small horse,PETS
 MULE,Animal that is part horse and part donkey,PETS
-LAMA,Pack animal with wool,PETS
+LLAMA,Pack animal with wool,PETS
 ALPACA,Fluffy animal raised for soft wool,PETS
 KITTEN,Baby cat,PETS
 PUPPY,Baby dog,PETS
@@ -129,12 +129,12 @@ BASENJI,Dog breed that yodels,PETS
 MALTIPOO,Maltese and poodle mix,PETS
 CAVAPOO,Cavalier and poodle mix,PETS
 POMSKY,Pomeranian and husky mix,PETS
-AUSSIEDOODLE,Australian shepherd and poodle mix (no spaces),PETS
-BERNEDOODLE,Bernese and poodle mix (no spaces),PETS
+AUSSIEDOODLE,Australian shepherd and poodle mix,PETS
+BERNEDOODLE,Bernese and poodle mix,PETS
 MORKIE,Maltese and Yorkie mix,PETS
-SCHNOODLE,Schnauzer and poodle mix (no spaces),PETS
+SCHNOODLE,Schnauzer and poodle mix,PETS
 SHELTIE,Small collie-like dog,PETS
-SCHNAUZER,Dog breed with a beard (no spaces),PETS
+SCHNAUZER,Dog breed with a beard,PETS
 MINIPOODLE,Medium-sized poodle (no spaces),PETS
 STANDARDPOODLE,Largest poodle size (no spaces),PETS
 BULLDOG,Wrinkled dog with a pushed-in nose,PETS
@@ -154,7 +154,7 @@ KENNEL,Small shelter for a dog,PETS
 LITTERBOX,Box where a house cat goes to the bathroom (no spaces),PETS
 SCRATCHPOST,Post a cat can claw (no spaces),PETS
 AQUARIUM,Glass tank for fish,PETS
-TERRARIUM,Tank for a lizard or bug (no spaces),PETS
+TERRARIUM,Tank for a lizard or bug,PETS
 BIRDCAGE,Wire home for a bird,PETS
 DOGHOUSE,Little house for a dog,PETS
 CHEWTOY,Toy a dog can bite,PETS
@@ -186,12 +186,12 @@ FOAL,Baby horse,PETS
 GROOMER,Person who washes and trims pets,PETS
 VET,Animal doctor,PETS
 VACCINE,Shot that helps keep a pet healthy,PETS
-MICROCHIP,Tiny ID chip for a pet (no spaces),PETS
+MICROCHIP,Tiny ID chip for a pet,PETS
 MUTT,Mixed-breed dog,PETS
 PUREBRED,Animal from one breed line,PETS
 SHOWDOG,Dog judged in a ring,PETS
 AGILITY,Pet sport with jumps and tunnels,PETS
-OBEDIENCE,Training a dog to follow commands (no spaces),PETS
+OBEDIENCE,Training a dog to follow commands,PETS
 FETCH,Game where a dog brings back a toy,PETS
 SQUEAKER,Noisy toy for a dog,PETS
 TREAT,Small snack for a pet,PETS
@@ -215,9 +215,9 @@ ISTANBUL,City on two continents,CITIES
 MUMBAI,India's financial capital,CITIES
 DELHI,Capital territory of India,CITIES
 SYDNEY,City with a famous opera house,CITIES
-MELBOURNE,Cultural capital of Australia (no spaces),CITIES
+MELBOURNE,Cultural capital of Australia,CITIES
 TORONTO,Capital of Ontario,CITIES
-VANCOUVER,British Columbia coastal city (no spaces),CITIES
+VANCOUVER,British Columbia coastal city,CITIES
 MONTREAL,Largest city in Quebec,CITIES
 HAVANA,Capital of Cuba,CITIES
 LIMA,Capital of Peru,CITIES
@@ -233,15 +233,15 @@ ACCRA,Capital of Ghana,CITIES
 DAKAR,Capital of Senegal,CITIES
 MANILA,Capital of the Philippines,CITIES
 JAKARTA,Capital of Indonesia,CITIES
-SINGAPORE,Lion City (no spaces),CITIES
+SINGAPORE,Lion City,CITIES
 KUALALUMPUR,Capital of Malaysia (no spaces),CITIES
 HANOI,Capital of Vietnam,CITIES
 TAIPEI,Capital of Taiwan,CITIES
 HONGKONG,Pearl of the Orient,CITIES
 SHANGHAI,Largest city in China,CITIES
 DUBLIN,Capital of Ireland,CITIES
-EDINBURGH,Capital of Scotland (no spaces),CITIES
-AMSTERDAM,Capital of the Netherlands (no spaces),CITIES
+EDINBURGH,Capital of Scotland,CITIES
+AMSTERDAM,Capital of the Netherlands,CITIES
 BRUSSELS,Capital of Belgium,CITIES
 VIENNA,Capital of Austria,CITIES
 PRAGUE,Capital of the Czech Republic,CITIES
@@ -259,7 +259,7 @@ AUSTIN,Capital of Texas,CITIES
 HOUSTON,Largest city in Texas,CITIES
 SANANTONIO,Home of the Alamo (no spaces),CITIES
 ELPASO,Texas city on the border,CITIES
-ALBUQUERQUE,Largest city in New Mexico (no spaces),CITIES
+ALBUQUERQUE,Largest city in New Mexico,CITIES
 SANTAFE,Capital of New Mexico,CITIES
 LASVEGAS,Nevada city with many casinos,CITIES
 RENO,Smaller Nevada casino city,CITIES
@@ -275,58 +275,58 @@ WICHITA,Large city in Kansas,CITIES
 TOPEKA,Capital of Kansas,CITIES
 OKLAHOMACITY,Capital of Oklahoma (no spaces),CITIES
 TULSA,Oklahoma city on the Arkansas River,CITIES
-MINNEAPOLIS,Minnesota city of lakes (no spaces),CITIES
+MINNEAPOLIS,Minnesota city of lakes,CITIES
 SAINTPAUL,Minnesota capital city (no spaces),CITIES
-MILWAUKEE,Wisconsin city on Lake Michigan (no spaces),CITIES
+MILWAUKEE,Wisconsin city on Lake Michigan,CITIES
 MADISON,Capital of Wisconsin,CITIES
 CHICAGO,Windy City,CITIES
 DETROIT,Michigan motor city,CITIES
 LANSING,Capital of Michigan,CITIES
-CLEVELAND,Ohio city on Lake Erie (no spaces),CITIES
+CLEVELAND,Ohio city on Lake Erie,CITIES
 COLUMBUS,Capital of Ohio,CITIES
-CINCINNATI,Ohio city on the Ohio River (no spaces),CITIES
-INDIANAPOLIS,Capital of Indiana (no spaces),CITIES
-LOUISVILLE,Kentucky city known for the Derby (no spaces),CITIES
-LEXINGTON,Kentucky horse city (no spaces),CITIES
-NASHVILLE,Tennessee music city (no spaces),CITIES
+CINCINNATI,Ohio city on the Ohio River,CITIES
+INDIANAPOLIS,Capital of Indiana,CITIES
+LOUISVILLE,Kentucky city known for the Derby,CITIES
+LEXINGTON,Kentucky horse city,CITIES
+NASHVILLE,Tennessee music city,CITIES
 MEMPHIS,Tennessee city on the Mississippi,CITIES
 ATLANTA,Capital of Georgia,CITIES
 SAVANNAH,Historic Georgia coastal city,CITIES
-CHARLESTON,Historic South Carolina city (no spaces),CITIES
+CHARLESTON,Historic South Carolina city,CITIES
 COLUMBIA,Capital of South Carolina,CITIES
-CHARLOTTE,North Carolina banking city (no spaces),CITIES
+CHARLOTTE,North Carolina banking city,CITIES
 RALEIGH,Capital of North Carolina,CITIES
 RICHMOND,Capital of Virginia,CITIES
 NORFOLK,Virginia port city,CITIES
-BALTIMORE,Maryland harbor city (no spaces),CITIES
-ANNAPOLIS,Capital of Maryland (no spaces),CITIES
-PHILADELPHIA,City of Brotherly Love (no spaces),CITIES
-PITTSBURGH,Pennsylvania steel city (no spaces),CITIES
-HARRISBURG,Capital of Pennsylvania (no spaces),CITIES
+BALTIMORE,Maryland harbor city,CITIES
+ANNAPOLIS,Capital of Maryland,CITIES
+PHILADELPHIA,City of Brotherly Love,CITIES
+PITTSBURGH,Pennsylvania steel city,CITIES
+HARRISBURG,Capital of Pennsylvania,CITIES
 BUFFALO,New York city near Niagara Falls,CITIES
-ROCHESTER,New York city on Lake Ontario (no spaces),CITIES
+ROCHESTER,New York city on Lake Ontario,CITIES
 ALBANY,Capital of New York,CITIES
 BOSTON,Massachusetts capital city,CITIES
-PROVIDENCE,Capital of Rhode Island (no spaces),CITIES
+PROVIDENCE,Capital of Rhode Island,CITIES
 HARTFORD,Capital of Connecticut,CITIES
 NEWHAVEN,Connecticut city with Yale,CITIES
 NEWARK,New Jersey city near New York City,CITIES
 TRENTON,Capital of New Jersey,CITIES
 DOVER,Capital of Delaware,CITIES
-WILMINGTON,Largest city in Delaware (no spaces),CITIES
-WASHINGTON,Capital of the United States (no spaces),CITIES
+WILMINGTON,Largest city in Delaware,CITIES
+WASHINGTON,Capital of the United States,CITIES
 MIAMI,South Florida beach city,CITIES
 ORLANDO,Florida city with theme parks,CITIES
 TAMPA,Florida Gulf Coast city,CITIES
-JACKSONVILLE,Largest city in Florida (no spaces),CITIES
-TALLAHASSEE,Capital of Florida (no spaces),CITIES
+JACKSONVILLE,Largest city in Florida,CITIES
+TALLAHASSEE,Capital of Florida,CITIES
 NEWORLEANS,Louisiana city with jazz (no spaces),CITIES
 BATONROUGE,Capital of Louisiana (no spaces),CITIES
-BIRMINGHAM,Largest city in Alabama (no spaces),CITIES
-MONTGOMERY,Capital of Alabama (no spaces),CITIES
+BIRMINGHAM,Largest city in Alabama,CITIES
+MONTGOMERY,Capital of Alabama,CITIES
 MOBILE,Alabama port city,CITIES
 LITTLEROCK,Capital of Arkansas (no spaces),CITIES
-FAYETTEVILLE,Arkansas college city (no spaces),CITIES
+FAYETTEVILLE,Arkansas college city,CITIES
 STLOUIS,Missouri city by the Gateway Arch,CITIES
 KANSASCITY,Missouri city known for barbecue (no spaces),CITIES
 JEFFERSONCITY,Capital of Missouri (no spaces),CITIES
@@ -336,13 +336,13 @@ FARGO,Largest city in North Dakota,CITIES
 BISMARCK,Capital of North Dakota,CITIES
 SIOUXFALLS,Largest city in South Dakota (no spaces),CITIES
 PIERRE,Capital of South Dakota,CITIES
-ANCHORAGE,Largest city in Alaska (no spaces),CITIES
+ANCHORAGE,Largest city in Alaska,CITIES
 JUNEAU,Capital of Alaska,CITIES
 HONOLULU,Capital of Hawaii,CITIES
 HILO,Hawaiian city on the Big Island,CITIES
 MEXICOCITY,Capital of Mexico (no spaces),CITIES
-GUADALAJARA,Large city in Mexico (no spaces),CITIES
-MONTERREY,Industrial city in Mexico (no spaces),CITIES
+GUADALAJARA,Large city in Mexico,CITIES
+MONTERREY,Industrial city in Mexico,CITIES
 TIJUANA,Border city in Mexico,CITIES
 OTTAWA,Capital of Canada,CITIES
 CALGARY,Alberta city known for the Stampede,CITIES
@@ -356,34 +356,34 @@ SANJOSE,Capital of Costa Rica,CITIES
 PANAMACITY,Capital of Panama (no spaces),CITIES
 QUITO,Capital of Ecuador,CITIES
 CARACAS,Capital of Venezuela,CITIES
-MONTEVIDEO,Capital of Uruguay (no spaces),CITIES
+MONTEVIDEO,Capital of Uruguay,CITIES
 ASUNCION,Capital of Paraguay,CITIES
 LAPAZ,Seat of government in Bolivia,CITIES
 SUCRE,Constitutional capital of Bolivia,CITIES
 SANJUAN,Capital of Puerto Rico,CITIES
 PUNTAARENAS,City in southern Chile (no spaces),CITIES
 MEDELLIN,Large city in Colombia,CITIES
-CARTAGENA,Historic city in Colombia (no spaces),CITIES
-MARACAIBO,Large Venezuelan city (no spaces),CITIES
+CARTAGENA,Historic city in Colombia,CITIES
+MARACAIBO,Large Venezuelan city,CITIES
 CUSCO,Historic city in Peru,CITIES
 AREQUIPA,City near volcanoes in Peru,CITIES
 RABAT,Capital of Morocco,CITIES
-CASABLANCA,Largest city in Morocco (no spaces),CITIES
-MARRAKESH,Famous city in Morocco (no spaces),CITIES
+CASABLANCA,Largest city in Morocco,CITIES
+MARRAKESH,Famous city in Morocco,CITIES
 ALGIERS,Capital of Algeria,CITIES
 TUNIS,Capital of Tunisia,CITIES
 TRIPOLI,Capital of Libya,CITIES
 ADDISABABA,Capital of Ethiopia (no spaces),CITIES
 KAMPALA,Capital of Uganda,CITIES
 KIGALI,Capital of Rwanda,CITIES
-DAR,ES SALAAM Tanzanian port city,CITIES
+DARESSALAAM,Largest city in Tanzania (no spaces),CITIES
 DODOMA,Capital of Tanzania,CITIES
 HARARE,Capital of Zimbabwe,CITIES
 LUSAKA,Capital of Zambia,CITIES
 MAPUTO,Capital of Mozambique,CITIES
 GABORONE,Capital of Botswana,CITIES
 WINDHOEK,Capital of Namibia,CITIES
-JOHANNESBURG,Largest city in South Africa (no spaces),CITIES
+JOHANNESBURG,Largest city in South Africa,CITIES
 PRETORIA,Administrative capital of South Africa,CITIES
 DURBAN,South African port city,CITIES
 ABUJA,Capital of Nigeria,CITIES
@@ -395,7 +395,7 @@ MUSCAT,Capital of Oman,CITIES
 KUWAITCITY,Capital of Kuwait (no spaces),CITIES
 MANAMA,Capital of Bahrain,CITIES
 AMMAN,Capital of Jordan,CITIES
-JERUSALEM,Holy city in Israel (no spaces),CITIES
+JERUSALEM,Holy city in Israel,CITIES
 TELAVIV,Israeli coastal city,CITIES
 BEIRUT,Capital of Lebanon,CITIES
 DAMASCUS,Capital of Syria,CITIES
@@ -435,7 +435,7 @@ ALONSO,Polar Bear Pete of the Mets (last name),ATHLETES
 GOLDSCHMIDT,Cardinals first baseman Paul (last name),ATHLETES
 ARENADO,Cardinals third base vacuum Nolan (last name),ATHLETES
 DEVERS,Red Sox star Rafael (last name),ATHLETES
-STRAUSBURG,Nationals drafted ace Stephen (last name),ATHLETES
+STRASBURG,Nationals drafted ace Stephen (last name),ATHLETES
 BUMGARNER,MadBum of the Giants (last name),ATHLETES
 LINCECUM,The Freak of the Giants (last name),ATHLETES
 CAIN,Giants perfect game pitcher Matt (last name),ATHLETES
@@ -472,11 +472,11 @@ PIERCE,Celtics star Paul (last name),ATHLETES
 ALLEN,Great shooter Ray (last name),ATHLETES
 MILLER,Pacers shooter Reggie (last name),ATHLETES
 BIRD,Celtics legend Larry (last name),ATHLETES
-MAGIC,Lakers legend Earvin (last name),ATHLETES
+MAGIC,Nickname of Lakers legend Earvin Johnson,ATHLETES
 ABDULJABBAR,Skyhook legend Kareem (last name),ATHLETES
 ROBERTSON,Big O basketball star (last name),ATHLETES
 BAYLOR,Lakers star Elgin (last name),ATHLETES
-MING,Rockets center Yao (last name),ATHLETES
+MING,Given name of Rockets center Yao,ATHLETES
 JOKIC,Nuggets star Nikola (last name),ATHLETES
 EMBIID,76ers center Joel (last name),ATHLETES
 DONCIC,Mavericks playmaker Luka (last name),ATHLETES
@@ -516,7 +516,7 @@ OWENS,Star receiver Terrell (last name),ATHLETES
 FITZGERALD,Cardinals receiver Larry (last name),ATHLETES
 KELCE,Chiefs tight end Travis (last name),ATHLETES
 GRONKOWSKI,Patriots tight end Rob (last name),ATHLETES
-WATT,Steelers defender J J (last name),ATHLETES
+WATT,Steelers defender T J (last name),ATHLETES
 DONALD,Rams defender Aaron (last name),ATHLETES
 LEWIS,Ravens linebacker Ray (last name),ATHLETES
 POLAMALU,Steelers safety Troy (last name),ATHLETES
@@ -557,7 +557,7 @@ GRIFFEY,Sweet-swinging Ken Jr (last name),ATHLETES
 BONDS,Barry home run star (last name),ATHLETES
 MCGWIRE,Cardinals slugger Mark (last name),ATHLETES
 SOSA,Cubs slugger Sammy (last name),ATHLETES
-AROD,Yankees slugger Alex (last name),ATHLETES
+AROD,Nickname of Yankees slugger Alex Rodriguez,ATHLETES
 CABRERA,Tigers star Miguel (last name),ATHLETES
 VERLANDER,Tigers and Astros ace Justin (last name),ATHLETES
 SCHERZER,Intense ace Max (last name),ATHLETES
@@ -570,7 +570,7 @@ WILLIAMS,Ted the Splendid Splinter (last name),ATHLETES
 MESSI,Soccer star Lionel (last name),ATHLETES
 RONALDO,Soccer star Cristiano (last name),ATHLETES
 MBAPPE,French soccer star Kylian (last name),ATHLETES
-PELE,Brazilian soccer legend (last name),ATHLETES
+PELE,Brazilian soccer legend known by one name,ATHLETES
 MARADONA,Argentine soccer legend Diego (last name),ATHLETES
 BECKHAM,English soccer star David (last name),ATHLETES
 HAALAND,Goal-scoring star Erling (last name),ATHLETES
@@ -578,12 +578,12 @@ MODRIC,Croatian midfielder Luka (last name),ATHLETES
 KANE,English striker Harry (last name),ATHLETES
 LEWANDOWSKI,Polish striker Robert (last name),ATHLETES
 SALAH,Liverpool star Mohamed (last name),ATHLETES
-NEYMAR,Brazilian soccer star Neymar (last name),ATHLETES
-RONALDINHO,Smiling Brazilian soccer star (last name),ATHLETES
+NEYMAR,Brazilian forward who starred for Santos and PSG (first name),ATHLETES
+RONALDINHO,Smiling Brazilian soccer star (nickname),ATHLETES
 ZIDANE,French soccer legend Zinedine (last name),ATHLETES
-XAVI,Barcelona playmaker Xavi (last name),ATHLETES
+XAVI,Barcelona playmaker Hernandez (first name),ATHLETES
 INIESTA,Spanish midfield star Andres (last name),ATHLETES
-MARTA,Brazilian soccer great Marta (last name),ATHLETES
+MARTA,Brazilian women's soccer great known by one name,ATHLETES
 WAMBACH,U S soccer star Abby (last name),ATHLETES
 HAMM,U S soccer star Mia (last name),ATHLETES
 RAPINOE,U S soccer star Megan (last name),ATHLETES
@@ -592,7 +592,7 @@ BRADLEY,U S soccer player Michael (last name),ATHLETES
 WOODS,Golf legend Tiger (last name),ATHLETES
 MICKELSON,Lefty golfer Phil (last name),ATHLETES
 SCHEFFLER,Top golfer Scottie (last name),ATHLETES
-MCLLROY,Northern Irish golfer Rory (last name),ATHLETES
+MCILROY,Northern Irish golfer Rory (last name),ATHLETES
 KOEPKA,Major-winning golfer Brooks (last name),ATHLETES
 SPIETH,Golfer Jordan (last name),ATHLETES
 NICKLAUS,Golden Bear Jack (last name),ATHLETES
@@ -601,16 +601,16 @@ PLAYER,Golf great Gary (last name),ATHLETES
 WATSON,Golf great Tom (last name),ATHLETES
 ALIEN,Xenomorph sci-fi film,ENTERTAINMENT
 PREDATOR,Schwarzenegger's invisible alien foe,ENTERTAINMENT
-TERMINATOR,Cyborg assassin sent back in time (no spaces),ENTERTAINMENT
+TERMINATOR,Cyborg assassin sent back in time,ENTERTAINMENT
 MATRIX,Neo's simulated reality film,ENTERTAINMENT
-INCEPTION,Dream within a dream film (no spaces),ENTERTAINMENT
-INTERSTELLAR,Nolan's wormhole epic (no spaces),ENTERTAINMENT
+INCEPTION,Dream within a dream film,ENTERTAINMENT
+INTERSTELLAR,Nolan's wormhole epic,ENTERTAINMENT
 DUNE,Arrakis spice epic,ENTERTAINMENT
 AVENGERS,Earth's mightiest heroes assembly,ENTERTAINMENT
 XMEN,Mutant superhero team,ENTERTAINMENT
 DEADPOOL,The Merc with a Mouth,ENTERTAINMENT
-WOLVERINE,Adamantium-clawed mutant (no spaces),ENTERTAINMENT
-TRANSFORMERS,Autobots and Decepticons film (no spaces),ENTERTAINMENT
+WOLVERINE,Adamantium-clawed mutant,ENTERTAINMENT
+TRANSFORMERS,Autobots and Decepticons film,ENTERTAINMENT
 JURASSICPARK,Spielberg's dinosaur island (no spaces),ENTERTAINMENT
 FASTFURIOUS,Vin Diesel's street racing franchise (no spaces),ENTERTAINMENT
 MISSIONIMPOSSIBLE,Tom Cruise's spy franchise (no spaces),ENTERTAINMENT
@@ -621,13 +621,13 @@ HOBBIT,Bilbo's prequel trilogy,ENTERTAINMENT
 TWILIGHT,Vampire romance saga,ENTERTAINMENT
 HUNGERGAMES,Katniss Everdeen's dystopian saga (no spaces),ENTERTAINMENT
 MAZERUNNER,Thomas in the Glade film (no spaces),ENTERTAINMENT
-DIVERGENT,Tris Prior's dystopian film (no spaces),ENTERTAINMENT
+DIVERGENT,Tris Prior's dystopian film,ENTERTAINMENT
 PERCYJACKSON,Demigod son of Poseidon (no spaces),ENTERTAINMENT
 NARNIA,Wardrobe's magical destination,ENTERTAINMENT
 PIRATESOFTHECARIBBEAN,Jack Sparrow's franchise (no spaces),ENTERTAINMENT
 INDIANA,Jones the archaeology professor,ENTERTAINMENT
 BACKTOTHEFUTURE,DeLorean time travel film (no spaces),ENTERTAINMENT
-GHOSTBUSTERS,Who you gonna call (no spaces),ENTERTAINMENT
+GHOSTBUSTERS,Who you gonna call,ENTERTAINMENT
 GREMLINS,Don't feed them after midnight,ENTERTAINMENT
 GOONIES,Truffle Shuffle kids film,ENTERTAINMENT
 KARATEKID,Wax on wax off film (no spaces),ENTERTAINMENT
@@ -635,7 +635,7 @@ ROCKY,Stallone's boxing franchise,ENTERTAINMENT
 RAMBO,Stallone's action franchise,ENTERTAINMENT
 DIEHARD,Bruce Willis Christmas action film,ENTERTAINMENT
 LETHALWEAPON,Mel Gibson buddy cop film (no spaces),ENTERTAINMENT
-BEVERLYHILLS,Cop starring Eddie Murphy (no spaces),ENTERTAINMENT
+BEVERLYHILLS,Eddie Murphy action comedy ___ Cop (no spaces),ENTERTAINMENT
 TOPGUN,Maverick's jet fighter film,ENTERTAINMENT
 SHREK,DreamWorks ogre franchise,ENTERTAINMENT
 MADMAX,Fury Road apocalyptic franchise,ENTERTAINMENT
@@ -643,10 +643,10 @@ BLADERUNNER,Harrison Ford replicant film (no spaces),ENTERTAINMENT
 TRON,Grid-based neon sci-fi film,ENTERTAINMENT
 ROBOCOP,Cyborg law enforcement officer film,ENTERTAINMENT
 TOTALRECALL,Mars memory implant film (no spaces),ENTERTAINMENT
-STARSHIP,Troopers fighting giant bugs,ENTERTAINMENT
+STARSHIP,___ Troopers (film about fighting giant bugs),ENTERTAINMENT
 FIFTHELEMENT,Bruce Willis flying cab sci-fi (no spaces),ENTERTAINMENT
 GALAXYQUEST,Sci-fi parody with Tim Allen (no spaces),ENTERTAINMENT
-SPACEBALLS,Mel Brooks Star Wars parody (no spaces),ENTERTAINMENT
+SPACEBALLS,Mel Brooks Star Wars parody,ENTERTAINMENT
 GHOST,Patrick Swayze pottery film,ENTERTAINMENT
 ALIENS,James Cameron's sci-fi sequel,ENTERTAINMENT
 STARWARS,Space movie saga with Jedi and the Force,ENTERTAINMENT
@@ -664,19 +664,19 @@ FLASH,Super-fast hero,ENTERTAINMENT
 GREENLANTERN,Hero with a power ring (no spaces),ENTERTAINMENT
 SHAZAM,Hero who transforms with a magic word,ENTERTAINMENT
 JOKER,Batman villain with a creepy smile,ENTERTAINMENT
-HARLEQUIN,Bat-wielding comic villain (no spaces),ENTERTAINMENT
+HARLEYQUINN,Bat-wielding comic villain (no spaces),ENTERTAINMENT
 LOKI,Trickster god from Marvel,ENTERTAINMENT
 VENOM,Symbiote antihero with sharp teeth,ENTERTAINMENT
 JAWS,Shark movie thriller,ENTERTAINMENT
-ET,Friendly alien from a Spielberg film,ENTERTAINMENT
+ELLIOTT,Boy who befriends a stranded alien in a Spielberg film,ENTERTAINMENT
 KINGKONG,Giant ape movie monster,ENTERTAINMENT
 GODZILLA,Giant lizard movie monster,ENTERTAINMENT
 PACIFICRIM,Giant robots fight giant monsters (no spaces),ENTERTAINMENT
 MIB,Alien-policing movie series,ENTERTAINMENT
 MENINBLACK,Agents who handle aliens (no spaces),ENTERTAINMENT
-GLADIATOR,Roman warrior movie (no spaces),ENTERTAINMENT
+GLADIATOR,Roman warrior movie,ENTERTAINMENT
 TROY,Greek war movie,ENTERTAINMENT
-BRAVEHEART,Scottish freedom movie (no spaces),ENTERTAINMENT
+BRAVEHEART,Scottish freedom movie,ENTERTAINMENT
 TITANIC,Big ship love story movie,ENTERTAINMENT
 AVATAR,Blue alien world movie,ENTERTAINMENT
 MOANA,Disney ocean adventure film,ENTERTAINMENT
@@ -685,35 +685,35 @@ TANGLED,Disney movie about Rapunzel,ENTERTAINMENT
 ENCANTO,Disney movie with a magical family,ENTERTAINMENT
 COCO,Pixar movie about music and family,ENTERTAINMENT
 TOYSTORY,Pixar movie about living toys,ENTERTAINMENT
-CARS,Pixar movie with race cars,ENTERTAINMENT
-UP,Pixar movie with balloons and adventure,ENTERTAINMENT
+CARS,Pixar movie starring Lightning McQueen,ENTERTAINMENT
+ONWARD,Pixar film about two elf brothers,ENTERTAINMENT
 WALLE,Robot movie set in space,ENTERTAINMENT
 FINDINGNEMO,Pixar fish adventure (no spaces),ENTERTAINMENT
 FINDINGDORY,Pixar movie about a forgetful fish (no spaces),ENTERTAINMENT
 MONSTERSINC,Pixar movie with Sulley and Mike (no spaces),ENTERTAINMENT
-INCREDIBLES,Pixar superhero family film (no spaces),ENTERTAINMENT
-RATATOUILLE,Pixar movie about a cooking rat (no spaces),ENTERTAINMENT
+INCREDIBLES,Pixar superhero family film,ENTERTAINMENT
+RATATOUILLE,Pixar movie about a cooking rat,ENTERTAINMENT
 BRAVE,Pixar movie with a Scottish princess,ENTERTAINMENT
 INSIDEOUT,Pixar movie about emotions (no spaces),ENTERTAINMENT
 SOUL,Pixar movie about music and life,ENTERTAINMENT
 LUCA,Pixar movie about sea friends,ENTERTAINMENT
-ELEMENTAL,Pixar movie about fire and water people (no spaces),ENTERTAINMENT
+ELEMENTAL,Pixar movie about fire and water people,ENTERTAINMENT
 MULAN,Disney movie about a brave warrior girl,ENTERTAINMENT
 ALADDIN,Disney movie with a magic lamp,ENTERTAINMENT
 LIONKING,Disney movie about Simba,ENTERTAINMENT
 BAMBI,Disney forest deer movie,ENTERTAINMENT
-PINOCCHIO,Puppet boy movie (no spaces),ENTERTAINMENT
+PINOCCHIO,Puppet boy movie,ENTERTAINMENT
 DUMBO,Flying elephant movie,ENTERTAINMENT
-CINDERELLA,Glass slipper fairy tale film (no spaces),ENTERTAINMENT
+CINDERELLA,Glass slipper fairy tale film,ENTERTAINMENT
 SNOWWHITE,Disney princess with seven dwarfs (no spaces),ENTERTAINMENT
 BEAUTYANDBEAST,Disney tale with a cursed prince (no spaces),ENTERTAINMENT
 LITTLEMERMAID,Disney movie about Ariel (no spaces),ENTERTAINMENT
-POCAHONTAS,Disney movie about a Native girl (no spaces),ENTERTAINMENT
+POCAHONTAS,Disney movie about a Native girl,ENTERTAINMENT
 HERCULES,Disney movie about a strong hero,ENTERTAINMENT
 TARZAN,Disney jungle hero movie,ENTERTAINMENT
 ROBINHOOD,Disney movie with a fox archer (no spaces),ENTERTAINMENT
 ZOOTOPIA,Disney animal city movie,ENTERTAINMENT
-BIGHERO,Disney superhero team movie,ENTERTAINMENT
+BAYMAX,Inflatable robot hero of Big Hero 6,ENTERTAINMENT
 WRECKITRALPH,Arcade game movie (no spaces),ENTERTAINMENT
 RALPHBREAKSTHEINTERNET,Sequel about the internet (no spaces),ENTERTAINMENT
 SING,Animated movie with singing animals,ENTERTAINMENT
@@ -723,25 +723,25 @@ MINIONS,Yellow helper movie series,ENTERTAINMENT
 KUNGFUPANDA,Animated movie with Po (no spaces),ENTERTAINMENT
 HOWTOTRAINYOURDRAGON,Movie with Hiccup and Toothless (no spaces),ENTERTAINMENT
 SHARKTALE,Animated fish movie (no spaces),ENTERTAINMENT
-MADAGASCAR,Animated zoo animal movie (no spaces),ENTERTAINMENT
+MADAGASCAR,Animated zoo animal movie,ENTERTAINMENT
 TROLLS,Movie with colorful singing dolls,ENTERTAINMENT
 SHARKBOY,Movie with a shark-powered boy,ENTERTAINMENT
 SPYKIDS,Family spy movie,ENTERTAINMENT
 NIGHTATTHEMUSEUM,Museum adventure movie (no spaces),ENTERTAINMENT
-PADDINGTON,Movie about a kind bear (no spaces),ENTERTAINMENT
+PADDINGTON,Movie about a kind bear,ENTERTAINMENT
 PETERPAN,Boy who never grows up,ENTERTAINMENT
 WILLYWONKA,Candy factory movie (no spaces),ENTERTAINMENT
 CHARLIEANDTHECHOCOLATEFACTORY,Candy factory story (no spaces),ENTERTAINMENT
 MATILDA,Movie about a smart girl with powers,ENTERTAINMENT
 JUMANJI,Board game adventure story,ENTERTAINMENT
-BEETLEJUICE,Funny ghost movie (no spaces),ENTERTAINMENT
+BEETLEJUICE,Funny ghost movie,ENTERTAINMENT
 CASPER,Friendly ghost movie,ENTERTAINMENT
 HOTELTRANSYLVANIA,Monster hotel cartoon movie (no spaces),ENTERTAINMENT
 MONSTERHOUSE,Haunted house movie (no spaces),ENTERTAINMENT
 CORALINE,Creepy button-eyes movie,ENTERTAINMENT
-PARANORMAN,Boy who sees ghosts movie (no spaces),ENTERTAINMENT
+PARANORMAN,Boy who sees ghosts movie,ENTERTAINMENT
 KUBO,Origami adventure movie,ENTERTAINMENT
-BOXTROLLS,Movie about underground box-wearing creatures (no spaces),ENTERTAINMENT
+BOXTROLLS,Movie about underground box-wearing creatures,ENTERTAINMENT
 SHAUNTHESHEEP,Clay sheep movie (no spaces),ENTERTAINMENT
 CHICKENRUN,Clay chicken escape movie (no spaces),ENTERTAINMENT
 THEMASK,Movie with a magical green mask,ENTERTAINMENT
@@ -753,7 +753,7 @@ ROADTOELDORADO,Animated gold city movie (no spaces),ENTERTAINMENT
 SINBAD,Animated sailor movie,ENTERTAINMENT
 PRINCEOFEGYPT,Animated story of Moses (no spaces),ENTERTAINMENT
 JOSEPHKINGOFDREAMS,Animated Bible story (no spaces),ENTERTAINMENT
-HOOK,Peter Pan movie with Captain Hook,ENTERTAINMENT
+HOOK,Spielberg film with Robin Williams as a grown-up Peter Pan,ENTERTAINMENT
 HOMEALONE,Kid stops burglars movie (no spaces),ENTERTAINMENT
 ELF,Christmas movie with Buddy,ENTERTAINMENT
 POLAREXPRESS,Christmas train movie (no spaces),ENTERTAINMENT
@@ -767,8 +767,8 @@ THOMAS,Tank engine kids show,ENTERTAINMENT
 POWERPUFFGIRLS,Three tiny superhero girls (no spaces),ENTERTAINMENT
 TEENAGEMUTANTNINJATURTLES,Pizza-loving turtle heroes (no spaces),ENTERTAINMENT
 HEMAN,Hero of Eternia,ENTERTAINMENT
-SHE,RA Princess of Power hero,ENTERTAINMENT
-THUNDERCATS,Cartoon cat warrior team (no spaces),ENTERTAINMENT
+SHERA,Princess of Power hero,ENTERTAINMENT
+THUNDERCATS,Cartoon cat warrior team,ENTERTAINMENT
 VOLTRON,Giant robot team cartoon,ENTERTAINMENT
 TRANSFORMERSONE,Robot origin movie (no spaces),ENTERTAINMENT
 SONICTHEHEDGEHOG,Blue speedster movie (no spaces),ENTERTAINMENT
@@ -779,45 +779,45 @@ MINECRAFTMOVIE,Block-building game movie (no spaces),ENTERTAINMENT
 SUPERMARIOMOVIE,Movie about Nintendo plumber brothers (no spaces),ENTERTAINMENT
 FALLOUT,Post-apocalyptic game-based series,ENTERTAINMENT
 LASTOFUS,Survival game-based series,ENTERTAINMENT
-WEDNESDAY,Addams Family spin-off series (no spaces),ENTERTAINMENT
+WEDNESDAY,Addams Family spin-off series,ENTERTAINMENT
 STRANGERTHINGS,Science fiction mystery series (no spaces),ENTERTAINMENT
 SQUIDGAME,Survival contest thriller series (no spaces),ENTERTAINMENT
-MANDALORIAN,Star Wars series with Grogu (no spaces),ENTERTAINMENT
+MANDALORIAN,Star Wars series with Grogu,ENTERTAINMENT
 ANDOR,Star Wars rebel series,ENTERTAINMENT
 LOKISERIES,Marvel time-traveling series (no spaces),ENTERTAINMENT
-WANDAVISION,Marvel series about Wanda and Vision (no spaces),ENTERTAINMENT
+WANDAVISION,Marvel series about Wanda and Vision,ENTERTAINMENT
 HAWKEYE,Marvel series about Clint Barton,ENTERTAINMENT
 MOONKNIGHT,Marvel hero with many identities (no spaces),ENTERTAINMENT
-DAREDEVIL,Blind hero crime series (no spaces),ENTERTAINMENT
+DAREDEVIL,Blind hero crime series,ENTERTAINMENT
 PUNISHER,Vigilante action series,ENTERTAINMENT
 REACHER,Series about a giant drifter hero,ENTERTAINMENT
 JACKRYAN,Spy action series,ENTERTAINMENT
 SHERLOCK,Detective series with Holmes,ENTERTAINMENT
 DOCTORWHO,Time-traveling British series (no spaces),ENTERTAINMENT
 MERLIN,Fantasy series about a young wizard,ENTERTAINMENT
-SUPERNATURAL,Brothers hunting monsters series (no spaces),ENTERTAINMENT
+SUPERNATURAL,Brothers hunting monsters series,ENTERTAINMENT
 BUFFY,Vampire-fighting TV series,ENTERTAINMENT
 GILMOREGIRLS,Fast-talking family series (no spaces),ENTERTAINMENT
-FRIENDS,Sitcom about six friends,ENTERTAINMENT
+FRIENDS,Sitcom set around Central Perk,ENTERTAINMENT
 CURLING,Ice sport with brooms and stones,SPORTS
 LUGE,Feet-first sledding sport,SPORTS
 BOBSLED,Jamaican team's winter track sport,SPORTS
 SKELETON,Head-first sledding sport,SPORTS
 BIATHLON,Skiing and rifle shooting,SPORTS
 SKIJUMPING,Winter sport aiming for distance (no spaces),SPORTS
-SNOWBOARDING,Halfpipe winter sport (no spaces),SPORTS
+SNOWBOARDING,Halfpipe winter sport,SPORTS
 ALPINESKIING,Downhill gate racing (no spaces),SPORTS
 FIGURESKATING,Ice sport with axels and salchows (no spaces),SPORTS
 SPEEDSKATING,Racing on an ice oval (no spaces),SPORTS
 ICEHOCKEY,Winter sport with pucks (no spaces),SPORTS
 RINGETTE,Ice sport played with a straight stick,SPORTS
 BANDY,Ice sport similar to field hockey,SPORTS
-BROOMBALL,Ice sport without skates (no spaces),SPORTS
+BROOMBALL,Ice sport without skates,SPORTS
 DIVING,Springboard and platform aquatic sport,SPORTS
-SYNCHRONIZED,Swimming ballet in the pool (no spaces),SPORTS
-WINDSURFING,Sailing on a surfboard (no spaces),SPORTS
-KITEBOARDING,Surfing pulled by a parachute (no spaces),SPORTS
-WAKEBOARDING,Surfing pulled by a motorboat (no spaces),SPORTS
+SYNCHRONIZED,Kind of swimming now called artistic swimming,SPORTS
+WINDSURFING,Sailing on a surfboard,SPORTS
+KITEBOARDING,Surfing pulled by a parachute,SPORTS
+WAKEBOARDING,Surfing pulled by a motorboat,SPORTS
 WATERSKIING,Gliding on water with two boards (no spaces),SPORTS
 CANOEING,Paddling with a single-bladed oar,SPORTS
 KAYAKING,Paddling with a double-bladed oar,SPORTS
@@ -828,7 +828,7 @@ ANGLING,Fishing with a hook and line,SPORTS
 HUNTING,Tracking and game sport,SPORTS
 SHOOTING,Marksmanship sport,SPORTS
 DARTS,Pub game aiming for a bullseye,SPORTS
-BILLIARDS,Cue sport on a pocketless table (no spaces),SPORTS
+BILLIARDS,Cue sport on a pocketless table,SPORTS
 SNOOKER,Cue sport with 22 balls,SPORTS
 POOL,Eight-ball cue sport,SPORTS
 BOCCEBALL,Italian lawn bowling (no spaces),SPORTS
@@ -839,7 +839,7 @@ MINIGOLF,Putting through windmills,SPORTS
 DISCGOLF,Frisbee target sport,SPORTS
 ULTIMATE,Team frisbee sport,SPORTS
 SOFTBALL,Underhand pitching sport,SPORTS
-STICKBALL,Urban street baseball (no spaces),SPORTS
+STICKBALL,Urban street baseball,SPORTS
 ROUNDERS,British bat-and-ball ancestor of baseball,SPORTS
 KORFBALL,Mixed-gender Dutch ball sport,SPORTS
 NETBALL,Court sport similar to basketball,SPORTS
@@ -850,31 +850,31 @@ KABADDI,Indian contact tag sport,SPORTS
 HURLING,Fast-paced Irish stick sport,SPORTS
 CAMOGIE,Women's variant of hurling,SPORTS
 BASEBALL,Bat-and-ball game with bases,SPORTS
-BASKETBALL,Team game with hoops (no spaces),SPORTS
+BASKETBALL,Team game with hoops,SPORTS
 SOCCER,Team game where players kick a ball,SPORTS
 FOOTBALL,Team game with touchdowns,SPORTS
-VOLLEYBALL,Team game where a ball goes over a net (no spaces),SPORTS
+VOLLEYBALL,Team game where a ball goes over a net,SPORTS
 TENNIS,Racket sport played over a net,SPORTS
-BADMINTON,Racket sport with a birdie (no spaces),SPORTS
-PICKLEBALL,Paddle sport on a small court (no spaces),SPORTS
-RACQUETBALL,Fast indoor racket sport (no spaces),SPORTS
+BADMINTON,Racket sport with a birdie,SPORTS
+PICKLEBALL,Paddle sport on a small court,SPORTS
+RACQUETBALL,Fast indoor racket sport,SPORTS
 SQUASH,Indoor racket sport in a small court,SPORTS
 GOLF,Sport where players hit a ball into a hole,SPORTS
 BOWLING,Sport where a ball knocks down pins,SPORTS
 ARCHERY,Sport of shooting arrows at a target,SPORTS
 BOXING,Sport where fighters punch with gloves,SPORTS
-WRESTLING,Sport of grappling an opponent (no spaces),SPORTS
+WRESTLING,Sport of grappling an opponent,SPORTS
 JUDO,Martial art and Olympic sport from Japan,SPORTS
 KARATE,Martial art with kicks and punches,SPORTS
 TAEKWONDO,Martial art known for high kicks (no spaces),SPORTS
 FENCING,Sport with swords and masks,SPORTS
 ROWING,Boat racing with oars,SPORTS
 SURFING,Riding waves on a board,SPORTS
-SKATEBOARDING,Riding tricks on a board with wheels (no spaces),SPORTS
+SKATEBOARDING,Riding tricks on a board with wheels,SPORTS
 CYCLING,Sport of riding a bike fast,SPORTS
 MOUNTAINBIKING,Bike riding on rough trails (no spaces),SPORTS
 BMX,Bike sport with jumps and tricks,SPORTS
-TRIATHLON,Race with swimming biking and running (no spaces),SPORTS
+TRIATHLON,Race with swimming biking and running,SPORTS
 MARATHON,Long-distance running race,SPORTS
 SPRINT,Short fast race,SPORTS
 HURDLES,Race where runners jump barriers,SPORTS
@@ -886,32 +886,32 @@ POLEVAULT,Track event using a pole to jump high (no spaces),SPORTS
 HIGHJUMP,Event where athletes jump over a bar,SPORTS
 LONGJUMP,Event where athletes leap for distance,SPORTS
 TRIPLEJUMP,Jump event with three parts (no spaces),SPORTS
-GYMNASTICS,Sport with flips bars and beams (no spaces),SPORTS
-TRAMPOLINE,Sport with jumps and tricks on a trampoline (no spaces),SPORTS
-CHEERLEADING,Team activity with chants and stunts (no spaces),SPORTS
+GYMNASTICS,Sport with flips bars and beams,SPORTS
+TRAMPOLINE,Gymnastics event performed on a bouncing bed,SPORTS
+CHEERLEADING,Team activity with chants and stunts,SPORTS
 RODEO,Sport with bulls horses and ropes,SPORTS
 HORSEBACKRIDING,Sport of riding a horse (no spaces),SPORTS
 POLO,Horse sport with mallets and a ball,SPORTS
 LACROSSE,Team sport with sticks and a netted head,SPORTS
 RUGBY,Team sport with running passing and tackling,SPORTS
 HANDBALL,Fast team game with goals,SPORTS
-DODGEBALL,Game where players throw soft balls (no spaces),SPORTS
+DODGEBALL,Game where players throw soft balls,SPORTS
 KICKBALL,Playground game with bases,SPORTS
 TABLETENNIS,Ping-pong sport (no spaces),SPORTS
 AIRHOCKEY,Fast table game with a puck (no spaces),SPORTS
 FRISBEE,Throwing game with a flying disc,SPORTS
-HORSESHOES,Yard game with metal shoes (no spaces),SPORTS
-PADDLEBOARDING,Standing on a board with a paddle (no spaces),SPORTS
+HORSESHOES,Yard game with metal shoes,SPORTS
+PADDLEBOARDING,Standing on a board with a paddle,SPORTS
 RAFTING,Riding rough river water in a raft,SPORTS
 CLIMBING,Sport of going up walls or rocks,SPORTS
 ROCKCLIMBING,Outdoor climbing on rock (no spaces),SPORTS
-BOULDERING,Climbing without ropes on shorter walls (no spaces),SPORTS
+BOULDERING,Climbing without ropes on shorter walls,SPORTS
 PARKOUR,Moving through obstacles by jumping and climbing,SPORTS
-ORIENTEERING,Navigation race using a map and compass (no spaces),SPORTS
+ORIENTEERING,Navigation race using a map and compass,SPORTS
 FISHINGSPORT,Sport of catching fish for fun (no spaces),SPORTS
 RODEOBARREL,Barrel racing on horseback (no spaces),SPORTS
 BULLRIDING,Riding a bucking bull (no spaces),SPORTS
-MOTOCROSS,Dirt bike racing over jumps (no spaces),SPORTS
+MOTOCROSS,Dirt bike racing over jumps,SPORTS
 FORMULAONE,Top level open-wheel car racing (no spaces),SPORTS
 NASCAR,Stock car racing sport,SPORTS
 RALLYRACING,Car racing on mixed roads (no spaces),SPORTS
@@ -921,7 +921,7 @@ HORSERACING,Racing horses on a track (no spaces),SPORTS
 DOGSLEDRACING,Race with sled dogs (no spaces),SPORTS
 BIKERACING,General sport of bicycle racing (no spaces),SPORTS
 MMA,Mixed martial arts fighting sport,SPORTS
-KICKBOXING,Fighting sport with kicks and punches (no spaces),SPORTS
+KICKBOXING,Fighting sport with kicks and punches,SPORTS
 JUJITSU,Grappling martial art sport,SPORTS
 CAPOEIRA,Martial art that looks like dance,SPORTS
 SUMO,Japanese wrestling sport,SPORTS
@@ -931,26 +931,26 @@ ROLLERDERBY,Contact sport on roller skates (no spaces),SPORTS
 INLINEHOCKEY,Hockey on a hard floor with skates (no spaces),SPORTS
 STREETHOCKEY,Hockey played without ice (no spaces),SPORTS
 PADDLETENNIS,Paddle game like tennis (no spaces),SPORTS
-SHUFFLEBOARD,Game of sliding discs (no spaces),SPORTS
+SHUFFLEBOARD,Game of sliding discs,SPORTS
 CORNHOLE,Yard game where bean bags go in a hole,SPORTS
-TETHERBALL,Playground game with a ball on a rope (no spaces),SPORTS
-WIFFLEBALL,Backyard bat-and-ball game with a plastic ball (no spaces),SPORTS
+TETHERBALL,Playground game with a ball on a rope,SPORTS
+WIFFLEBALL,Backyard bat-and-ball game with a plastic ball,SPORTS
 HANDBIKE,Racing bike powered by arms,SPORTS
-SNORKELING,Swimming while breathing through a tube (no spaces),SPORTS
+SNORKELING,Swimming while breathing through a tube,SPORTS
 SCUBADIVING,Diving underwater with an air tank (no spaces),SPORTS
-FREE,DIVING Diving without an air tank,SPORTS
+FREEDIVING,Breath-hold underwater diving sport,SPORTS
 OPENWATERSWIM,Swimming in a lake or ocean (no spaces),SPORTS
 SWIMMING,Water sport using strokes,SPORTS
-BACKSTROKE,Swimming stroke on the back (no spaces),SPORTS
-BREASTSTROKE,Swimming stroke with frog kicks (no spaces),SPORTS
-BUTTERFLY,Swimming stroke with both arms together (no spaces),SPORTS
-FREESTYLE,Fast swimming stroke (no spaces),SPORTS
+BACKSTROKE,Swimming stroke on the back,SPORTS
+BREASTSTROKE,Swimming stroke with frog kicks,SPORTS
+BUTTERFLY,Swimming stroke with both arms together,SPORTS
+FREESTYLE,Fast swimming stroke,SPORTS
 WATERPOLO,Team game played in a pool (no spaces),SPORTS
-SHOT,PUT Heavy ball throwing event,SPORTS
-HOPSCOTCH,Playground jumping game (no spaces),SPORTS
+HAMMERTHROW,Track event with a ball on a wire (no spaces),SPORTS
+HOPSCOTCH,Playground jumping game,SPORTS
 JACKS,Small-ball hand game,SPORTS
 MARBLES,Game played with glass balls,SPORTS
-PADDLEBALL,Ball-and-paddle wall sport (no spaces),SPORTS
+PADDLEBALL,Ball-and-paddle wall sport,SPORTS
 RINGTOSS,Tossing rings onto pegs,SPORTS
 TUGOFWAR,Team pulling contest,SPORTS
 OBSTACLECOURSE,Race through many challenges (no spaces),SPORTS
@@ -963,42 +963,42 @@ ICECLIMBING,Climbing on frozen waterfalls (no spaces),SPORTS
 SNOWSHOEING,Walking on snow with special shoes (no spaces),SPORTS
 CROSSCOUNTRY,Long race over natural ground (no spaces),SPORTS
 TRACKANDFIELD,Group of running and throwing events (no spaces),SPORTS
-POWERLIFTING,Sport of lifting very heavy weights (no spaces),SPORTS
-WEIGHTLIFTING,Olympic lifting sport (no spaces),SPORTS
-BODYBUILDING,Sport of building and showing muscles (no spaces),SPORTS
-STRONGMAN,Sport of lifting and carrying huge objects (no spaces),SPORTS
+POWERLIFTING,Sport of lifting very heavy weights,SPORTS
+WEIGHTLIFTING,Olympic lifting sport,SPORTS
+BODYBUILDING,Sport of building and showing muscles,SPORTS
+STRONGMAN,Sport of lifting and carrying huge objects,SPORTS
 YOGA,Movement activity for balance and stretching,SPORTS
 PILATES,Exercise system for strength and control,SPORTS
 AEROBICS,Exercise class with music,SPORTS
 ZUMBA,Dance fitness class,SPORTS
-BREAKDANCING,Dance style now in competition (no spaces),SPORTS
+BREAKDANCING,Dance style now in competition,SPORTS
 SYNCHROSWIM,Short name for artistic swimming (no spaces),SPORTS
 ARTISTICSWIMMING,New name for synchronized swimming (no spaces),SPORTS
 RINGTENNIS,Court game with a ring (no spaces),SPORTS
-BOSSABALL,Volleyball and soccer mix on trampolines (no spaces),SPORTS
+BOSSABALL,Volleyball and soccer mix on trampolines,SPORTS
 GAELICFOOTBALL,Irish ball sport (no spaces),SPORTS
 ROADRACING,Bike or car race on roads (no spaces),SPORTS
 DUATHLON,Race with running and biking,SPORTS
-PENTATHLON,Five-event sport (no spaces),SPORTS
-DECATHLON,Ten-event track contest (no spaces),SPORTS
-HEPTATHLON,Seven-event track contest (no spaces),SPORTS
-SKIMBOARDING,Riding a thin board near shore (no spaces),SPORTS
-BODYBOARDING,Riding waves on a short foam board (no spaces),SPORTS
-SLACKLINING,Balancing on a flat line (no spaces),SPORTS
-DISCATHLON,Throws with flying discs (no spaces),SPORTS
+PENTATHLON,Five-event sport,SPORTS
+DECATHLON,Ten-event track contest,SPORTS
+HEPTATHLON,Seven-event track contest,SPORTS
+SKIMBOARDING,Riding a thin board near shore,SPORTS
+BODYBOARDING,Riding waves on a short foam board,SPORTS
+SLACKLINING,Balancing on a flat line,SPORTS
+DISCATHLON,Throws with flying discs,SPORTS
 SPEEDCLIMBING,Racing straight up a climbing wall (no spaces),SPORTS
 LEADCLIMBING,Climbing sport with ropes and route reading (no spaces),SPORTS
 COMBINEDCLIMBING,Event that mixes climbing styles (no spaces),SPORTS
 HANDBALLWALL,Small-ball game off a wall (no spaces),SPORTS
 PICKLEBALLDOUBLES,Two-on-two pickleball game (no spaces),SPORTS
-CYCLEBALL,Bike game where players hit a ball (no spaces),SPORTS
+CYCLEBALL,Bike game where players hit a ball,SPORTS
 BASKETBALLTHREE,Three-on-three basketball (no spaces),SPORTS
 FIVES,Handball game played in Britain,SPORTS
-HURLYBALL,Fast game with sticks and a ball (no spaces),SPORTS
-LAWN,DARTS Outdoor tossing game,SPORTS
-SPEEDBALL,Ball game using a pole and rope (no spaces),SPORTS
+HURLYBALL,Fast game with sticks and a ball,SPORTS
+LAWNDARTS,Outdoor tossing game (no spaces),SPORTS
+SPEEDBALL,Ball game using a pole and rope,SPORTS
 ROUNDNET,Game like Spikeball,SPORTS
-SPIKEBALL,Brand name for roundnet (no spaces),SPORTS
+SPIKEBALL,Brand name for roundnet,SPORTS
 SUSHI,Raw fish on vinegared rice,FOOD
 RAMEN,Japanese noodle soup,FOOD
 UDON,Thick Japanese noodles,FOOD
@@ -1006,7 +1006,7 @@ SOBA,Japanese buckwheat noodles,FOOD
 PHO,Vietnamese noodle soup,FOOD
 PADTHAI,Stir-fried Thai noodles,FOOD
 DIMSUM,Chinese bite-sized portions,FOOD
-DUMPLINGS,Dough-wrapped savory fillings (no spaces),FOOD
+DUMPLINGS,Dough-wrapped savory fillings,FOOD
 BAO,Steamed Chinese buns,FOOD
 SPRINGROLLS,Crispy Asian appetizers (no spaces),FOOD
 EGGROLLS,Fried American-Chinese appetizers,FOOD
@@ -1029,15 +1029,15 @@ TIRAMISU,Coffee-flavored Italian dessert,FOOD
 GELATO,Italian ice cream,FOOD
 SORBET,Dairy-free frozen fruit dessert,FOOD
 MACARONS,French meringue-based sandwich cookies,FOOD
-CROISSANT,Crescent-shaped buttery pastry (no spaces),FOOD
+CROISSANT,Crescent-shaped buttery pastry,FOOD
 BAGUETTE,Long thin French bread,FOOD
 BRIE,Soft French cheese,FOOD
-CAMEMBERT,Soft creamy French cheese (no spaces),FOOD
+CAMEMBERT,Soft creamy French cheese,FOOD
 GRUYERE,Swiss melting cheese,FOOD
 GOUDA,Dutch yellow cheese,FOOD
 EDAM,Dutch cheese with red wax,FOOD
-PROVOLONE,Italian sandwich cheese (no spaces),FOOD
-MOZZARELLA,Pizza topping cheese (no spaces),FOOD
+PROVOLONE,Italian sandwich cheese,FOOD
+MOZZARELLA,Pizza topping cheese,FOOD
 PARMESAN,Hard grated pasta cheese,FOOD
 PECORINO,Salty Italian sheep's cheese,FOOD
 RICOTTA,Soft whey cheese used in lasagna,FOOD
@@ -1054,12 +1054,12 @@ HOTDOG,Long sandwich with a sausage,FOOD
 PIZZA,Baked pie with sauce and cheese,FOOD
 TACO,Folded shell filled with meat and toppings,FOOD
 BURRITO,Wrapped tortilla filled with rice and beans,FOOD
-QUESADILLA,Toasted tortilla with melted cheese (no spaces),FOOD
+QUESADILLA,Toasted tortilla with melted cheese,FOOD
 NACHOS,Chips covered with cheese and toppings,FOOD
-ENCHILADA,Rolled tortilla with sauce (no spaces),FOOD
+ENCHILADA,Rolled tortilla with sauce,FOOD
 FAJITAS,Sizzling meat and peppers served with tortillas,FOOD
 SALSA,Chopped tomato dip,FOOD
-GUACAMOLE,Mashed avocado dip (no spaces),FOOD
+GUACAMOLE,Mashed avocado dip,FOOD
 PANCAKES,Flat breakfast cakes with syrup,FOOD
 WAFFLES,Breakfast cakes with square pockets,FOOD
 FRENCHTOAST,Bread dipped in egg and cooked (no spaces),FOOD
@@ -1082,11 +1082,11 @@ PUMPKINPIE,Holiday pie made from pumpkin (no spaces),FOOD
 BROWNIE,Rich chocolate bar cookie,FOOD
 COOKIE,Sweet baked treat,FOOD
 CUPCAKE,Small frosted cake,FOOD
-CHEESECAKE,Rich dessert with cream cheese (no spaces),FOOD
+CHEESECAKE,Rich dessert with cream cheese,FOOD
 PUDDING,Soft spoon dessert,FOOD
 JELLO,Wiggly gelatin dessert,FOOD
 SUNDAE,Ice cream dessert with toppings,FOOD
-MILKSHAKE,Ice cream drink (no spaces),FOOD
+MILKSHAKE,Ice cream drink,FOOD
 SMOOTHIE,Blended fruit drink,FOOD
 LEMONADE,Sweet sour lemon drink,FOOD
 ICEDTEA,Cold tea drink,FOOD
@@ -1099,7 +1099,7 @@ PEANUTS,Salty nuts in shells or out,FOOD
 ALMONDS,Crunchy tree nuts,FOOD
 WALNUTS,Brain-shaped nuts,FOOD
 CASHEWS,Curved creamy nuts,FOOD
-PISTACHIOS,Green nuts in shells (no spaces),FOOD
+PISTACHIOS,Green nuts in shells,FOOD
 GRAPES,Small fruit in bunches,FOOD
 ORANGE,Citrus fruit you peel,FOOD
 BANANA,Yellow fruit,FOOD
@@ -1109,17 +1109,17 @@ PEAR,Sweet fruit with a narrow top,FOOD
 PLUM,Small purple stone fruit,FOOD
 CHERRY,Small red fruit with a pit,FOOD
 MANGO,Sweet tropical fruit,FOOD
-PINEAPPLE,Spiky tropical fruit (no spaces),FOOD
-WATERMELON,Big green fruit with red inside (no spaces),FOOD
-CANTALOUPE,Orange melon (no spaces),FOOD
+PINEAPPLE,Spiky tropical fruit,FOOD
+WATERMELON,Big green fruit with red inside,FOOD
+CANTALOUPE,Orange melon,FOOD
 HONEYDEW,Green melon,FOOD
-STRAWBERRY,Red berry with tiny seeds outside (no spaces),FOOD
-BLUEBERRY,Small blue berry (no spaces),FOOD
-RASPBERRY,Soft red berry (no spaces),FOOD
-BLACKBERRY,Dark berry made of little parts (no spaces),FOOD
+STRAWBERRY,Red berry with tiny seeds outside,FOOD
+BLUEBERRY,Small blue berry,FOOD
+RASPBERRY,Soft red berry,FOOD
+BLACKBERRY,Dark berry made of little parts,FOOD
 CARROT,Orange crunchy vegetable,FOOD
 BROCCOLI,Green tree-like vegetable,FOOD
-CAULIFLOWER,White crunchy vegetable (no spaces),FOOD
+CAULIFLOWER,White crunchy vegetable,FOOD
 SPINACH,Leafy green vegetable,FOOD
 LETTUCE,Salad leaf,FOOD
 CELERY,Crunchy green stalk,FOOD
@@ -1138,10 +1138,10 @@ BEANS,Seeds often cooked in chili,FOOD
 LENTILS,Small flat beans,FOOD
 RICE,Small grains cooked soft,FOOD
 PASTA,Noodles of many shapes,FOOD
-SPAGHETTI,Long thin pasta (no spaces),FOOD
+SPAGHETTI,Long thin pasta,FOOD
 LASAGNA,Layered pasta dish,FOOD
 RAVIOLI,Stuffed pasta pillows,FOOD
-TORTELLINI,Ring-shaped stuffed pasta (no spaces),FOOD
+TORTELLINI,Ring-shaped stuffed pasta,FOOD
 MACNCHEESE,Pasta with melted cheese (no spaces),FOOD
 ALFREDO,Creamy white pasta sauce,FOOD
 MEATBALL,Round ball of cooked meat,FOOD
@@ -1156,7 +1156,7 @@ SOUP,Warm liquid meal,FOOD
 STEW,Thick meal cooked in one pot,FOOD
 SALAD,Bowl of greens and toppings,FOOD
 SANDWICH,Two pieces of bread with filling,FOOD
-SUBMARINE,Long sandwich on a roll (no spaces),FOOD
+SUBMARINE,Long sandwich on a roll,FOOD
 GRILLEDCHEESE,Toasted sandwich with melted cheese (no spaces),FOOD
 PEANUTBUTTER,Creamy or crunchy nut spread (no spaces),FOOD
 JELLY,Sweet fruit spread,FOOD
@@ -1165,13 +1165,13 @@ HONEY,Sweet syrup made by bees,FOOD
 SYRUP,Sweet topping for pancakes,FOOD
 KETCHUP,Tomato sauce for fries and burgers,FOOD
 MUSTARD,Yellow sandwich sauce,FOOD
-MAYONNAISE,Creamy white sandwich spread (no spaces),FOOD
+MAYONNAISE,Creamy white sandwich spread,FOOD
 RELISH,Sweet chopped pickle topping,FOOD
 PICKLES,Cucumbers soaked in brine,FOOD
 OLIVES,Small salty fruits,FOOD
 CABBAGE,Round leafy vegetable,FOOD
-BRUSSELS,Small green cabbage-like vegetables,FOOD
-ASPARAGUS,Green spring vegetable with spears (no spaces),FOOD
+BRUSSELSSPROUTS,Small green cabbage-like vegetables (no spaces),FOOD
+ASPARAGUS,Green spring vegetable with spears,FOOD
 BEETS,Purple root vegetable,FOOD
 RADISH,Small spicy root vegetable,FOOD
 TURNIP,White and purple root vegetable,FOOD
@@ -1184,11 +1184,11 @@ FLAN,Smooth baked custard dessert,FOOD
 SORBETTO,Italian frozen fruit dessert,FOOD
 GUMBALL,Small hard candy ball,FOOD
 LICORICE,Chewy candy rope,FOOD
-MARSHMALLOW,Soft fluffy candy (no spaces),FOOD
+MARSHMALLOW,Soft fluffy candy,FOOD
 TOFFEE,Hard buttery candy,FOOD
 CARAMEL,Chewy brown candy,FOOD
 TAFFY,Pulled chewy candy,FOOD
-JAWBREAKER,Very hard round candy (no spaces),FOOD
+JAWBREAKER,Very hard round candy,FOOD
 LOLLIPOP,Candy on a stick,FOOD
 JELLYBEANS,Small bean-shaped candies (no spaces),FOOD
 GOLDFISHCRACKERS,Cheesy fish-shaped snack (no spaces),FOOD
@@ -1198,13 +1198,13 @@ DUMPLINGSOUP,Soup with dough pieces (no spaces),FOOD
 FRUITSALAD,Bowl of mixed fruit (no spaces),FOOD
 PASTASALAD,Cold salad with noodles (no spaces),FOOD
 COLESLAW,Shredded cabbage salad,FOOD
-APPLESAUCE,Soft cooked apples mashed smooth (no spaces),FOOD
+APPLESAUCE,Soft cooked apples mashed smooth,FOOD
 SHARPIE,Permanent marker brand,SCHOOL
 COMPASS,Circle-drawing math tool,SCHOOL
 HOLEPUNCH,Binder paper preparer (no spaces),SCHOOL
 PAPERCLIP,Bent wire sheet fastener (no spaces),SCHOOL
 BINDERCLIP,Black metal paper clamp (no spaces),SCHOOL
-THUMBTACK,Corkboard pin (no spaces),SCHOOL
+THUMBTACK,Corkboard pin,SCHOOL
 PUSHPIN,Plastic-headed board tack,SCHOOL
 SMARTBOARD,Interactive classroom display (no spaces),SCHOOL
 PODIUM,Speaker's stand,SCHOOL
@@ -1215,10 +1215,10 @@ SNEAKERS,Rubber-soled athletic shoes,SCHOOL
 PROM,Formal high school dance,SCHOOL
 DANCE,School gymnasium social event,SCHOOL
 PEPRALLY,School spirit gathering,SCHOOL
-NEWSPAPER,Student publication (no spaces),SCHOOL
+NEWSPAPER,Student publication,SCHOOL
 CHOIR,Student vocal group,SCHOOL
 BAND,Student instrumental group,SCHOOL
-ORCHESTRA,Student string group (no spaces),SCHOOL
+ORCHESTRA,Student string group,SCHOOL
 THEATER,Drama club venue,SCHOOL
 DEBATE,Formal argument club,SCHOOL
 CHESSCLUB,Board game student group (no spaces),SCHOOL
@@ -1226,23 +1226,23 @@ MATHLETE,Competitive numbers student,SCHOOL
 SCIENCEFAIR,Volcano model competition (no spaces),SCHOOL
 SPELLINGBEE,Word pronunciation contest (no spaces),SCHOOL
 FIELDTRIP,Educational off-campus excursion (no spaces),SCHOOL
-CHAPERONE,Parent supervisor on a trip (no spaces),SCHOOL
-PERMISSION,Signed slip for a field trip (no spaces),SCHOOL
+CHAPERONE,Parent supervisor on a trip,SCHOOL
+PERMISSION,Signed ___ slip for a field trip,SCHOOL
 PASSPORT,Hallway travel document,SCHOOL
 HALLPASS,Laminated corridor permission,SCHOOL
 BATHROOM,Restroom break destination,SCHOOL
 WATERFOUNTAIN,Hallway hydration station (no spaces),SCHOOL
 NURSE,School health provider,SCHOOL
-COUNSELOR,Academic advisor (no spaces),SCHOOL
-PSYCHOLOGIST,Student mental health pro (no spaces),SCHOOL
-ASSISTANT,Principal's right hand (no spaces),SCHOOL
-SUPERINTENDENT,District educational leader (no spaces),SCHOOL
+COUNSELOR,Academic advisor,SCHOOL
+PSYCHOLOGIST,Student mental health pro,SCHOOL
+ASSISTANT,Principal's right hand,SCHOOL
+SUPERINTENDENT,District educational leader,SCHOOL
 BOARD,Elected education officials,SCHOOL
 TRUSTEE,School board member,SCHOOL
 PTA,Parent-teacher organization,SCHOOL
 DONATION,Fundraising contribution,SCHOOL
-FUNDRAISER,School money-making event (no spaces),SCHOOL
-BAKE,Sale of cookies for the school,SCHOOL
+FUNDRAISER,School money-making event,SCHOOL
+BAKESALE,Cookie-selling school fundraiser,SCHOOL
 CARWASH,Student fundraising activity,SCHOOL
 RAFFLE,Ticket-based school fundraiser,SCHOOL
 AUCTION,Bidding event for school funds,SCHOOL
@@ -1261,32 +1261,32 @@ RULER,Tool used to measure straight lines,SCHOOL
 SCISSORS,Cutting tool for paper,SCHOOL
 GLUESTICK,Solid glue in a tube (no spaces),SCHOOL
 NOTECARD,Small card for studying,SCHOOL
-FLASHCARD,Study card with a question and answer (no spaces),SCHOOL
-HIGHLIGHTER,Bright pen for marking words (no spaces),SCHOOL
-WHITEBOARD,Smooth board for dry-erase markers (no spaces),SCHOOL
-BLACKBOARD,Old classroom chalk board (no spaces),SCHOOL
+FLASHCARD,Study card with a question and answer,SCHOOL
+HIGHLIGHTER,Bright pen for marking words,SCHOOL
+WHITEBOARD,Smooth board for dry-erase markers,SCHOOL
+BLACKBOARD,Old classroom chalk board,SCHOOL
 CHALK,Writing stick for a board,SCHOOL
-CALCULATOR,Math machine for solving problems (no spaces),SCHOOL
+CALCULATOR,Math machine for solving problems,SCHOOL
 LAPTOP,Small computer for schoolwork,SCHOOL
 TABLET,Touchscreen computer,SCHOOL
-CHROMEBOOK,School laptop used in many classrooms (no spaces),SCHOOL
+CHROMEBOOK,School laptop used in many classrooms,SCHOOL
 KEYBOARD,Board of letter keys for typing,SCHOOL
 MOUSE,Hand tool used to move a screen pointer,SCHOOL
 PRINTER,Machine that prints paper copies,SCHOOL
-PROJECTOR,Machine that shows a big image on a wall (no spaces),SCHOOL
+PROJECTOR,Machine that shows a big image on a wall,SCHOOL
 SCREEN,Pull-down surface for a projector,SCHOOL
 DESK,Student work table,SCHOOL
 CHAIR,Seat in a classroom,SCHOOL
-BOOKSHELF,Shelf that holds books (no spaces),SCHOOL
+BOOKSHELF,Shelf that holds books,SCHOOL
 LOCKER,Tall school storage box,SCHOOL
 LUNCHBOX,Box that holds a school lunch,SCHOOL
-CAFETERIA,School room where students eat (no spaces),SCHOOL
+CAFETERIA,School room where students eat,SCHOOL
 TRAY,Flat holder for cafeteria food,SCHOOL
 NAPKIN,Paper used to wipe hands or face,SCHOOL
 STRAW,Thin tube used to drink,SCHOOL
 RECESS,Break time for play,SCHOOL
 HOMEROOM,First class or class group of the day,SCHOOL
-ATTENDANCE,Daily record of who is present (no spaces),SCHOOL
+ATTENDANCE,Daily record of who is present,SCHOOL
 ABSENCE,Being away from school,SCHOOL
 TARDY,Late to class,SCHOOL
 BELL,Signal that class is starting or ending,SCHOOL
@@ -1299,7 +1299,7 @@ QUIZ,Short test,SCHOOL
 EXAM,Big test,SCHOOL
 POPQUIZ,Surprise test,SCHOOL
 ESSAY,Longer writing assignment,SCHOOL
-PARAGRAPH,Group of sentences on one idea (no spaces),SCHOOL
+PARAGRAPH,Group of sentences on one idea,SCHOOL
 SENTENCE,Group of words that makes a full thought,SCHOOL
 GRAMMAR,Rules for language,SCHOOL
 SPELLING,Writing words the right way,SCHOOL
@@ -1308,29 +1308,29 @@ WRITING,Putting words on paper or a screen,SCHOOL
 MATH,School subject with numbers,SCHOOL
 SCIENCE,School subject about how the world works,SCHOOL
 HISTORY,School subject about the past,SCHOOL
-GEOGRAPHY,Study of places on Earth (no spaces),SCHOOL
+GEOGRAPHY,Study of places on Earth,SCHOOL
 ART,Class for drawing and making things,SCHOOL
 MUSIC,Class for singing and playing songs,SCHOOL
 LIBRARY,Room full of books,SCHOOL
-LIBRARIAN,Person who helps with books (no spaces),SCHOOL
-PRINCIPAL,Head of a school (no spaces),SCHOOL
+LIBRARIAN,Person who helps with books,SCHOOL
+PRINCIPAL,Head of a school,SCHOOL
 TEACHER,Person who leads the class,SCHOOL
 STUDENT,Person who goes to school,SCHOOL
 JANITOR,Person who cleans the school,SCHOOL
-RECEPTIONIST,Front office helper (no spaces),SCHOOL
-SECRETARY,Office helper in a school (no spaces),SCHOOL
+RECEPTIONIST,Front office helper,SCHOOL
+SECRETARY,Office helper in a school,SCHOOL
 COACH,Sports leader,SCHOOL
-PLAYGROUND,Outdoor place for play (no spaces),SCHOOL
+PLAYGROUND,Outdoor place for play,SCHOOL
 SWING,Seat that moves back and forth,SCHOOL
-SLIDE,Playground ramp you slide down,SCHOOL
+SLIDE,Slippery playground ramp,SCHOOL
 MONKEYBARS,Climbing bars on a playground (no spaces),SCHOOL
 KICKBALL,Playground game with a rubber ball,SCHOOL
 DODGEBALL,Game where players throw soft balls (no spaces),SCHOOL
 YEARBOOK,School memory book,SCHOOL
 PHOTOCLASS,Class that teaches picture taking (no spaces),SCHOOL
 ARTROOM,Classroom for art,SCHOOL
-GYMNASIUM,Large room for sports (no spaces),SCHOOL
-AUDITORIUM,Big room for shows and meetings (no spaces),SCHOOL
+GYMNASIUM,Large room for sports,SCHOOL
+AUDITORIUM,Big room for shows and meetings,SCHOOL
 ASSEMBLY,School meeting with many students,SCHOOL
 BUSLINE,Line where students wait for buses,SCHOOL
 SCHOOLBUS,Big yellow bus for students (no spaces),SCHOOL
@@ -1339,10 +1339,10 @@ PICKUP,Time to get students after school,SCHOOL
 DROPOFF,Time to bring students to school,SCHOOL
 OPENHOUSE,Event where families visit the school (no spaces),SCHOOL
 SCIENCELAB,Room for science work (no spaces),SCHOOL
-MICROSCOPE,Tool used to look at tiny things (no spaces),SCHOOL
+MICROSCOPE,Tool used to look at tiny things,SCHOOL
 GLOBE,Round model of Earth,SCHOOL
 MAP,Flat drawing of places,SCHOOL
-TIMETABLE,School schedule (no spaces),SCHOOL
+TIMETABLE,School schedule,SCHOOL
 SCHEDULE,List of times and classes,SCHOOL
 PLANNER,Book used to track assignments,SCHOOL
 BULLETINBOARD,Board for notes and posters (no spaces),SCHOOL
@@ -1350,27 +1350,27 @@ POSTERBOARD,Large board for a project (no spaces),SCHOOL
 DIORAMA,Small model scene in a box,SCHOOL
 BOOKREPORT,Talk or writing about a book (no spaces),SCHOOL
 READINGLOG,List of books or pages read (no spaces),SCHOOL
-WORKSHEET,Practice paper with questions (no spaces),SCHOOL
+WORKSHEET,Practice paper with questions,SCHOOL
 SCANTRON,Test sheet filled with bubbles,SCHOOL
 DIPLOMA,Paper that shows graduation,SCHOOL
-GRADUATION,Ceremony at the end of school (no spaces),SCHOOL
+GRADUATION,Ceremony at the end of school,SCHOOL
 CAPANDGOWN,Clothes worn at graduation (no spaces),SCHOOL
-VALEDICTORIAN,Top student at graduation (no spaces),SCHOOL
-SALUTATORIAN,Student who gives the second speech (no spaces),SCHOOL
+VALEDICTORIAN,Top student at graduation,SCHOOL
+SALUTATORIAN,Student who gives the second speech,SCHOOL
 MASCOT,School team symbol,SCHOOL
 SCHOOLSONG,Song linked to a school (no spaces),SCHOOL
 HANDBOOK,Book of school rules,SCHOOL
 DRESSCODE,Rules about what students can wear (no spaces),SCHOOL
-DETENTION,Time kept after school as a punishment (no spaces),SCHOOL
-SUSPENSION,Time away from school as a punishment (no spaces),SCHOOL
+DETENTION,Time kept after school as a punishment,SCHOOL
+SUSPENSION,Time away from school as a punishment,SCHOOL
 RULEBOOK,Book of rules,SCHOOL
 PLEDGE,Short promise said at school,SCHOOL
-ANNOUNCEMENT,Message shared with the school (no spaces),SCHOOL
+ANNOUNCEMENT,Message shared with the school,SCHOOL
 INTERCOM,Speaker system for messages,SCHOOL
 STAPLER,Tool that joins papers with staples,SCHOOL
 STAPLES,Small metal fasteners,SCHOOL
 TISSUES,Soft paper for noses,SCHOOL
-SANITIZER,Hand-cleaning gel (no spaces),SCHOOL
+SANITIZER,Hand-cleaning gel,SCHOOL
 BROOM,Tool used to sweep the floor,SCHOOL
 DUSTPAN,Pan used with a broom,SCHOOL
 MOP,Tool used to clean floors,SCHOOL
@@ -1381,11 +1381,11 @@ WHISTLE,Tool a coach blows,SCHOOL
 MEDAL,Award worn around the neck,SCHOOL
 TROPHY,Prize cup or figure,SCHOOL
 RIBBON,Prize strip for winning or joining,SCHOOL
-CERTIFICATE,Paper award (no spaces),SCHOOL
+CERTIFICATE,Paper award,SCHOOL
 HONORROLL,List of students with high grades (no spaces),SCHOOL
 BOOKFAIR,School sale with books,SCHOOL
 PENCILTIN,Box that holds pencils (no spaces),SCHOOL
-SHARPENER,Tool that makes a pencil point (no spaces),SCHOOL
+SHARPENER,Tool that makes a pencil point,SCHOOL
 INKPEN,Pen filled with ink,SCHOOL
 DRYERASEMARKER,Marker for a whiteboard (no spaces),SCHOOL
 BINDER,Ringed holder for papers,SCHOOL
@@ -1396,7 +1396,7 @@ READALOUD,Time when a teacher reads to the class (no spaces),SCHOOL
 GROUPPROJECT,School project done with others (no spaces),SCHOOL
 PARTNERWORK,Assignment done with one partner (no spaces),SCHOOL
 ROLLCALL,Reading names to check attendance,SCHOOL
-CLASSROOM,Room where a class meets (no spaces),SCHOOL
+CLASSROOM,Room where a class meets,SCHOOL
 TEAMPROJECT,School project done as a team (no spaces),SCHOOL
 READINGGROUP,Small group that reads together (no spaces),SCHOOL
 LAGOON,Shallow body of water separated by reefs,NATURE
@@ -1404,11 +1404,11 @@ TUNDRA,Treeless Arctic biome,NATURE
 SAVANNA,Tropical grassy plain,NATURE
 STEPPE,Dry grassy plain,NATURE
 TAIGA,Boreal snow forest,NATURE
-CHAPARRAL,Shrubland biome (no spaces),NATURE
+CHAPARRAL,Shrubland biome,NATURE
 CORALREEF,Underwater colorful ecosystem (no spaces),NATURE
 ATOLL,Ring-shaped coral reef,NATURE
-ARCHIPELAGO,Chain of islands (no spaces),NATURE
-PENINSULA,Land surrounded by water on three sides (no spaces),NATURE
+ARCHIPELAGO,Chain of islands,NATURE
+PENINSULA,Land surrounded by water on three sides,NATURE
 ISTHMUS,Narrow strip connecting two landmasses,NATURE
 STRAIT,Narrow waterway connecting two seas,NATURE
 FJORD,Deep inlet between high cliffs,NATURE
@@ -1425,7 +1425,7 @@ FEN,Alkaline wetland,NATURE
 MIRE,Swampy or boggy ground,NATURE
 MOOR,Tract of uncultivated upland,NATURE
 HEATH,Shrubland habitat,NATURE
-GLENN,Narrow valley,NATURE
+GLEN,Narrow valley,NATURE
 DALE,Broad valley,NATURE
 VALE,Valley often with a stream,NATURE
 HOLLOW,Small valley or basin,NATURE
@@ -1440,8 +1440,8 @@ PLATEAU,Area of relatively level high ground,NATURE
 OUTCROP,Exposed bedrock,NATURE
 CRAG,Steep rugged rock,NATURE
 BLUFF,Steep cliff or bank,NATURE
-PRECIPICE,Very steep rock face (no spaces),NATURE
-ESCARPMENT,Steep slope or cliff (no spaces),NATURE
+PRECIPICE,Very steep rock face,NATURE
+ESCARPMENT,Steep slope or cliff,NATURE
 SUMMIT,Highest point of a hill,NATURE
 PEAK,Pointed top of a mountain,NATURE
 CREST,Top of a ridge,NATURE
@@ -1456,10 +1456,10 @@ CRATER,Bowl-shaped hole on a volcano or moon,NATURE
 CANYON,Deep valley with steep sides,NATURE
 VALLEY,Low land between hills or mountains,NATURE
 RIVER,Large flowing stream of water,NATURE
-STREAM,Small flowing stream of water,NATURE
+STREAM,Flowing body of water smaller than a river,NATURE
 BROOK,Tiny stream,NATURE
 CREEK,Small stream,NATURE
-WATERFALL,Water dropping over a cliff (no spaces),NATURE
+WATERFALL,Water dropping over a cliff,NATURE
 POND,Small body of still water,NATURE
 LAKE,Large body of still water,NATURE
 OCEAN,Very large body of salt water,NATURE
@@ -1484,11 +1484,11 @@ BLOSSOM,Flower bloom on a tree or plant,NATURE
 ROSE,Thorny flower often given as a gift,NATURE
 TULIP,Cup-shaped spring flower,NATURE
 DAISY,White flower with a yellow middle,NATURE
-SUNFLOWER,Tall flower that follows the sun (no spaces),NATURE
+SUNFLOWER,Tall flower that follows the sun,NATURE
 LILY,Flower with large petals,NATURE
 ORCHID,Fancy flower with many colors,NATURE
 VIOLET,Small purple flower,NATURE
-DANDELION,Yellow flower that turns to puffballs (no spaces),NATURE
+DANDELION,Yellow flower that turns to puffballs,NATURE
 SEED,Tiny beginning of a plant,NATURE
 SPROUT,Young plant just starting to grow,NATURE
 ROOT,Part of a plant that grows underground,NATURE
@@ -1531,7 +1531,7 @@ WIND,Moving air,NATURE
 BREEZE,Gentle wind,NATURE
 STORM,Bad weather with wind and rain,NATURE
 THUNDER,Loud sound in a storm,NATURE
-LIGHTNING,Bright flash in a storm (no spaces),NATURE
+LIGHTNING,Bright flash in a storm,NATURE
 RAINBOW,Colorful arc in the sky,NATURE
 SUN,Star that lights Earth,NATURE
 MOON,Object that circles Earth,NATURE
@@ -1578,14 +1578,14 @@ LIZARD,Scaly reptile,NATURE
 SNAKE,Long legless reptile,NATURE
 FROG,Jumping amphibian,NATURE
 TOAD,Bumpy amphibian,NATURE
-SALAMANDER,Small smooth amphibian (no spaces),NATURE
+SALAMANDER,Small smooth amphibian,NATURE
 CRAB,Sideways-walking shellfish,NATURE
 LOBSTER,Large clawed sea animal,NATURE
 STARFISH,Sea animal with arms like a star,NATURE
-JELLYFISH,Clear sea animal with stinging arms (no spaces),NATURE
+JELLYFISH,Clear sea animal with stinging arms,NATURE
 CORAL,Hard sea animal that builds reefs,NATURE
 SEASHELL,Shell found by the shore,NATURE
-DRIFTWOOD,Wood washed onto a beach (no spaces),NATURE
+DRIFTWOOD,Wood washed onto a beach,NATURE
 PEBBLE,Small smooth stone,NATURE
 BOULDER,Very large rock,NATURE
 STONE,Hard piece of rock,NATURE
@@ -1600,19 +1600,19 @@ GEMSTONE,Precious colorful stone,NATURE
 DIAMOND,Very hard precious stone,NATURE
 RUBY,Red gemstone,NATURE
 WELDER,Metal-fusing worker,JOBS
-MACHINIST,Machine tool operator (no spaces),JOBS
-MILLWRIGHT,Factory machinery installer (no spaces),JOBS
-BOILERMAKER,Vessel and vat fabricator (no spaces),JOBS
-PIPEFITTER,Industrial plumbing installer (no spaces),JOBS
-IRONWORKER,Structural steel erector (no spaces),JOBS
-STEELWORKER,Metal factory laborer (no spaces),JOBS
+MACHINIST,Machine tool operator,JOBS
+MILLWRIGHT,Factory machinery installer,JOBS
+BOILERMAKER,Vessel and vat fabricator,JOBS
+PIPEFITTER,Industrial plumbing installer,JOBS
+IRONWORKER,Structural steel erector,JOBS
+STEELWORKER,Metal factory laborer,JOBS
 GLAZIER,Glass installer,JOBS
-DRYWALLER,Gypsum board installer (no spaces),JOBS
-PLASTERER,Wall coating applier (no spaces),JOBS
+DRYWALLER,Gypsum board installer,JOBS
+PLASTERER,Wall coating applier,JOBS
 TILER,Ceramic floor layer,JOBS
 FLOORLAYER,Hardwood installer (no spaces),JOBS
-LANDSCAPER,Yard designer (no spaces),JOBS
-GROUNDSKEEPER,Estate maintainer (no spaces),JOBS
+LANDSCAPER,Yard designer,JOBS
+GROUNDSKEEPER,Estate maintainer,JOBS
 GARDENER,Plant and flower caretaker,JOBS
 ARBORIST,Tree surgeon,JOBS
 RANCHER,Cattle raiser,JOBS
@@ -1622,44 +1622,44 @@ WHALER,Sea mammal hunter,JOBS
 MINER,Underground resource extractor,JOBS
 TRUCKDRIVER,Big rig operator (no spaces),JOBS
 TAXIDRIVER,Cab operator (no spaces),JOBS
-CHAUFFEUR,Private driver (no spaces),JOBS
+CHAUFFEUR,Private driver,JOBS
 CAPTAIN,Ship commander,JOBS
 FIRSTMATE,Ship captain's deputy (no spaces),JOBS
 DECKHAND,Ship laborer,JOBS
 STEWARD,Ship or plane attendant,JOBS
 FLIGHTATTENDANT,Airplane cabin crew (no spaces),JOBS
-CONDUCTOR,Train ticket collector (no spaces),JOBS
+CONDUCTOR,Train ticket collector,JOBS
 ENGINEER,Train driver,JOBS
 BRAKEMAN,Train safety operator,JOBS
-DISPATCHER,Emergency call router (no spaces),JOBS
-AIRTRAFFIC,Aviation controller (no spaces),JOBS
-CONTROLLER,Financial or air traffic boss (no spaces),JOBS
-BAGGAGE,Luggage handler,JOBS
+DISPATCHER,Emergency call router,JOBS
+AIRTRAFFICCONTROLLER,Worker who guides planes from a tower (no spaces),JOBS
+CONTROLLER,Financial or air traffic boss,JOBS
+BAGGAGEHANDLER,Airport luggage loader (no spaces),JOBS
 HANDLER,Animal trainer or cargo worker,JOBS
 PORTER,Luggage carrier,JOBS
 BELLHOP,Hotel luggage assistant,JOBS
-CONCIERGE,Hotel guest assistant (no spaces),JOBS
+CONCIERGE,Hotel guest assistant,JOBS
 VALET,Parking attendant,JOBS
 BOUNCER,Club security,JOBS
-BARTENDER,Drink mixer (no spaces),JOBS
+BARTENDER,Drink mixer,JOBS
 BARISTA,Coffee maker,JOBS
-SOMMELIER,Wine expert (no spaces),JOBS
+SOMMELIER,Wine expert,JOBS
 HOST,Restaurant greeter,JOBS
 BUSSER,Table clearer,JOBS
-DISHWASHER,Kitchen cleaner (no spaces),JOBS
-EXPEDITER,Kitchen order manager (no spaces),JOBS
+DISHWASHER,Kitchen cleaner,JOBS
+EXPEDITER,Kitchen order manager,JOBS
 PREPCHEF,Ingredient chopper,JOBS
 DOCTOR,Person who helps sick people get well,JOBS
 NURSEHELPER,Worker who helps care for patients (no spaces),JOBS
 DENTIST,Tooth doctor,JOBS
-HYGIENIST,Worker who cleans teeth (no spaces),JOBS
+HYGIENIST,Worker who cleans teeth,JOBS
 TEACHERAIDE,Classroom helper (no spaces),JOBS
-FIREFIGHTER,Person who puts out fires (no spaces),JOBS
+FIREFIGHTER,Person who puts out fires,JOBS
 POLICEOFFICER,Person who helps keep people safe (no spaces),JOBS
-PARAMEDIC,Emergency medical worker in an ambulance (no spaces),JOBS
+PARAMEDIC,Emergency medical worker in an ambulance,JOBS
 SURGEON,Doctor who does operations,JOBS
-PHARMACIST,Person who fills medicine orders (no spaces),JOBS
-VETERINARIAN,Animal doctor (no spaces),JOBS
+PHARMACIST,Person who fills medicine orders,JOBS
+VETERINARIAN,Animal doctor,JOBS
 FARMER,Person who grows crops and raises animals,JOBS
 BAKER,Person who bakes bread and sweets,JOBS
 CHEF,Person who cooks meals in a restaurant,JOBS
@@ -1668,19 +1668,19 @@ SERVER,Restaurant worker who brings food,JOBS
 CASHIER,Worker who takes payments,JOBS
 GROCERYCLERK,Store worker who stocks or helps customers (no spaces),JOBS
 BUTCHER,Person who cuts meat,JOBS
-FISHERMAN,Person who catches fish for work (no spaces),JOBS
-CARPENTER,Person who builds with wood (no spaces),JOBS
-ELECTRICIAN,Person who works with wires and power (no spaces),JOBS
+FISHERMAN,Person who catches fish for work,JOBS
+CARPENTER,Person who builds with wood,JOBS
+ELECTRICIAN,Person who works with wires and power,JOBS
 PLUMBER,Person who fixes pipes and drains,JOBS
 PAINTER,Person who paints walls or houses,JOBS
 ROOFER,Person who works on roofs,JOBS
 MASON,Worker who builds with brick or stone,JOBS
 MECHANIC,Person who fixes cars or machines,JOBS
-TECHNICIAN,Worker who repairs or tests equipment (no spaces),JOBS
-SCIENTIST,Person who studies how the world works (no spaces),JOBS
-BIOLOGIST,Scientist who studies living things (no spaces),JOBS
+TECHNICIAN,Worker who repairs or tests equipment,JOBS
+SCIENTIST,Person who studies how the world works,JOBS
+BIOLOGIST,Scientist who studies living things,JOBS
 CHEMIST,Scientist who studies matter,JOBS
-ASTRONAUT,Person who travels into space (no spaces),JOBS
+ASTRONAUT,Person who travels into space,JOBS
 PILOT,Person who flies an airplane,JOBS
 COPILOT,Second pilot on a plane,JOBS
 FLIGHTINSTRUCTOR,Pilot who teaches others to fly (no spaces),JOBS
@@ -1693,11 +1693,11 @@ DELIVERYDRIVER,Person who brings packages (no spaces),JOBS
 WAREHOUSEWORKER,Person who moves and stores goods (no spaces),JOBS
 PACKER,Worker who packs boxes,JOBS
 MAILSORTER,Worker who sorts mail (no spaces),JOBS
-LIBRARIAN,Person who cares for books (no spaces),JOBS
+LIBRARIAN,Person who cares for books,JOBS
 AUTHOR,Person who writes books,JOBS
 EDITOR,Person who improves writing,JOBS
 REPORTER,Person who gathers and shares news,JOBS
-PHOTOGRAPHER,Person who takes pictures (no spaces),JOBS
+PHOTOGRAPHER,Person who takes pictures,JOBS
 CAMERAPERSON,Worker who runs a camera (no spaces),JOBS
 ANCHORPERSON,Person who reads the news on TV (no spaces),JOBS
 ACTOR,Person who performs in plays or movies,JOBS
@@ -1712,52 +1712,52 @@ JEWELER,Person who makes or repairs jewelry,JOBS
 DESIGNER,Person who plans how things look,JOBS
 FASHIONDESIGNER,Person who creates clothes (no spaces),JOBS
 TAILOR,Person who fixes or makes clothes,JOBS
-SEAMSTRESS,Person who sews clothes (no spaces),JOBS
+SEAMSTRESS,Person who sews clothes,JOBS
 BARBER,Person who cuts hair,JOBS
 HAIRSTYLIST,Person who styles hair (no spaces),JOBS
 MAKEUPARTIST,Person who does makeup (no spaces),JOBS
-LIFEGUARD,Person who watches swimmers for safety (no spaces),JOBS
+LIFEGUARD,Person who watches swimmers for safety,JOBS
 REFEREE,Person who enforces game rules,JOBS
 UMPIRE,Official who makes calls in sports,JOBS
 TRAINER,Person who helps athletes get stronger,JOBS
-COUNSELOR,Person who helps people with problems (no spaces),JOBS
+COUNSELOR,Person who helps people with problems,JOBS
 SOCIALWORKER,Person who helps families and communities (no spaces),JOBS
-THERAPIST,Person who helps people feel or move better (no spaces),JOBS
-PSYCHOLOGIST,Person who studies the mind and helps people (no spaces),JOBS
-ARCHITECT,Person who designs buildings (no spaces),JOBS
+THERAPIST,Person who helps people feel or move better,JOBS
+PSYCHOLOGIST,Person who studies the mind and helps people,JOBS
+ARCHITECT,Person who designs buildings,JOBS
 SURVEYOR,Person who measures land,JOBS
 REALTOR,Person who helps buy and sell homes,JOBS
-APPRAISER,Person who judges the value of property (no spaces),JOBS
+APPRAISER,Person who judges the value of property,JOBS
 BANKER,Person who works with money in a bank,JOBS
-ACCOUNTANT,Person who tracks money and records (no spaces),JOBS
-BOOKKEEPER,Person who keeps money records (no spaces),JOBS
+ACCOUNTANT,Person who tracks money and records,JOBS
+BOOKKEEPER,Person who keeps money records,JOBS
 LAWYER,Person who gives legal help,JOBS
 JUDGE,Person who makes decisions in court,JOBS
 MAYOR,Leader of a town or city,JOBS
 GOVERNOR,Leader of a state,JOBS
 SENATOR,Lawmaker in government,JOBS
 PARKRANGER,Person who protects parks and visitors (no spaces),JOBS
-ZOOKEEPER,Person who cares for zoo animals (no spaces),JOBS
+ZOOKEEPER,Person who cares for zoo animals,JOBS
 DOGTRAINER,Person who trains dogs (no spaces),JOBS
 PETSITTER,Person who watches pets (no spaces),JOBS
 DOGWALKER,Person who walks dogs (no spaces),JOBS
 SECURITYGUARD,Person who watches over a place (no spaces),JOBS
-CUSTODIAN,Person who cleans and maintains a building (no spaces),JOBS
+CUSTODIAN,Person who cleans and maintains a building,JOBS
 WINDOWWASHER,Person who cleans windows (no spaces),JOBS
-HOUSEKEEPER,Person who cleans rooms (no spaces),JOBS
+HOUSEKEEPER,Person who cleans rooms,JOBS
 NANNY,Person who cares for children at home,JOBS
-BABYSITTER,Person who watches children for a short time (no spaces),JOBS
+BABYSITTER,Person who watches children for a short time,JOBS
 DAYCAREWORKER,Person who cares for young children (no spaces),JOBS
 CAMPCOUNSELOR,Leader who helps kids at camp (no spaces),JOBS
 GUIDE,Person who leads tours,JOBS
 PARKINGATTENDANT,Person who helps with cars in a lot (no spaces),JOBS
 TICKETTAKER,Person who checks tickets at a door (no spaces),JOBS
 USHER,Person who helps people find seats,JOBS
-STAGEHAND,Worker who helps behind a stage (no spaces),JOBS
+STAGEHAND,Worker who helps behind a stage,JOBS
 DIRECTOR,Person who leads a movie or play,JOBS
 PRODUCER,Person who helps make a show or film,JOBS
 ANIMATOR,Person who draws moving cartoons,JOBS
-PROGRAMMER,Person who writes computer code (no spaces),JOBS
+PROGRAMMER,Person who writes computer code,JOBS
 WEBDESIGNER,Person who builds websites (no spaces),JOBS
 GAMEDEVELOPER,Person who helps make video games (no spaces),JOBS
 ITMANAGER,Person who helps with computers at work (no spaces),JOBS
@@ -1765,7 +1765,7 @@ DATAANALYST,Person who studies information (no spaces),JOBS
 LABTECH,Worker who helps in a lab,JOBS
 DRAFTER,Person who makes detailed plans and drawings,JOBS
 FORESTER,Person who cares for forests,JOBS
-BEEKEEPER,Person who cares for bees (no spaces),JOBS
+BEEKEEPER,Person who cares for bees,JOBS
 FLORIST,Person who arranges flowers,JOBS
 GROUNDSCREW,Workers who care for fields or yards (no spaces),JOBS
 TREECUTTER,Person who cuts down trees (no spaces),JOBS
@@ -1774,28 +1774,28 @@ RECYCLER,Worker who sorts reusable materials,JOBS
 SANITATIONWORKER,Person who collects trash (no spaces),JOBS
 CROSSINGGUARD,Person who helps children cross the street (no spaces),JOBS
 COURTREPORTER,Person who types what is said in court (no spaces),JOBS
-INTERPRETER,Person who changes speech from one language to another (no spaces),JOBS
-TRANSLATOR,Person who changes writing from one language to another (no spaces),JOBS
+INTERPRETER,Person who changes speech from one language to another,JOBS
+TRANSLATOR,Person who changes writing from one language to another,JOBS
 MINISTER,Religious leader in a church,JOBS
 PASTOR,Church leader,JOBS
 RABBI,Jewish religious leader,JOBS
 IMAM,Muslim religious leader,JOBS
-MISSIONARY,Person who travels to teach religion (no spaces),JOBS
-VOLUNTEER,Person who works to help without pay (no spaces),JOBS
+MISSIONARY,Person who travels to teach religion,JOBS
+VOLUNTEER,Person who works to help without pay,JOBS
 INVENTOR,Person who creates something new,JOBS
-ENTREPRENEUR,Person who starts a business (no spaces),JOBS
+ENTREPRENEUR,Person who starts a business,JOBS
 SHOPOWNER,Person who owns a small store (no spaces),JOBS
 MANAGER,Person who leads workers,JOBS
-SUPERVISOR,Person who oversees a team (no spaces),JOBS
-SALESPERSON,Worker who sells goods or services (no spaces),JOBS
+SUPERVISOR,Person who oversees a team,JOBS
+SALESPERSON,Worker who sells goods or services,JOBS
 MARKETER,Person who helps people learn about a product,JOBS
 RECEPTIONCLERK,Front desk worker (no spaces),JOBS
 HOSTESS,Worker who greets guests at a restaurant,JOBS
 MERCHANT,Person who buys and sells goods,JOBS
 FARMHAND,Person who helps on a farm,JOBS
 CURATOR,Person who cares for museum items,JOBS
-ARCHEOLOGIST,Scientist who studies old objects and ruins (no spaces),JOBS
-HISTORIAN,Person who studies the past (no spaces),JOBS
+ARCHEOLOGIST,Scientist who studies old objects and ruins,JOBS
+HISTORIAN,Person who studies the past,JOBS
 MAILMAN,Person who brings mail,JOBS
 VASE,Flower holder,OBJECTS
 PICTURE,Framed photograph,OBJECTS
@@ -1805,16 +1805,16 @@ POSTER,Wall graphic,OBJECTS
 TAPESTRY,Woven wall hanging,OBJECTS
 CARPET,Wall-to-wall flooring,OBJECTS
 MAT,Small floor covering,OBJECTS
-WASHCLOTH,Face-cleaning fabric (no spaces),OBJECTS
+WASHCLOTH,Face-cleaning fabric,OBJECTS
 SPONGE,Porous cleaning pad,OBJECTS
 SHAMPOO,Hair cleaner,OBJECTS
-CONDITIONER,Hair softener (no spaces),OBJECTS
+CONDITIONER,Hair softener,OBJECTS
 LOTION,Skin moisturizer,OBJECTS
 PERFUME,Fragrant spray,OBJECTS
 COLOGNE,Men's fragrance,OBJECTS
-DEODORANT,Antiperspirant stick (no spaces),OBJECTS
-TOOTHPASTE,Minty dental gel (no spaces),OBJECTS
-MOUTHWASH,Breath freshening liquid (no spaces),OBJECTS
+DEODORANT,Antiperspirant stick,OBJECTS
+TOOTHPASTE,Minty dental gel,OBJECTS
+MOUTHWASH,Breath freshening liquid,OBJECTS
 FLOSS,Dental string,OBJECTS
 COMB,Hair detangling tool with teeth,OBJECTS
 RAZOR,Shaving blade,OBJECTS
@@ -1825,18 +1825,18 @@ POLISH,Nail paint,OBJECTS
 LIPSTICK,Cosmetic lip color,OBJECTS
 MASCARA,Eyelash darkener,OBJECTS
 EYELINER,Eye contour cosmetic,OBJECTS
-FOUNDATION,Base facial makeup (no spaces),OBJECTS
+FOUNDATION,Base facial makeup,OBJECTS
 BLUSH,Cheek cosmetic,OBJECTS
-CONCEALER,Blemish hiding makeup (no spaces),OBJECTS
+CONCEALER,Blemish hiding makeup,OBJECTS
 POWDER,Setting makeup,OBJECTS
 BRONZER,Sun-kissed makeup,OBJECTS
-EYESHADOW,Eyelid cosmetic (no spaces),OBJECTS
+EYESHADOW,Eyelid cosmetic,OBJECTS
 BROWPENCIL,Eyebrow filler (no spaces),OBJECTS
 LIPBALM,Chapped lip remedy,OBJECTS
-CHAPSTICK,Lip balm brand (no spaces),OBJECTS
-SUNSCREEN,UV protection lotion (no spaces),OBJECTS
+CHAPSTICK,Lip balm brand,OBJECTS
+SUNSCREEN,UV protection lotion,OBJECTS
 BUGSPRAY,Mosquito repellent,OBJECTS
-REPELLENT,Insect spray (no spaces),OBJECTS
+REPELLENT,Insect spray,OBJECTS
 BANDAGE,Adhesive wound cover,OBJECTS
 GAUZE,Medical dressing,OBJECTS
 TAPE,Medical adhesive roll,OBJECTS
@@ -1850,7 +1850,7 @@ CAPSULE,Gelatin medicine container,OBJECTS
 CLOCK,Tool that tells time,OBJECTS
 WATCH,Small clock worn on a wrist,OBJECTS
 LAMP,Light for a room or desk,OBJECTS
-FLASHLIGHT,Handheld light (no spaces),OBJECTS
+FLASHLIGHT,Handheld light,OBJECTS
 CANDLE,Wax stick that burns for light,OBJECTS
 MIRROR,Glass that shows a reflection,OBJECTS
 WINDOW,Glass opening in a wall,OBJECTS
@@ -1859,7 +1859,7 @@ BLINDS,Window slats that block light,OBJECTS
 PILLOW,Soft cushion for a bed,OBJECTS
 BLANKET,Soft cover used for warmth,OBJECTS
 SHEET,Thin bed covering,OBJECTS
-COMFORTER,Thick bed blanket (no spaces),OBJECTS
+COMFORTER,Thick bed blanket,OBJECTS
 QUILT,Stitched bed cover,OBJECTS
 MATTRESS,Soft bed pad,OBJECTS
 BEDFRAME,Frame that holds a mattress,OBJECTS
@@ -1868,7 +1868,7 @@ COUCH,Another word for a sofa,OBJECTS
 RECLINER,Chair that leans back,OBJECTS
 OTTOMAN,Footrest or low padded seat,OBJECTS
 TABLE,Piece of furniture with a flat top,OBJECTS
-NIGHTSTAND,Small table beside a bed (no spaces),OBJECTS
+NIGHTSTAND,Small table beside a bed,OBJECTS
 DRESSER,Furniture with drawers,OBJECTS
 DRAWER,Sliding box in furniture,OBJECTS
 CABINET,Storage furniture with doors,OBJECTS
@@ -1889,18 +1889,18 @@ HANDTOWEL,Small towel for hands (no spaces),OBJECTS
 BATHTOWEL,Large towel for drying after a bath (no spaces),OBJECTS
 SOAP,Bar or liquid used for washing,OBJECTS
 DISHSOAP,Soap used for washing dishes,OBJECTS
-DETERGENT,Cleaner used in laundry (no spaces),OBJECTS
+DETERGENT,Cleaner used in laundry,OBJECTS
 BLEACH,Strong cleaner that whitens,OBJECTS
-BASKETBALL,Orange ball used in basketball (no spaces),OBJECTS
-FOOTBALL,Oval ball used in football,OBJECTS
+BASKETBALL,Orange ball bounced on a court (no spaces),OBJECTS
+FOOTBALL,Oval ball thrown for touchdowns,OBJECTS
 BASEBALL,White ball with red stitches,OBJECTS
 SOCCERBALL,Black-and-white ball kicked in soccer (no spaces),OBJECTS
 TENNISRACKET,Tool used to hit a tennis ball (no spaces),OBJECTS
 BASEBALLBAT,Tool used to hit a baseball (no spaces),OBJECTS
 GLOVE,Hand cover used in baseball,OBJECTS
 HELMET,Hard hat used for safety,OBJECTS
-SKATEBOARD,Board with wheels (no spaces),OBJECTS
-ROLLERBLADES,Boots with wheels (no spaces),OBJECTS
+SKATEBOARD,Board with wheels,OBJECTS
+ROLLERBLADES,Boots with wheels,OBJECTS
 SLED,Winter ride used on snow,OBJECTS
 UMBRELLA,Tool that keeps rain off,OBJECTS
 RAINCOAT,Coat worn in the rain,OBJECTS
@@ -1918,7 +1918,7 @@ WALLET,Small holder for money and cards,OBJECTS
 PURSE,Bag often carried by hand or shoulder,OBJECTS
 BACKPACK,Bag carried on the back,OBJECTS
 SUITCASE,Travel case for clothes,OBJECTS
-BRIEFCASE,Work bag for papers (no spaces),OBJECTS
+BRIEFCASE,Work bag for papers,OBJECTS
 KEY,Small tool used to open a lock,OBJECTS
 KEYCHAIN,Ring that holds keys,OBJECTS
 LOCK,Metal device that secures a door or box,OBJECTS
@@ -1946,7 +1946,7 @@ POT,Deep cooking tool with sides,OBJECTS
 SKILLET,Frying pan,OBJECTS
 KETTLE,Pot used to heat water,OBJECTS
 TOASTER,Machine that browns bread,OBJECTS
-MICROWAVE,Oven that heats food quickly (no spaces),OBJECTS
+MICROWAVE,Oven that heats food quickly,OBJECTS
 BLENDER,Machine that mixes food or drinks,OBJECTS
 MIXER,Machine used to mix batter,OBJECTS
 CUTTINGBOARD,Board used for chopping food (no spaces),OBJECTS
@@ -1956,12 +1956,12 @@ CANOPENER,Tool for opening cans (no spaces),OBJECTS
 BOTTLEOPENER,Tool for opening bottles (no spaces),OBJECTS
 PITCHER,Large container for pouring drinks,OBJECTS
 LUNCHBOX,Box used to carry lunch,OBJECTS
-THERMOMETER,Tool used to measure temperature (no spaces),OBJECTS
+THERMOMETER,Tool used to measure temperature,OBJECTS
 BATTERY,Small power cell,OBJECTS
 REMOTE,Tool used to control a TV from far away,OBJECTS
-TELEVISION,Screen used to watch shows (no spaces),OBJECTS
+TELEVISION,Screen used to watch shows,OBJECTS
 RADIO,Device that plays broadcasts,OBJECTS
-HEADPHONES,Ear-worn listening device (no spaces),OBJECTS
+HEADPHONES,Ear-worn listening device,OBJECTS
 EARBUDS,Small ear speakers,OBJECTS
 PHONE,Device used to call or text,OBJECTS
 CAMERA,Device used to take pictures,OBJECTS
@@ -1970,7 +1970,7 @@ PRINTER,Device that prints pages,OBJECTS
 SCANNER,Device that copies a page into a computer,OBJECTS
 BOOK,Printed pages bound together,OBJECTS
 MAGAZINE,Booklet with articles and pictures,OBJECTS
-NEWSPAPER,Daily paper with news (no spaces),OBJECTS
+NEWSPAPER,Daily paper with news,OBJECTS
 ENVELOPE,Paper cover for a letter,OBJECTS
 STAMP,Small paper showing postage was paid,OBJECTS
 LETTER,Written message sent by mail,OBJECTS
@@ -1981,14 +1981,14 @@ GLUE,Sticky liquid that holds things together,OBJECTS
 NAIL,Thin metal fastener,OBJECTS
 SCREW,Metal fastener with threads,OBJECTS
 HAMMER,Tool used to hit nails,OBJECTS
-SCREWDRIVER,Tool used to turn screws (no spaces),OBJECTS
+SCREWDRIVER,Tool used to turn screws,OBJECTS
 WRENCH,Tool used to grip and turn bolts,OBJECTS
 PLIERS,Tool used to grip tightly,OBJECTS
 LADDER,Tool used for climbing up,OBJECTS
 TOOLBOX,Box used to hold tools,OBJECTS
 MEASURINGCUP,Cup marked for cooking amounts (no spaces),OBJECTS
 MEASURINGSPOON,Spoon marked for small cooking amounts (no spaces),OBJECTS
-CORKSCREW,Tool used to pull a cork (no spaces),OBJECTS
+CORKSCREW,Tool used to pull a cork,OBJECTS
 BOOKMARK,Strip used to save a place in a book,OBJECTS
 CANDLEHOLDER,Base that holds a candle (no spaces),OBJECTS
 PICTUREFRAME,Border that holds a photo (no spaces),OBJECTS
@@ -1998,17 +1998,17 @@ THREAD,Thin strand used for sewing,OBJECTS
 BUTTON,Small fastener on clothing,OBJECTS
 ZIPPER,Fastener with teeth,OBJECTS
 SWIFT,Pop icon Taylor (last name),SINGERS
-BEYONCE,Queen Bey (last name),SINGERS
-GAGA,Born This Way singer (last name),SINGERS
-ADELE,Hello vocalist (last name),SINGERS
+BEYONCE,Crazy in Love singer known by one name,SINGERS
+GAGA,Born This Way singer Lady ___,SINGERS
+ADELE,Hello singer known by one name,SINGERS
 SHEERAN,Shape of You singer Ed (last name),SINGERS
 BIEBER,Baby singer Justin (last name),SINGERS
 PERRY,Katy of California Gurls (last name),SINGERS
 MARS,Bruno of Uptown Funk (last name),SINGERS
-RIHANNA,Umbrella singer (last name),SINGERS
-DRAKE,Hotline Bling rapper (last name),SINGERS
-EMINEM,Slim Shady (last name),SINGERS
-MADONNA,Queen of Pop (last name),SINGERS
+RIHANNA,Umbrella singer known by one name,SINGERS
+DRAKE,Hotline Bling rapper (stage name),SINGERS
+EMINEM,Rapper also called Slim Shady (stage name),SINGERS
+MADONNA,Queen of Pop known by one name,SINGERS
 JACKSON,King of Pop Michael (last name),SINGERS
 PRESLEY,King of Rock and Roll Elvis (last name),SINGERS
 SINATRA,Ol' Blue Eyes Frank (last name),SINGERS
@@ -2022,7 +2022,7 @@ HARRISON,Beatle George (last name),SINGERS
 STARR,Beatle Ringo (last name),SINGERS
 MERCURY,Queen frontman Freddie (last name),SINGERS
 BOWIE,Ziggy Stardust David (last name),SINGERS
-PRINCE,Purple Rain artist (last name),SINGERS
+PRINCE,Purple Rain artist known by one name,SINGERS
 SPRINGSTEEN,The Boss Bruce (last name),SINGERS
 JOEL,Piano Man Billy (last name),SINGERS
 WONDER,Superstition singer Stevie (last name),SINGERS
@@ -2101,76 +2101,76 @@ VIARDOT,French mezzo-soprano Pauline (last name),SINGERS
 GRISI,Italian operatic soprano Giulia (last name),SINGERS
 PASTA,Italian operatic soprano Giuditta (last name),SINGERS
 SONTAG,German operatic soprano Henriette (last name),SINGERS
-USHER,Yeah! singer (last name),SINGERS
-NEYO,So Sick singer (last name),SINGERS
-AKON,Smack That singer (last name),SINGERS
-TPAIN,Buy U a Drank singer (last name),SINGERS
-LILWAYNE,A Milli rapper (last name),SINGERS
-JAYZ,Empire State of Mind rapper (last name),SINGERS
-NAS,Illmatic rapper (last name),SINGERS
-SNOOPDOGG,Drop It Like It's Hot rapper (last name),SINGERS
-ICECUBE,It Was a Good Day rapper (last name),SINGERS
-DRDRE,The Chronic producer and rapper (last name),SINGERS
-EAZYE,Boyz-n-the-Hood rapper (last name),SINGERS
-TUPAC,California Love rapper (last name),SINGERS
-BIGGIE,Juicy rapper (last name),SINGERS
-DIDDY,I'll Be Missing You rapper (last name),SINGERS
-MASE,Feel So Good rapper (last name),SINGERS
-BUSTA,Rhymes rapper (last name),SINGERS
-MISSY,Get Ur Freak On rapper Elliott (last name),SINGERS
-LILKIM,Crush on You rapper (last name),SINGERS
-FOXY,Brown rapper (last name),SINGERS
-EVE,Let Me Blow Ya Mind rapper (last name),SINGERS
-TRINA,Diamond Princess rapper (last name),SINGERS
-NICKI,Super Bass rapper Minaj (last name),SINGERS
-CARDI,Bodak Yellow rapper B (last name),SINGERS
-MEGAN,Savage rapper Thee Stallion (last name),SINGERS
-DOJA,Say So singer and rapper Cat (last name),SINGERS
-IGGY,Fancy rapper Azalea (last name),SINGERS
-LATTO,Big Energy rapper (last name),SINGERS
-SAWEETIE,My Type rapper (last name),SINGERS
-GLORILLA,F.N.F. rapper (last name),SINGERS
-ICESPICE,Munch rapper (last name),SINGERS
-TYLA,Water singer (last name),SINGERS
-AYRA,Starr Nigerian singer (last name),SINGERS
-TEMS,Free Mind Nigerian singer (last name),SINGERS
-WIZKID,Essence Nigerian singer (last name),SINGERS
-BURNABOY,Last Last Nigerian singer (last name),SINGERS
-DAVIDO,Fall Nigerian singer (last name),SINGERS
-REMA,Calm Down Nigerian singer (last name),SINGERS
-ASAKE,Lonely At The Top Nigerian singer (last name),SINGERS
-OMAHLAY,Soso Nigerian singer (last name),SINGERS
-FIREBOY,Peru Nigerian singer DML (last name),SINGERS
-CKAY,Love Nwantiti Nigerian singer (last name),SINGERS
-KIZZDANIEL,Buga Nigerian singer (last name),SINGERS
-TIWA,Savage Nigerian singer (last name),SINGERS
-YEMI,Alade Nigerian singer (last name),SINGERS
-SIMI,Duduke Nigerian singer (last name),SINGERS
-TENI,Billionaire Nigerian singer (last name),SINGERS
-FEMIKUTI,Nigerian Afrobeat musician (last name),SINGERS
-CABALLO,Anthem singer Camila (last name),SINGERS
-SHAKIRA,Hips Don't Lie singer (last name),SINGERS
+USHER,Yeah! singer known by one name,SINGERS
+NEYO,So Sick singer (stage name),SINGERS
+AKON,Smack That singer (stage name),SINGERS
+TPAIN,Buy U a Drank singer (stage name),SINGERS
+LILWAYNE,A Milli rapper (no spaces),SINGERS
+JAYZ,Empire State of Mind rapper (stage name),SINGERS
+NAS,Illmatic rapper (stage name),SINGERS
+SNOOPDOGG,Drop It Like It's Hot rapper (no spaces),SINGERS
+ICECUBE,It Was a Good Day rapper (no spaces),SINGERS
+DRDRE,The Chronic producer and rapper (no spaces),SINGERS
+EAZYE,Boyz-n-the-Hood rapper (stage name),SINGERS
+TUPAC,California Love rapper ___ Shakur,SINGERS
+BIGGIE,Juicy rapper also called the Notorious B.I.G. (nickname),SINGERS
+DIDDY,I'll Be Missing You rapper (stage name),SINGERS
+MASE,Feel So Good rapper (stage name),SINGERS
+BUSTA,Rapper ___ Rhymes,SINGERS
+MISSY,Get Ur Freak On rapper ___ Elliott,SINGERS
+LILKIM,Crush on You rapper (no spaces),SINGERS
+FOXY,Rapper ___ Brown,SINGERS
+EVE,Let Me Blow Ya Mind rapper (stage name),SINGERS
+TRINA,Diamond Princess rapper (stage name),SINGERS
+NICKI,Super Bass rapper ___ Minaj,SINGERS
+CARDI,Bodak Yellow rapper ___ B,SINGERS
+MEGAN,Savage rapper ___ Thee Stallion,SINGERS
+DOJA,Say So singer ___ Cat,SINGERS
+IGGY,Fancy rapper ___ Azalea,SINGERS
+LATTO,Big Energy rapper (stage name),SINGERS
+SAWEETIE,My Type rapper (stage name),SINGERS
+GLORILLA,F.N.F. rapper (stage name),SINGERS
+ICESPICE,Munch rapper (no spaces),SINGERS
+TYLA,Water singer known by one name,SINGERS
+AYRA,Rush singer ___ Starr,SINGERS
+TEMS,Free Mind Nigerian singer (stage name),SINGERS
+WIZKID,Essence Nigerian singer (stage name),SINGERS
+BURNABOY,Last Last Nigerian singer (no spaces),SINGERS
+DAVIDO,Fall Nigerian singer (stage name),SINGERS
+REMA,Calm Down Nigerian singer (stage name),SINGERS
+ASAKE,Lonely At The Top Nigerian singer (stage name),SINGERS
+OMAHLAY,Soso Nigerian singer (no spaces),SINGERS
+FIREBOY,Peru singer ___ DML,SINGERS
+CKAY,Love Nwantiti Nigerian singer (stage name),SINGERS
+KIZZDANIEL,Buga Nigerian singer (no spaces),SINGERS
+TIWA,Nigerian singer ___ Savage,SINGERS
+YEMI,Johnny singer ___ Alade,SINGERS
+SIMI,Duduke Nigerian singer (stage name),SINGERS
+TENI,Billionaire Nigerian singer (stage name),SINGERS
+FEMIKUTI,Nigerian Afrobeat musician son of Fela (no spaces),SINGERS
+CABELLO,Havana singer Camila (last name),SINGERS
+SHAKIRA,Hips Don't Lie singer known by one name,SINGERS
 ESTEFAN,Conga singer Gloria (last name),SINGERS
-JLO,On the Floor singer Jennifer (last name),SINGERS
+JLO,Nickname of On the Floor singer Jennifer Lopez,SINGERS
 LAVIGNE,Sk8er Boi singer Avril (last name),SINGERS
-PINK,Raise Your Glass singer (last name),SINGERS
+PINK,Raise Your Glass singer (stage name),SINGERS
 NICKS,Fleetwood Mac singer Stevie (last name),SINGERS
 TYLER,Aerosmith singer Steven (last name),SINGERS
 JAGGER,Rolling Stones singer Mick (last name),SINGERS
 RICHARDS,Rolling Stones guitarist Keith often sings too (last name),SINGERS
-STING,Every Breath You Take singer (last name),SINGERS
+STING,Every Breath You Take singer (stage name),SINGERS
 COLLINS,In the Air Tonight singer Phil (last name),SINGERS
 GABRIEL,Sledgehammer singer Peter (last name),SINGERS
 MORISSETTE,Ironic singer Alanis (last name),SINGERS
 MONAHAN,Train singer Pat (last name),SINGERS
 TRAINOR,All About That Bass singer Meghan (last name),SINGERS
-KEANE,Somewhere Only We Know singer Tom from Keane (last name),SINGERS
+KEANE,Band behind Somewhere Only We Know,SINGERS
 GROHL,Foo Fighters singer Dave (last name),SINGERS
 COBAIN,Nirvana singer Kurt (last name),SINGERS
 VEDDER,Pearl Jam singer Eddie (last name),SINGERS
-CICCONE,Last name of Madonna (last name),SINGERS
+CICCONE,Madonna's real surname,SINGERS
 MINOGUE,Can't Get You Out of My Head singer Kylie (last name),SINGERS
-CLARK,Five Foot Two singer Petula (last name),SINGERS
+CLARK,Downtown singer Petula (last name),SINGERS
 WARWICK,Walk On By singer Dionne (last name),SINGERS
 KNIGHT,Midnight Train to Georgia singer Gladys (last name),SINGERS
 SUMMER,Disco singer Donna (last name),SINGERS
@@ -2182,20 +2182,20 @@ HOLLY,Peggy Sue singer Buddy (last name),SINGERS
 ORBISON,Pretty Woman singer Roy (last name),SINGERS
 VALENS,La Bamba singer Ritchie (last name),SINGERS
 MONROE,I Wanna Be Loved by You singer Marilyn (last name),SINGERS
-SEAL,Kiss from a Rose singer (last name),SINGERS
+SEAL,Kiss from a Rose singer known by one name,SINGERS
 MORRISON,Brown Eyed Girl singer Van (last name),SINGERS
 CROCE,Time in a Bottle singer Jim (last name),SINGERS
-KING,Fire and Rain singer Carole (last name),SINGERS
+KING,Tapestry singer Carole (last name),SINGERS
 FUNICELLO,Beach party singer Annette (last name),SINGERS
 GILL,Country singer Vince (last name),SINGERS
 YOAKAM,Country singer Dwight (last name),SINGERS
-PATTY,Loveless country singer name clue says one-word last name style not needed (last name),SINGERS
+LOVELESS,Country singer Patty (last name),SINGERS
 MCCREERY,Country singer Scotty (last name),SINGERS
 ALDEAN,Country singer Jason (last name),SINGERS
 COMBS,Fast Car country singer Luke (last name),SINGERS
-KELLY,Country singer Josh (last name),SINGERS
+KELLEY,Pop-country singer Josh (last name),SINGERS
 RIMES,Blue singer LeAnn (last name),SINGERS
-MARTELL,Country singer Mickey (last name),SINGERS
+MARTELL,Pioneering country singer Linda (last name),SINGERS
 GOKU,Saiyan warrior,ANIME
 VEGETA,Prince of all Saiyans,ANIME
 GOHAN,Goku's eldest son,ANIME
@@ -2211,7 +2211,7 @@ SASUKE,Uchiha clan survivor,ANIME
 SAKURA,Pink-haired medical ninja,ANIME
 KAKASHI,Copy Ninja with the Sharingan,ANIME
 HINATA,Byakugan princess of the Hyuga,ANIME
-SHIKAMARU,Lazy shadow-manipulating genius (no spaces),ANIME
+SHIKAMARU,Lazy shadow-manipulating genius,ANIME
 INO,Mind-transferring kunoichi,ANIME
 CHOJI,Chips-loving Akimichi ninja,ANIME
 KIBA,Ninja with a dog companion Akamaru,ANIME
@@ -2233,7 +2233,7 @@ KONAN,Paper-manipulating Akatsuki,ANIME
 ZETSU,Plant-like Akatsuki spy,ANIME
 TOBI,Masked Akatsuki member,ANIME
 MADARA,Legendary Uchiha ghost,ANIME
-OROCHIMARU,Snake sannin (no spaces),ANIME
+OROCHIMARU,Snake sannin,ANIME
 KABUTO,Orochimaru's bespectacled spy,ANIME
 JIRAIYA,Toad sage sannin,ANIME
 TSUNADE,Slug princess sannin,ANIME
@@ -2256,13 +2256,13 @@ APOO,Musical instrument pirate,ANIME
 UROUGE,Mad Monk pirate,ANIME
 BEGE,Castle-castle fruit mafia pirate,ANIME
 BONNEY,Age-manipulating pirate glutton,ANIME
-BLACKBEARD,Marshall D Teach (no spaces),ANIME
-WHITEBEARD,Edward Newgate (no spaces),ANIME
+BLACKBEARD,Marshall D Teach,ANIME
+WHITEBEARD,Edward Newgate,ANIME
 SHANKS,Red-haired Emperor,ANIME
 BIGMOM,Charlotte Linlin,ANIME
 KAIDO,King of the Beasts,ANIME
-DOFLAMINGO,Heavenly Yaksha (no spaces),ANIME
-CROCODILE,Sand-manipulating Warlord (no spaces),ANIME
+DOFLAMINGO,Heavenly Yaksha,ANIME
+CROCODILE,Sand-manipulating Warlord,ANIME
 MORIA,Shadow-stealing Warlord,ANIME
 KUMA,Paw-paw fruit Warlord,ANIME
 HANCOCK,Snake Princess Warlord,ANIME
@@ -2288,8 +2288,8 @@ URARAKA,Zero-gravity hero student,ANIME
 IIDA,Engine-leg hero student,ANIME
 ASUI,Frog-quirk hero student,ANIME
 MINETA,Pop-off hair hero student,ANIME
-YAOYOROZU,Creation-quirk hero student (no spaces),ANIME
-KIRISHIMA,Hardening-quirk hero student (no spaces),ANIME
+YAOYOROZU,Creation-quirk hero student,ANIME
+KIRISHIMA,Hardening-quirk hero student,ANIME
 KAMINARI,Electrification-quirk hero student,ANIME
 JIRO,Earphone-jack hero student,ANIME
 ASHIDO,Acid-quirk hero student,ANIME
@@ -2307,7 +2307,7 @@ PRESENTMIC,Voice-amplifying teacher (no spaces),ANIME
 MIDNIGHT,Somnambulist teacher,ANIME
 CEMENTOSS,Concrete-manipulating teacher (no spaces),ANIME
 SNIPE,Homing-bullet teacher,ANIME
-ECTOPLASM,Cloning teacher (no spaces),ANIME
+ECTOPLASM,Cloning teacher,ANIME
 VLADKING,Blood-manipulating teacher,ANIME
 GRANTORINO,Jet-quirk retired hero (no spaces),ANIME
 RECOVERYGIRL,Healing school nurse (no spaces),ANIME
@@ -2323,7 +2323,7 @@ WASH,Laundry hero,ANIME
 YOROIMUSHA,Armored hero (no spaces),ANIME
 RYUKYU,Dragon hero,ANIME
 GANGORCA,Killer-whale hero,ANIME
-SHIGARAKI,Decay-quirk villain (no spaces),ANIME
+SHIGARAKI,Decay-quirk villain,ANIME
 KUROGIRI,Warp-gate villain,ANIME
 DABI,Blue-flame villain,ANIME
 TOGA,Blood-transforming villain,ANIME
@@ -2335,9 +2335,9 @@ MOONFISH,Blade-tooth villain,ANIME
 MUSTARD,Sleep-gas villain,ANIME
 MAGNE,Magnetism villain,ANIME
 OVERHAUL,Deconstruct-reconstruct villain,ANIME
-CHRONOSTASIS,Time-slowing villain (no spaces),ANIME
+CHRONOSTASIS,Time-slowing villain,ANIME
 MIMIC,Object-possessing villain,ANIME
-SHINEMOTO,Confession-quirk villain (no spaces),ANIME
+NEMOTO,Confession-quirk villain Shin (last name),ANIME
 RAPPA,Strong-arm villain,ANIME
 EREN,Attack Titan shifter,ANIME
 MIKASA,Ackerman prodigy soldier,ANIME
@@ -2351,7 +2351,7 @@ CONNIE,Shaved-head soldier,ANIME
 INUYASHA,Half-demon hero from a feudal tale,ANIME
 KAGOME,Schoolgirl who travels through a well,ANIME
 KIKYO,Priestess from Inuyasha,ANIME
-SESSHOMARU,Powerful demon from Inuyasha (no spaces),ANIME
+SESSHOMARU,Powerful demon from Inuyasha,ANIME
 SHIPPO,Fox demon child from Inuyasha,ANIME
 SANGO,Demon-slayer from Inuyasha,ANIME
 MIROKU,Monk with a wind tunnel hand,ANIME
@@ -2409,7 +2409,7 @@ BUGS,Carrot-chomping rabbit,CARTOONS
 DAFFY,Lisping Looney Tunes duck,CARTOONS
 PORKY,Stuttering Looney Tunes pig,CARTOONS
 ELMER,Fudd who hunts wabbits,CARTOONS
-SYLVESTER,Sufferin' succotash cat (no spaces),CARTOONS
+SYLVESTER,Sufferin' succotash cat,CARTOONS
 TWEETY,Yellow canary who taut he taw a puddy tat,CARTOONS
 YOSEMITE,Sam with a red mustache and pistols,CARTOONS
 FOGHORN,Leghorn the large rooster,CARTOONS
@@ -2428,7 +2428,7 @@ FLANDERS,Okely-dokely neighbor Ned,CARTOONS
 BURNS,Excellent power plant owner Mr,CARTOONS
 SMITHERS,Burns's loyal assistant Waylon,CARTOONS
 SKINNER,Springfield Elementary principal,CARTOONS
-KRABAPPEL,Bart's cynical teacher Edna (no spaces),CARTOONS
+KRABAPPEL,Bart's cynical teacher Edna,CARTOONS
 MOE,Springfield bartender,CARTOONS
 BARNEY,Gumble the town drunk,CARTOONS
 LENNY,Homer's power plant friend,CARTOONS
@@ -2441,9 +2441,9 @@ NELSON,Ha-ha bully Muntz,CARTOONS
 MILHOUSE,Bart's bespectacled best friend,CARTOONS
 RALPH,I'm in danger Wiggum boy,CARTOONS
 MARTIN,Prince the teacher's pet,CARTOONS
-SPONGEBOB,Fry cook in pineapple (no spaces),CARTOONS
+SPONGEBOB,Fry cook in pineapple,CARTOONS
 PATRICK,Starfish under a rock,CARTOONS
-SQUIDWARD,Clarinet-playing octopus (no spaces),CARTOONS
+SQUIDWARD,Clarinet-playing octopus,CARTOONS
 KRABS,Money-loving crustacean boss,CARTOONS
 PLANKTON,Chum Bucket owner,CARTOONS
 SANDY,Cheeks the karate squirrel,CARTOONS
@@ -2490,7 +2490,7 @@ STEWIE,Griffin the evil genius baby,CARTOONS
 BRIAN,Griffin the talking dog,CARTOONS
 QUAGMIRE,Giggity neighbor Glenn,CARTOONS
 JOE,Swanson the wheelchair cop,CARTOONS
-CLEVELAND,Brown the mild-mannered neighbor (no spaces),CARTOONS
+CLEVELAND,Brown the mild-mannered neighbor,CARTOONS
 STAN,Smith the CIA dad,CARTOONS
 FRANCINE,Smith the housewife mom,CARTOONS
 HAYLEY,Smith the activist daughter,CARTOONS
@@ -2525,7 +2525,7 @@ TRENT,Lane Jane's slacker brother,CARTOONS
 MYSTIK,Spiral the band Trent is in,CARTOONS
 FINN,The human boy in Ooo,CARTOONS
 JAKE,The magical dog in Ooo,CARTOONS
-MARCELINE,The Vampire Queen (no spaces),CARTOONS
+MARCELINE,The Vampire Queen,CARTOONS
 ICEKING,Simon Petrikov,CARTOONS
 BMO,Living video game console,CARTOONS
 LEMONGRAB,Unacceptable earl (no spaces),CARTOONS
@@ -2546,7 +2546,7 @@ PHINEAS,Triangular-headed inventor boy,CARTOONS
 FERB,Green-haired silent stepbrother,CARTOONS
 CANDACE,Sister who tries to bust her brothers,CARTOONS
 PERRY,The platypus secret agent,CARTOONS
-DOOFENSHMIRTZ,Evil incorporated scientist Heinz (no spaces),CARTOONS
+DOOFENSHMIRTZ,Evil incorporated scientist Heinz,CARTOONS
 SCOOBY,Talking mystery-solving dog,CARTOONS
 SHAGGY,Scooby's hungry best friend,CARTOONS
 VELMA,Smart mystery solver with glasses,CARTOONS
@@ -2562,14 +2562,14 @@ WILMA,Stone Age mom from Bedrock,CARTOONS
 BETTY,Barney's wife in Bedrock,CARTOONS
 BAMMBAMM,Very strong little boy in The Flintstones,CARTOONS
 PEBBLES,Flintstones daughter,CARTOONS
-JOSIE,Leader of Josie and the Pussycats,CARTOONS
+JOSIE,Lead singer of the Pussycats,CARTOONS
 SMURF,Small blue cartoon creature,CARTOONS
-PAPA,Smurf village leader clue uses one-word name,CARTOONS
-SMURFETTE,Blonde girl Smurf (no spaces),CARTOONS
+PAPA,___ Smurf the village leader,CARTOONS
+SMURFETTE,Blonde girl Smurf,CARTOONS
 HEFTY,Strong Smurf,CARTOONS
 GARGAMEL,Smurf-hating wizard,CARTOONS
 AZRAEL,Gargamel's cat,CARTOONS
-RICKRICK,scientist grandpa from a wild cartoon,CARTOONS
+RICKSANCHEZ,Genius scientist grandpa of Morty (no spaces),CARTOONS
 MORTY,Nervous grandson in a wild cartoon,CARTOONS
 SUMMER,Teen sister in Rick and Morty,CARTOONS
 BETH,Horse doctor mom in Rick and Morty,CARTOONS
@@ -2578,15 +2578,15 @@ POPEYE,Sailor who eats spinach,CARTOONS
 OLIVE,Popeye's sweetheart,CARTOONS
 BLUTO,Popeye's big rival,CARTOONS
 FELIX,Classic cartoon cat,CARTOONS
-WOODSTOCK,Little yellow bird in Peanuts (no spaces),CARTOONS
+WOODSTOCK,Little yellow bird in Peanuts,CARTOONS
 CHARLIEBROWN,Peanuts kid with bad luck (no spaces),CARTOONS
 SNOOPY,Peanuts beagle,CARTOONS
 LUCY,Bossy Peanuts girl,CARTOONS
 LINUS,Peanuts kid with a blanket,CARTOONS
-SCHROEDER,Piano-playing Peanuts kid (no spaces),CARTOONS
-HELLOKITTY,One-word character with a bow (no spaces),CARTOONS
-KEROPPI,One-word frog from Sanrio,CARTOONS
-AGGRETSUKO,Red panda office cartoon (no spaces),CARTOONS
+SCHROEDER,Piano-playing Peanuts kid,CARTOONS
+HELLOKITTY,Sanrio cat with a red bow (no spaces),CARTOONS
+KEROPPI,Frog character from Sanrio,CARTOONS
+AGGRETSUKO,Red panda office cartoon,CARTOONS
 DEXTER,Boy genius with a secret lab,CARTOONS
 DEEDEE,Dexter's dancing sister,CARTOONS
 COURAGE,Pink dog who lives in the middle of nowhere,CARTOONS
@@ -2688,47 +2688,47 @@ SCHWAB,The Invisible Life of Addie LaRue author VE (last name),AUTHORS
 TAYLOR,The Hate U Give author Angie (last name),AUTHORS
 THOMAS,Concrete Rose author Angie (last name),AUTHORS
 JACKSON,The Haunting of Hill House author Shirley (last name),AUTHORS
-SHIRLEY,We Have Always Lived in the Castle author (last name),AUTHORS
+SHIRLEY,We Have Always Lived in the Castle author ___ Jackson,AUTHORS
 PALAHNIUK,Fight Club author Chuck (last name),AUTHORS
 ELLIS,American Psycho author Bret Easton (last name),AUTHORS
 TARTT,The Secret History author Donna (last name),AUTHORS
-DONNA,The Goldfinch author Tartt (last name),AUTHORS
+DONNA,The Goldfinch author Tartt (first name),AUTHORS
 BYATT,Possession author AS (last name),AUTHORS
 MANTEL,Wolf Hall author Hilary (last name),AUTHORS
 SMITH,White Teeth author Zadie (last name),AUTHORS
-ZADIE,On Beauty author Smith (last name),AUTHORS
+ZADIE,On Beauty author Smith (first name),AUTHORS
 RUSHDIE,Midnight's Children author Salman (last name),AUTHORS
 ISHIGURO,The Remains of the Day author Kazuo (last name),AUTHORS
 MURAKAMI,Norwegian Wood author Haruki (last name),AUTHORS
 YOSHIMOTO,Kitchen author Banana (last name),AUTHORS
 KAWAKAMI,Breasts and Eggs author Mieko (last name),AUTHORS
 OGAWA,The Memory Police author Yoko (last name),AUTHORS
-SAYAKA,Convenience Store Woman author Murata (last name),AUTHORS
-MIEKO,Heaven author Kawakami (last name),AUTHORS
-YOKO,The Housekeeper and the Professor author Ogawa (last name),AUTHORS
-HIROMI,Strange Weather in Tokyo author Kawakami (last name),AUTHORS
-BANANA,Goodbye Tsugumi author Yoshimoto (last name),AUTHORS
-HARUKI,Kafka on the Shore author Murakami (last name),AUTHORS
-RYU,Coin Locker Babies author Murakami (last name),AUTHORS
-KOBO,The Woman in the Dunes author Abe (last name),AUTHORS
-YUKIO,The Temple of the Golden Pavilion author Mishima (last name),AUTHORS
-OSAMU,No Longer Human author Dazai (last name),AUTHORS
+SAYAKA,Convenience Store Woman author Murata (first name),AUTHORS
+MIEKO,Heaven author Kawakami (first name),AUTHORS
+YOKO,The Housekeeper and the Professor author Ogawa (first name),AUTHORS
+HIROMI,Strange Weather in Tokyo author Kawakami (first name),AUTHORS
+BANANA,Goodbye Tsugumi author Yoshimoto (first name),AUTHORS
+HARUKI,Kafka on the Shore author Murakami (first name),AUTHORS
+RYU,Coin Locker Babies author Murakami (first name),AUTHORS
+KOBO,The Woman in the Dunes author Abe (first name),AUTHORS
+YUKIO,The Temple of the Golden Pavilion author Mishima (first name),AUTHORS
+OSAMU,No Longer Human author Dazai (first name),AUTHORS
 NATSUME,I Am a Cat author Soseki (last name),AUTHORS
-RYUNOSUKE,Rashomon author Akutagawa (last name),AUTHORS
-JUNICHIRO,The Makioka Sisters author Tanizaki (last name),AUTHORS
-YASUNARI,Snow Country author Kawabata (last name),AUTHORS
-KENZABURO,A Personal Matter author Oe (last name),AUTHORS
-SHUSAKU,Silence author Endo (last name),AUTHORS
-DANTE,The Divine Comedy author Alighieri (last name),AUTHORS
-HOMER,The Iliad author (last name),AUTHORS
-VIRGIL,The Aeneid author (last name),AUTHORS
-OVID,Metamorphoses author (last name),AUTHORS
-HORACE,Roman lyric poet (last name),AUTHORS
-SENECA,Roman Stoic philosopher and playwright (last name),AUTHORS
-SOPHOCLES,Oedipus Rex playwright (last name),AUTHORS
-EURIPIDES,Medea playwright (last name),AUTHORS
-AESCHYLUS,The Oresteia playwright (last name),AUTHORS
-ARISTOPHANES,Lysistrata playwright (last name),AUTHORS
+RYUNOSUKE,Rashomon author Akutagawa (first name),AUTHORS
+JUNICHIRO,The Makioka Sisters author Tanizaki (first name),AUTHORS
+YASUNARI,Snow Country author Kawabata (first name),AUTHORS
+KENZABURO,A Personal Matter author Oe (first name),AUTHORS
+SHUSAKU,Silence author Endo (first name),AUTHORS
+DANTE,The Divine Comedy author Alighieri (first name),AUTHORS
+HOMER,The Iliad poet,AUTHORS
+VIRGIL,The Aeneid poet,AUTHORS
+OVID,Metamorphoses poet,AUTHORS
+HORACE,Roman lyric poet of the Odes,AUTHORS
+SENECA,Roman Stoic philosopher and playwright,AUTHORS
+SOPHOCLES,Oedipus Rex playwright,AUTHORS
+EURIPIDES,Medea playwright,AUTHORS
+AESCHYLUS,The Oresteia playwright,AUTHORS
+ARISTOPHANES,Lysistrata playwright,AUTHORS
 CHAUCER,The Canterbury Tales author Geoffrey (last name),AUTHORS
 MILTON,Paradise Lost author John (last name),AUTHORS
 SPENSER,The Faerie Queene author Edmund (last name),AUTHORS
@@ -2736,12 +2736,12 @@ DONNE,Holy Sonnets author John (last name),AUTHORS
 MARVELL,To His Coy Mistress author Andrew (last name),AUTHORS
 HERBERT,The Temple author George (last name),AUTHORS
 LEE,To Kill a Mockingbird author Harper (last name),AUTHORS
-SEUSS,One-word last name of Dr Seuss (last name),AUTHORS
+SEUSS,Pen name of The Cat in the Hat author,AUTHORS
 SENDAK,Where the Wild Things Are author Maurice (last name),AUTHORS
-BLOOM,Judy Blume children's author clue uses last name (last name),AUTHORS
+GEISEL,Real surname of Dr Seuss,AUTHORS
 DAHL,Charlie and the Chocolate Factory author Roald (last name),AUTHORS
 SILVERSTEIN,The Giving Tree author Shel (last name),AUTHORS
-CLEMENS,Pen name family name of Mark Twain creator (last name),AUTHORS
+CLEMENS,Real surname of Mark Twain,AUTHORS
 LOWRY,The Giver author Lois (last name),AUTHORS
 CLEARY,Ramona author Beverly (last name),AUTHORS
 BLUME,Tales of a Fourth Grade Nothing author Judy (last name),AUTHORS
@@ -2767,7 +2767,7 @@ HADDIX,Among the Hidden author Margaret Peterson (last name),AUTHORS
 PATERSON,Bridge to Terabithia author Katherine (last name),AUTHORS
 SPINELLI,Maniac Magee author Jerry (last name),AUTHORS
 SACHAR,Holes author Louis (last name),AUTHORS
-APPELGATE,One and Only Ivan author Katherine (last name),AUTHORS
+APPLEGATE,The One and Only Ivan author Katherine (last name),AUTHORS
 HIAASEN,Hoot author Carl (last name),AUTHORS
 WOODSON,Brown Girl Dreaming author Jacqueline (last name),AUTHORS
 REYNOLDS,Ghost author Jason (last name),AUTHORS
@@ -2777,21 +2777,21 @@ PAULSEN,Hatchet author Gary (last name),AUTHORS
 LUPICA,Sports story author Mike (last name),AUTHORS
 GIBBS,Spy School author Stuart (last name),AUTHORS
 RUSSELL,Dork Diaries author Rachel Renee (last name),AUTHORS
-MEADRICK,no (last name),AUTHORS
-HUNTER,Warriors series author name used for Erin Hunter (last name),AUTHORS
+KORMAN,Swindle author Gordon (last name),AUTHORS
+HUNTER,Pen name behind the Warriors cat series Erin (last name),AUTHORS
 COLFER,Artemis Fowl author Eoin (last name),AUTHORS
 FUNKE,Inkheart author Cornelia (last name),AUTHORS
 MULL,The Candy Shop War author Brandon (last name),AUTHORS
 MESSENGER,Keeper of the Lost Cities author Shannon (last name),AUTHORS
 SEPETYS,Between Shades of Gray author Ruta (last name),AUTHORS
 YOUSAFZAI,Memoir author Malala (last name),AUTHORS
-OBAMA,Memoir writer Michelle or Barack clue last name only (last name),AUTHORS
+OBAMA,Becoming memoirist Michelle (last name),AUTHORS
 COLLINS,Hunger Games author Suzanne (last name),AUTHORS
 VERNE,Journey to the Center of the Earth author Jules (last name),AUTHORS
 DUMAS,Three Musketeers author Alexandre (last name),AUTHORS
 HUGO,Les Miserables author Victor (last name),AUTHORS
-MOLIERE,French playwright with one-word last name (last name),AUTHORS
-CERVANTES,Don Quixote author Miguel de clue uses last name (last name),AUTHORS
+MOLIERE,Tartuffe playwright (pen name),AUTHORS
+CERVANTES,Don Quixote author Miguel de (last name),AUTHORS
 IBSEN,A Doll's House author Henrik (last name),AUTHORS
 SHAKESPEARE,Hamlet author William (last name),AUTHORS
 HANKS,Forrest Gump star Tom (last name),ACTORS
@@ -2843,24 +2843,24 @@ ISAAC,Poe Dameron star Oscar (last name),ACTORS
 DRIVER,Kylo Ren star Adam (last name),ACTORS
 SERKIS,Gollum star Andy (last name),ACTORS
 GLEESON,General Hux star Domhnall (last name),ACTORS
-DOMHNALL,Ex Machina star Gleeson (last name),ACTORS
-BRENDAN,The Mummy star Fraser (last name),ACTORS
-BRIAN,Succession star Cox (last name),ACTORS
-COLIN,The King's Speech star Firth (last name),ACTORS
-CILLIAN,Oppenheimer star Murphy (last name),ACTORS
-PIERCE,Mamma Mia star Brosnan (last name),ACTORS
-LIAM,Taken star Neeson (last name),ACTORS
-GABRIEL,Hereditary star Byrne (last name),ACTORS
-DANIEL,Harry Potter star Radcliffe (last name),ACTORS
-RUPERT,Ron Weasley star Grint (last name),ACTORS
-EMMA,Hermione Granger star Watson (last name),ACTORS
-TOM,Draco Malfoy star Felton (last name),ACTORS
-MATTHEW,Neville Longbottom star Lewis (last name),ACTORS
-ALAN,Severus Snape star Rickman (last name),ACTORS
-MAGGIE,Minerva McGonagall star Smith (last name),ACTORS
-MICHAEL,Albus Dumbledore star Gambon (last name),ACTORS
-RALPH,Lord Voldemort star Fiennes (last name),ACTORS
-RICHARD,First Albus Dumbledore star Harris (last name),ACTORS
+DOMHNALL,Ex Machina star Gleeson (first name),ACTORS
+BRENDAN,The Mummy star Fraser (first name),ACTORS
+BRIAN,Succession star Cox (first name),ACTORS
+COLIN,The King's Speech star Firth (first name),ACTORS
+CILLIAN,Oppenheimer star Murphy (first name),ACTORS
+PIERCE,Mamma Mia star Brosnan (first name),ACTORS
+LIAM,Taken star Neeson (first name),ACTORS
+GABRIEL,Hereditary star Byrne (first name),ACTORS
+DANIEL,Harry Potter star Radcliffe (first name),ACTORS
+RUPERT,Ron Weasley star Grint (first name),ACTORS
+EMMA,Hermione Granger star Watson (first name),ACTORS
+TOM,Draco Malfoy star Felton (first name),ACTORS
+MATTHEW,Neville Longbottom star Lewis (first name),ACTORS
+ALAN,Severus Snape star Rickman (first name),ACTORS
+MAGGIE,Minerva McGonagall star Smith (first name),ACTORS
+MICHAEL,Albus Dumbledore star Gambon (first name),ACTORS
+RALPH,Lord Voldemort star Fiennes (first name),ACTORS
+RICHARD,First Albus Dumbledore star Harris (first name),ACTORS
 RICKMAN,Die Hard villain Alan (last name),ACTORS
 FIENNES,Schindler's List star Ralph (last name),ACTORS
 GAMBON,Layer Cake star Michael (last name),ACTORS
@@ -2878,50 +2878,50 @@ STEWART,Bella Swan star Kristen (last name),ACTORS
 LAUTNER,Jacob Black star Taylor (last name),ACTORS
 FANNING,Jane Volturi star Dakota (last name),ACTORS
 SHEEN,Aro Volturi star Michael (last name),ACTORS
-DAKOTA,Fifty Shades star Johnson (last name),ACTORS
-ELLE,Maleficent star Fanning (last name),ACTORS
-SAOIRSE,Lady Bird star Ronan (last name),ACTORS
-FLORENCE,Midsommar star Pugh (last name),ACTORS
-TIMOTHEE,Dune star Chalamet (last name),ACTORS
-ZENDAYA,Euphoria star (last name),ACTORS
+DAKOTA,Madame Web star Johnson (first name),ACTORS
+ELLE,Maleficent star Fanning (first name),ACTORS
+SAOIRSE,Lady Bird star Ronan (first name),ACTORS
+FLORENCE,Midsommar star Pugh (first name),ACTORS
+TIMOTHEE,Dune star Chalamet (first name),ACTORS
+ZENDAYA,Euphoria star known by one name,ACTORS
 HOLLAND,Spider-Man star Tom (last name),ACTORS
 BATALON,Ned Leeds star Jacob (last name),ACTORS
 REVOLORI,Flash Thompson star Tony (last name),ACTORS
-ANGOURIE,Betty Brant star Rice (last name),ACTORS
-MARISA,Aunt May star Tomei (last name),ACTORS
-JON,Happy Hogan star Favreau (last name),ACTORS
-ROBERT,Iron Man star Downey Jr (last name),ACTORS
-GWYNETH,Pepper Potts star Paltrow (last name),ACTORS
-TERRENCE,First Rhodey star Howard (last name),ACTORS
-DON,Second Rhodey star Cheadle (last name),ACTORS
-JEFF,Obadiah Stane star Bridges (last name),ACTORS
-CLARK,Phil Coulson star Gregg (last name),ACTORS
-PAUL,J.A.R.V.I.S. voice Bettany (last name),ACTORS
-ANTHONY,Odin star Hopkins (last name),ACTORS
-HAYLEY,Peggy Carter star Atwell (last name),ACTORS
-SEBASTIAN,Bucky Barnes star Stan (last name),ACTORS
-EMILY,Sharon Carter star VanCamp (last name),ACTORS
-HUGO,Red Skull star Weaving (last name),ACTORS
-NATALIE,Jane Foster star Portman (last name),ACTORS
-STELLAN,Erik Selvig star Skarsgard (last name),ACTORS
-KAT,Darcy Lewis star Dennings (last name),ACTORS
-IDRIS,Heimdall star Elba (last name),ACTORS
-JAIMIE,Sif star Alexander (last name),ACTORS
-ZACHARY,Fandral star Levi (last name),ACTORS
-RENE,Frigga star Russo (last name),ACTORS
-CHRIS,Star-Lord star Pratt (last name),ACTORS
-TESSA,Valkyrie star Thompson (last name),ACTORS
-CATE,Hela star Blanchett (last name),ACTORS
-KARL,Skurge star Urban (last name),ACTORS
-TAIKA,Korg star Waititi (last name),ACTORS
-MARK,Bruce Banner star Ruffalo (last name),ACTORS
-BRIE,Captain Marvel star Larson (last name),ACTORS
-JUDE,Yon-Rogg star Law (last name),ACTORS
-BEN,Talos star Mendelsohn (last name),ACTORS
-SAMUEL,Nick Fury star L Jackson (last name),ACTORS
-GEMMA,Sersi star Chan (last name),ACTORS
-SALMA,Ajak star Hayek (last name),ACTORS
-ANGELINA,Thena star Jolie (last name),ACTORS
+ANGOURIE,Betty Brant star Rice (first name),ACTORS
+MARISA,Aunt May star Tomei (first name),ACTORS
+JON,Happy Hogan star Favreau (first name),ACTORS
+ROBERT,Iron Man star Downey Jr (first name),ACTORS
+GWYNETH,Pepper Potts star Paltrow (first name),ACTORS
+TERRENCE,First Rhodey star Howard (first name),ACTORS
+DON,Second Rhodey star Cheadle (first name),ACTORS
+JEFF,Obadiah Stane star Bridges (first name),ACTORS
+CLARK,Phil Coulson star Gregg (first name),ACTORS
+PAUL,J.A.R.V.I.S. voice Bettany (first name),ACTORS
+ANTHONY,Odin star Hopkins (first name),ACTORS
+HAYLEY,Peggy Carter star Atwell (first name),ACTORS
+SEBASTIAN,Bucky Barnes star Stan (first name),ACTORS
+EMILY,Sharon Carter star VanCamp (first name),ACTORS
+HUGO,Red Skull star Weaving (first name),ACTORS
+NATALIE,Jane Foster star Portman (first name),ACTORS
+STELLAN,Erik Selvig star Skarsgard (first name),ACTORS
+KAT,Darcy Lewis star Dennings (first name),ACTORS
+IDRIS,Heimdall star Elba (first name),ACTORS
+JAIMIE,Sif star Alexander (first name),ACTORS
+ZACHARY,Fandral star Levi (first name),ACTORS
+RENE,Frigga star Russo (first name),ACTORS
+CHRIS,Star-Lord star Pratt (first name),ACTORS
+TESSA,Valkyrie star Thompson (first name),ACTORS
+CATE,Hela star Blanchett (first name),ACTORS
+KARL,Skurge star Urban (first name),ACTORS
+TAIKA,Korg star Waititi (first name),ACTORS
+MARK,Bruce Banner star Ruffalo (first name),ACTORS
+BRIE,Captain Marvel star Larson (first name),ACTORS
+JUDE,Yon-Rogg star Law (first name),ACTORS
+BEN,Talos star Mendelsohn (first name),ACTORS
+SAMUEL,Nick Fury star L Jackson (first name),ACTORS
+GEMMA,Sersi star Chan (first name),ACTORS
+SALMA,Ajak star Hayek (first name),ACTORS
+ANGELINA,Thena star Jolie (first name),ACTORS
 KEATON,Batman star Michael (last name),ACTORS
 NICHOLSON,The Shining star Jack (last name),ACTORS
 PACINO,The Godfather star Al (last name),ACTORS
@@ -2940,13 +2940,13 @@ ADAMS,Actor Amy from Enchanted (last name),ACTORS
 LAWRENCE,Actor Jennifer from Hunger Games (last name),ACTORS
 PORTMAN,Actor Natalie from Star Wars (last name),ACTORS
 THERON,Actor Charlize from Mad Max (last name),ACTORS
-REESE,Actor Reese from Legally Blonde (last name),ACTORS
+REESE,Legally Blonde star Witherspoon (first name),ACTORS
 WITHERSPOON,Legally Blonde star Reese (last name),ACTORS
 WINSLET,Titanic actor Kate (last name),ACTORS
 DENCH,Actor Judi known for many films (last name),ACTORS
 MCCARTHY,Funny actor Melissa (last name),ACTORS
 BARRYMORE,Actor Drew from E T (last name),ACTORS
-BLAKE,Actor Blake from Gossip Girl clue uses last name (last name),ACTORS
+BLAKE,Gossip Girl star Lively (first name),ACTORS
 LIVELY,Actor Blake from Gossip Girl (last name),ACTORS
 ANISTON,Friends actor Jennifer (last name),ACTORS
 COX,Friends actor Courteney (last name),ACTORS
@@ -2958,7 +2958,7 @@ CARELL,Office actor Steve (last name),ACTORS
 KRASINSKI,Office actor John (last name),ACTORS
 FISCHER,Office actor Jenna (last name),ACTORS
 WILSON,Office actor Rainn (last name),ACTORS
-MARTIN,Short comedy actor Steve or Martin clue says last name only (last name),ACTORS
+MARTIN,Only Murders in the Building actor Steve (last name),ACTORS
 SANDLER,Comedy actor Adam (last name),ACTORS
 BLACK,Comedy actor Jack (last name),ACTORS
 HART,Comedy actor Kevin (last name),ACTORS
@@ -2979,15 +2979,15 @@ BLANCHETT,Actor Cate from many films (last name),ACTORS
 WEAVING,Actor Hugo from The Matrix (last name),ACTORS
 REEVES,Matrix actor Keanu (last name),ACTORS
 FISHBURNE,Matrix actor Laurence (last name),ACTORS
-MOSS,Trinity actor Carrie-Anne clue uses last name (last name),ACTORS
+MOSS,Trinity actor Carrie-Anne (last name),ACTORS
 DAFOE,Spider-Man actor Willem (last name),ACTORS
 MOLINA,Doc Ock actor Alfred (last name),ACTORS
-MCGUIRE,Spider-Man actor Tobey clue uses last name (last name),ACTORS
+DUNST,Mary Jane actor Kirsten (last name),ACTORS
 MAGUIRE,Spider-Man actor Tobey (last name),ACTORS
 GARFIELD,Spider-Man actor Andrew (last name),ACTORS
-BOSWORTH,not (last name),ACTORS
+BOSWORTH,Superman Returns Lois Lane actor Kate (last name),ACTORS
 TOMEI,Aunt May actor Marisa (last name),ACTORS
-DASTMALCHIAN,not (last name),ACTORS
+DASTMALCHIAN,Polka-Dot Man actor David (last name),ACTORS
 CAVILL,Superman actor Henry (last name),ACTORS
 GADOT,Wonder Woman actor Gal (last name),ACTORS
 MOMOA,Aquaman actor Jason (last name),ACTORS
@@ -3010,7 +3010,7 @@ DIDDYKONG,DK's cap-wearing sidekick (no spaces),VIDEOGAMES
 DIXIEKONG,Kong with a prehensile ponytail (no spaces),VIDEOGAMES
 CRANKYKONG,Elderly grumpy ape (no spaces),VIDEOGAMES
 FUNKYKONG,Surfer ape (no spaces),VIDEOGAMES
-KINGKRULE,Kremling leader (no spaces),VIDEOGAMES
+KINGKROOL,Kremling leader (no spaces),VIDEOGAMES
 LINK,Hero of Hyrule,VIDEOGAMES
 ZELDA,Princess of Hyrule,VIDEOGAMES
 GANON,Demon King of Hyrule,VIDEOGAMES
@@ -3034,23 +3034,23 @@ HINOX,Cyclops monster in Zelda,VIDEOGAMES
 TALUS,Stone golem monster in Zelda,VIDEOGAMES
 GUARDIAN,Ancient spider-like machine in Zelda,VIDEOGAMES
 PIKACHU,Electric mouse Pokémon,VIDEOGAMES
-CHARIZARD,Fire-flying dragon-like Pokémon (no spaces),VIDEOGAMES
-BULBASAUR,Grass-poison seed Pokémon (no spaces),VIDEOGAMES
+CHARIZARD,Fire-flying dragon-like Pokémon,VIDEOGAMES
+BULBASAUR,Grass-poison seed Pokémon,VIDEOGAMES
 SQUIRTLE,Water turtle Pokémon,VIDEOGAMES
 EEVEE,Evolution Pokémon,VIDEOGAMES
 MEWTWO,Genetic Pokémon,VIDEOGAMES
 MEW,New Species Pokémon,VIDEOGAMES
 LUCARIO,Aura Pokémon,VIDEOGAMES
 GRENINJA,Ninja Pokémon,VIDEOGAMES
-JIGGLYPUFF,Balloon Pokémon that sings to sleep (no spaces),VIDEOGAMES
+JIGGLYPUFF,Balloon Pokémon that sings to sleep,VIDEOGAMES
 SNORLAX,Sleeping Pokémon,VIDEOGAMES
 GENGAR,Shadow Pokémon,VIDEOGAMES
 MACHAMP,Superpower Pokémon,VIDEOGAMES
 ALAKAZAM,Psi Pokémon,VIDEOGAMES
-DRAGONITE,Dragon Pokémon (no spaces),VIDEOGAMES
-TYRANITAR,Armor Pokémon (no spaces),VIDEOGAMES
-METAGROSS,Iron Leg Pokémon (no spaces),VIDEOGAMES
-SALAMENCE,Dragon Pokémon (no spaces),VIDEOGAMES
+DRAGONITE,Dragon Pokémon,VIDEOGAMES
+TYRANITAR,Armor Pokémon,VIDEOGAMES
+METAGROSS,Iron Leg Pokémon,VIDEOGAMES
+SALAMENCE,Dragon Pokémon,VIDEOGAMES
 GARCHOMP,Mach Pokémon,VIDEOGAMES
 SAMUS,Bounty hunter Aran,VIDEOGAMES
 RIDLEY,Space Pirate leader,VIDEOGAMES
@@ -3060,11 +3060,11 @@ KIRBY,Pink puffball from Dream Land,VIDEOGAMES
 KINGDEDEDE,Self-proclaimed king of Dream Land (no spaces),VIDEOGAMES
 METAKNIGHT,Masked swordsman in Dream Land (no spaces),VIDEOGAMES
 BANDANADEE,Waddle Dee with a spear (no spaces),VIDEOGAMES
-FOX,McCloud leader of Star Fox,VIDEOGAMES
+FOX,McCloud who leads Falco and Peppy,VIDEOGAMES
 FALCO,Lombardi ace pilot of Star Fox,VIDEOGAMES
 PEPPY,Hare experienced pilot of Star Fox,VIDEOGAMES
 SLIPPY,Toad mechanic of Star Fox,VIDEOGAMES
-WOLF,O'Donnell leader of Star Wolf,VIDEOGAMES
+WOLF,O'Donnell rival of Fox McCloud,VIDEOGAMES
 LEON,Powalski chameleon of Star Wolf,VIDEOGAMES
 PANTHER,Caroso rose-holding pilot of Star Wolf,VIDEOGAMES
 PIGMA,Dengar traitorous pig of Star Wolf,VIDEOGAMES
@@ -3095,8 +3095,8 @@ GUILE,American Air Force major,VIDEOGAMES
 ZANGIEF,Red Cyclone wrestler,VIDEOGAMES
 DHALSIM,Yoga master who stretches,VIDEOGAMES
 BLANKA,Green Brazilian mutant,VIDEOGAMES
-HONDA,E Honda the sumo wrestler,VIDEOGAMES
-BISON,M Bison the Shadaloo dictator,VIDEOGAMES
+HONDA,Sumo wrestler of Street Fighter II,VIDEOGAMES
+BISON,Shadaloo dictator of Street Fighter,VIDEOGAMES
 BALROG,Shadaloo boxer,VIDEOGAMES
 VEGA,Spanish ninja with a claw,VIDEOGAMES
 SAGAT,Muay Thai emperor,VIDEOGAMES
@@ -3134,7 +3134,7 @@ ARBITER,Thel 'Vadam the Sangheili,VIDEOGAMES
 MARCUSFENIX,Gears of War protagonist (full name) (no spaces),VIDEOGAMES
 DOMSANTIAGO,Marcus Fenix's best friend (full name) (no spaces),VIDEOGAMES
 COLETRAIN,Augustus Cole (no spaces),VIDEOGAMES
-BAIRD,Damon Baird the sarcastic engineer,VIDEOGAMES
+BAIRD,Sarcastic engineer Damon of Gears of War,VIDEOGAMES
 NATHANDRAKE,Treasure hunter descendant of Sir Francis (no spaces),VIDEOGAMES
 SULLY,Victor Sullivan Drake's mentor,VIDEOGAMES
 ELENA,Fisher journalist and Drake's wife,VIDEOGAMES
@@ -3147,7 +3147,7 @@ ASH,Hero from the Pokemon cartoon and games,VIDEOGAMES
 MISTY,Water trainer from Pokemon,VIDEOGAMES
 BROCK,Rock trainer from Pokemon,VIDEOGAMES
 CLOUD,Spiky-haired hero from Final Fantasy,VIDEOGAMES
-SEPHIROTH,Long-haired Final Fantasy villain (no spaces),VIDEOGAMES
+SEPHIROTH,Long-haired Final Fantasy villain,VIDEOGAMES
 TIFA,Final Fantasy fighter with gloves,VIDEOGAMES
 AERITH,Flower girl from Final Fantasy,VIDEOGAMES
 BARRET,Gun-armed ally from Final Fantasy,VIDEOGAMES
@@ -3157,17 +3157,17 @@ SORA,Keyblade hero from Kingdom Hearts,VIDEOGAMES
 RIKU,Kingdom Hearts rival and friend,VIDEOGAMES
 KAIRI,Kingdom Hearts friend of Sora,VIDEOGAMES
 ALLOY,Bow-using hero from Horizon,VIDEOGAMES
-NATHAN,Drake treasure hunter clue uses last name style not exact,VIDEOGAMES
+NATHAN,First name of Uncharted hero Drake,VIDEOGAMES
 DRAKE,Treasure hunter Nathan from Uncharted,VIDEOGAMES
 LARACROFT,Tomb-raiding hero (no spaces),VIDEOGAMES
 GERALT,Monster hunter from The Witcher,VIDEOGAMES
 YENNEFER,Sorceress from The Witcher,VIDEOGAMES
 CIRI,Princess with powers in The Witcher,VIDEOGAMES
-CJ,Hero from Grand Theft Auto San Andreas,VIDEOGAMES
+CARLJOHNSON,Hero of GTA San Andreas (no spaces),VIDEOGAMES
 TOMNOOK,Animal Crossing shopkeeper,VIDEOGAMES
 ISABELLE,Helpful dog from Animal Crossing,VIDEOGAMES
 VILLAGER,Player character in Animal Crossing or Smash,VIDEOGAMES
-KAPPA,Animal Crossing boat driver clue one-word character,VIDEOGAMES
+KAPPA,Folklore creature species of Animal Crossing boatman Kapp'n,VIDEOGAMES
 PACMAN,Yellow dot-eating hero,VIDEOGAMES
 BLINKY,Red ghost in Pac-Man,VIDEOGAMES
 INKY,Blue ghost in Pac-Man,VIDEOGAMES
@@ -3192,5 +3192,5 @@ STEVE,Default hero in Minecraft,VIDEOGAMES
 ALEX,Minecraft player character,VIDEOGAMES
 CREEPER,Exploding Minecraft enemy,VIDEOGAMES
 ENDERMAN,Tall teleporting Minecraft creature,VIDEOGAMES
-VILLAGERNOSE,Long-nosed Minecraft resident (no spaces),VIDEOGAMES
-BANJO,Bear hero from Banjo-Kazooie,VIDEOGAMES
+PIGLIN,Gold-loving Nether creature in Minecraft,VIDEOGAMES
+BANJO,Bear hero who partners with Kazooie,VIDEOGAMES
