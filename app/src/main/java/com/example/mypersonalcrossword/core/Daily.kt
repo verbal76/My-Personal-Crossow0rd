@@ -44,6 +44,35 @@ object DailyPuzzle {
         return generateCrossword(canonical, WORD_COUNT, usedWords = emptySet(), rng = rng)
     }
 
+    /**
+     * Consecutive days, ending today (or yesterday, if today isn't solved yet),
+     * on which a Daily was solved. [completedKeys] are yyyy-MM-dd date keys.
+     */
+    fun streak(completedKeys: Set<String>, todayKey: String): Int {
+        val today = epochDayOf(todayKey) ?: return 0
+        val done  = completedKeys.mapNotNull { epochDayOf(it) }.toHashSet()
+        var day   = if (today in done) today else today - 1
+        var n     = 0
+        while (day in done) { n++; day-- }
+        return n
+    }
+
+    /** Days since 1970-01-01 for a yyyy-MM-dd key, or null if malformed. */
+    fun epochDayOf(key: String): Long? {
+        val parts = key.split('-')
+        if (parts.size != 3) return null
+        val y = parts[0].toLongOrNull() ?: return null
+        val m = parts[1].toLongOrNull()?.takeIf { it in 1..12 } ?: return null
+        val d = parts[2].toLongOrNull()?.takeIf { it in 1..31 } ?: return null
+        // Inverse of civilFromDays (Hinnant's days_from_civil).
+        val yy  = if (m <= 2) y - 1 else y
+        val era = Math.floorDiv(yy, 400L)
+        val yoe = yy - era * 400
+        val doy = (153 * (if (m > 2) m - 3 else m + 9) + 2) / 5 + d - 1
+        val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        return era * 146_097 + doe - 719_468
+    }
+
     /** Milliseconds until the next UTC midnight — for "new puzzle in Xh" copy. */
     fun millisUntilNext(epochMillis: Long): Long =
         86_400_000L - Math.floorMod(epochMillis, 86_400_000L)

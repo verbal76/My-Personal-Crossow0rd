@@ -59,4 +59,22 @@ class DailyTest {
         assertEquals(s, SaveSlot.parse(s.id))
         assertNotEquals(SaveSlot.daily("2026-09-28").id, s.id)
     }
+
+    @Test fun epochDayRoundTrips() {
+        for (day in listOf(-1L, 0L, 11_574L, 19_782L, 19_783L, 20_000L, 73_000L)) {
+            val key = DailyPuzzle.dateKey(day * 86_400_000L)
+            assertEquals(key, day, DailyPuzzle.epochDayOf(key))
+        }
+        assertEquals(null, DailyPuzzle.epochDayOf("2026-13-01"))
+        assertEquals(null, DailyPuzzle.epochDayOf("nonsense"))
+    }
+
+    @Test fun dailyStreakCountsConsecutiveDays() {
+        val done = setOf("2026-09-24", "2026-09-25", "2026-09-26", "2026-09-20")
+        assertEquals("today not played yet: streak runs through yesterday", 3, DailyPuzzle.streak(done, "2026-09-27"))
+        assertEquals(4, DailyPuzzle.streak(done + "2026-09-27", "2026-09-27"))
+        assertEquals("gap breaks the streak", 0, DailyPuzzle.streak(done, "2026-09-29"))
+        assertEquals("across a month boundary", 3,
+            DailyPuzzle.streak(setOf("2026-02-27", "2026-02-28", "2026-03-01"), "2026-03-01"))
+    }
 }

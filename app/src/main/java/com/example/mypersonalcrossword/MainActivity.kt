@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -69,12 +70,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.ui.graphics.drawscope.rotate as canvasRotate
-import androidx.compose.runtime.withFrameMillis
+import androidx.compose.runtime.withFrameNanos
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
@@ -89,7 +92,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalConfiguration
 import kotlin.random.Random
 import kotlin.math.sin
-import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.atan2
 import androidx.compose.foundation.Canvas
@@ -105,10 +107,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import android.media.AudioTrack
-import android.media.AudioFormat
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.SoundPool
+import android.media.AudioManager
+import android.media.AudioFocusRequest
+import android.os.Handler
+import android.os.Looper
 import android.annotation.SuppressLint
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -129,6 +134,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.semantics.semantics
 import com.hag.mypersonalcrossword.ui.theme.MyPersonalCrosswordTheme
 import com.hag.mypersonalcrossword.core.*
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -198,61 +204,52 @@ fun loadWordData(context: Context): WordData = try {
     WordData(emptyList(), emptyList())
 }
 
-fun vibrateLight(context: Context) {
-    try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vm = context.getSystemService(VibratorManager::class.java)
-            vm?.defaultVibrator?.vibrate(VibrationEffect.createOneShot(40, 80))
-        } else {
-            @Suppress("DEPRECATION")
-            val v = context.getSystemService(VIBRATOR_SERVICE) as? Vibrator
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                v?.vibrate(VibrationEffect.createOneShot(40, 80))
-            else @Suppress("DEPRECATION") v?.vibrate(40)
-        }
-    } catch (_: Exception) {}
-}
+// ── HAPTICS ──────────────────────────────────────────────────────────────────
+// Short, crisp system presets where available (API 29+), gentle one-shots below.
+// Every call respects the player's Haptics setting.
+object Haptics {
+    @Volatile var enabled = true
 
-fun vibrate(context: Context) {
-    try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vm = context.getSystemService(VibratorManager::class.java)
-            vm?.defaultVibrator?.vibrate(
-                VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            val v = context.getSystemService(VIBRATOR_SERVICE) as? Vibrator
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                v?.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                v?.vibrate(300)
+    private fun vibrator(context: Context): Vibrator? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        else @Suppress("DEPRECATION") (context.getSystemService(VIBRATOR_SERVICE) as? Vibrator)
+
+    fun play(context: Context, predefined: Int, fallbackMs: Long, fallbackAmp: Int) {
+        if (!enabled) return
+        try {
+            val v = vibrator(context) ?: return
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                    v.vibrate(VibrationEffect.createPredefined(predefined))
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ->
+                    v.vibrate(VibrationEffect.createOneShot(fallbackMs, fallbackAmp))
+                else -> @Suppress("DEPRECATION") v.vibrate(fallbackMs)
             }
-        }
-    } catch (_: Exception) {}
+        } catch (_: Exception) {}
+    }
+
+    fun waveform(context: Context, timings: LongArray, amps: IntArray, fallbackMs: Long) {
+        if (!enabled) return
+        try {
+            val v = vibrator(context) ?: return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) v.vibrate(VibrationEffect.createWaveform(timings, amps, -1))
+            else @Suppress("DEPRECATION") v.vibrate(fallbackMs)
+        } catch (_: Exception) {}
+    }
 }
 
-fun vibrateCorrect(context: Context) {
-    try {
-        val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
-        else @Suppress("DEPRECATION") context.getSystemService(VIBRATOR_SERVICE) as? Vibrator
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            v?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 55, 70, 65), intArrayOf(0, 180, 0, 230), -1))
-        else @Suppress("DEPRECATION") v?.vibrate(120)
-    } catch (_: Exception) {}
-}
+/** UI tap / key press. */
+fun vibrateLight(context: Context) =
+    Haptics.play(context, VibrationEffect.EFFECT_TICK, 18L, 70)
 
-fun vibrateWrong(context: Context) {
-    try {
-        val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
-        else @Suppress("DEPRECATION") context.getSystemService(VIBRATOR_SERVICE) as? Vibrator
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            v?.vibrate(VibrationEffect.createOneShot(230, 255))
-        else @Suppress("DEPRECATION") v?.vibrate(230)
-    } catch (_: Exception) {}
-}
+/** Word solved: a quick double pulse. */
+fun vibrateCorrect(context: Context) =
+    Haptics.waveform(context, longArrayOf(0, 28, 55, 36), intArrayOf(0, 150, 0, 210), 60L)
+
+/** Wrong answer: one firm knock (was a 230 ms full-strength buzz). */
+fun vibrateWrong(context: Context) =
+    Haptics.play(context, VibrationEffect.EFFECT_HEAVY_CLICK, 70L, 200)
 
 class SaveManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("CrosswordSaves", Context.MODE_PRIVATE)
@@ -365,6 +362,9 @@ class SaveManager(context: Context) {
     // Set of UTC date keys on which this profile solved the Daily (last 60 kept).
     fun isDailyCompleted(name: String, dateKey: String): Boolean =
         (prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet()).contains(dateKey)
+
+    fun getDailyCompletedKeys(name: String): Set<String> =
+        prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet()
 
     fun markDailyCompleted(name: String, dateKey: String) {
         val done = (prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet())
@@ -483,6 +483,14 @@ class SaveManager(context: Context) {
     fun getMusicVolume(): Float = prefs.getFloat("music_volume", 0.35f)
     fun setMusicVolume(v: Float) = prefs.edit { putFloat("music_volume", v) }
 
+    // Device-wide audio / haptics preferences (previously lost on every restart).
+    fun isSoundEnabled(): Boolean   = prefs.getBoolean("sound_enabled", true)
+    fun setSoundEnabled(on: Boolean) = prefs.edit { putBoolean("sound_enabled", on) }
+    fun isMusicEnabled(): Boolean   = prefs.getBoolean("music_enabled", true)
+    fun setMusicEnabled(on: Boolean) = prefs.edit { putBoolean("music_enabled", on) }
+    fun isHapticsEnabled(): Boolean = prefs.getBoolean("haptics_enabled", true)
+    fun setHapticsEnabled(on: Boolean) = prefs.edit { putBoolean("haptics_enabled", on) }
+
     fun isFirstLaunch(): Boolean = prefs.getBoolean("first_launch", true)
     fun markLaunched() = prefs.edit { putBoolean("first_launch", false) }
     fun isFirstVindictive(): Boolean = prefs.getBoolean("first_vind", true)
@@ -517,142 +525,67 @@ class SaveManager(context: Context) {
 
 
 // ── SOUND EFFECTS ─────────────────────────────────────────────────────────────
-// Synthesised entirely with AudioTrack — no audio asset files needed.
-// All sounds generated in a background thread so they never block the UI.
+// Effects are synthesised once (core/SoundSynth: normalised, click-free), cached
+// as WAVs, and played through a single SoundPool — instant, overlapping, and no
+// per-sound thread or AudioTrack (which could exhaust the platform track limit).
 object SoundPlayer {
-    // Build and play a tone sequence on a daemon thread
-    private fun play(build: (FloatArray) -> Unit) {
-        Thread {
-            try {
-                val buf   = FloatArray(44100 * 2)  // max 2 sec
-                build(buf)
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_GAME)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-                            .setSampleRate(44100)
-                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                            .build()
-                    )
-                    .setBufferSizeInBytes(buf.size * 4)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
+    @Volatile var enabled = true
+    private var pool: SoundPool? = null
+    private val ids = java.util.concurrent.ConcurrentHashMap<SoundSynth.Effect, Int>()
+
+    fun init(context: Context) {
+        if (pool != null) return
+        val app = context.applicationContext
+        val sp = SoundPool.Builder()
+            .setMaxStreams(6)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
-                track.write(buf, 0, buf.size, AudioTrack.WRITE_BLOCKING)
-                track.play()
-                Thread.sleep((buf.size * 1000L / 44100))
-                track.stop(); track.release()
-            } catch (_: Exception) {}
-        }.also { it.isDaemon = true }.start()
-    }
-
-    private fun sine(buf: FloatArray, startSample: Int, endSample: Int,
-                     freq: Double, amp: Float) {
-        for (i in startSample until endSample.coerceAtMost(buf.size)) {
-            val t = (i - startSample).toDouble() / 44100
-            // Soft envelope: 5 ms fade-in, 20 ms fade-out.
-            // All branches return Double so env is unambiguously Double —
-            // mixing Float branches (0.005f) and a Double else (1.0) made
-            // Kotlin infer env: Number, causing the Float * Number type error.
-            val env: Double = when {
-                i - startSample < 44100 * 0.005 -> (i - startSample).toDouble() / (44100 * 0.005)
-                endSample - i   < 44100 * 0.02  -> (endSample - i).toDouble()   / (44100 * 0.02)
-                else -> 1.0
-            }
-            // All math stays Double; only the final assignment converts to Float.
-            buf[i] = (buf[i].toDouble() + amp.toDouble() * env * sin(2.0 * PI * freq * t))
-                .toFloat().coerceIn(-1f, 1f)
-        }
-    }
-
-    /** Very short tick — played on button presses */
-    fun playClick() {
+            ).build()
+        pool = sp
         Thread {
-            try {
-                val n = 1800
-                val buf = FloatArray(n)
-                sine(buf, 0, n, 1100.0, 0.14f)
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build())
-                    .setAudioFormat(AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-                        .setSampleRate(44100)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .build())
-                    .setBufferSizeInBytes(n * 4)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .build()
-                track.write(buf, 0, n, AudioTrack.WRITE_BLOCKING)
-                track.play()
-                Thread.sleep(n * 1000L / 44100)
-                track.stop(); track.release()
-            } catch (_: Exception) {}
-        }.also { it.isDaemon = true }.start()
-    }
-
-    /** Short ascending chime — played when a word answer is fully correct */
-    fun playCorrect() = play { buf ->
-        // C5 → E5 → G5 quick arpeggio
-        listOf(523.25 to 0, 659.25 to 5000, 783.99 to 10000).forEach { (freq, start) ->
-            sine(buf, start, start + 12000, freq, 0.45f)
-        }
-    }
-
-    /** Low buzz — played when an answer is wrong */
-    fun playWrong() = play { buf ->
-        // Two descending buzzy tones
-        sine(buf, 0,     8000,  180.0, 0.55f)
-        sine(buf, 0,     8000,  90.0,  0.3f)
-        sine(buf, 6000, 14000,  140.0, 0.55f)
-        sine(buf, 6000, 14000,  70.0,  0.3f)
-    }
-
-    /** Clapping burst — played on streak milestones */
-    fun playClap() = play { buf ->
-        // Five short noise bursts simulate a clap rhythm
-        for (burst in 0..4) {
-            val s = burst * 7500
-            val e = s + 3500
-            for (i in s until e.coerceAtMost(buf.size)) {
-                val env = when {
-                    i - s < 400      -> (i - s) / 400f
-                    e - i < 800      -> (e - i) / 800f
-                    else             -> 1f
+            for (effect in SoundSynth.Effect.entries) {
+                try {
+                    val f = java.io.File(app.cacheDir, "sfx_v2_${effect.name.lowercase()}.wav")
+                    if (!f.exists() || f.length() == 0L) f.writeBytes(SoundSynth.toWav(SoundSynth.render(effect)))
+                    ids[effect] = sp.load(f.path, 1)
+                } catch (e: Exception) {
+                    android.util.Log.w("CrosswordSound", "Couldn't prepare $effect", e)
                 }
-                buf[i] = (buf[i] + (Random.nextFloat() * 2f - 1f) * 0.55f * env)
-                    .coerceIn(-1f, 1f)
             }
-        }
+        }.also { it.isDaemon = true }.start()
     }
 
-    /** Ascending fanfare — played when the full puzzle is solved */
-    fun playCelebration() = play { buf ->
-        // C5-E5-G5-C6 fanfare with overlapping harmonics
-        val notes = listOf(523.25 to 0, 659.25 to 8000, 783.99 to 16000, 1046.50 to 24000)
-        notes.forEach { (freq, start) ->
-            sine(buf, start, start + 22000, freq,        0.4f)
-            sine(buf, start, start + 22000, freq * 2.0,  0.15f)  // octave harmonic
-        }
-        // Trailing shimmer
-        sine(buf, 36000, 60000, 1046.50, 0.25f)
-        sine(buf, 40000, 60000, 1318.51, 0.2f)
-        sine(buf, 44000, 60000, 1567.98, 0.15f)
+    private fun play(effect: SoundSynth.Effect, volume: Float = 1f, rate: Float = 1f) {
+        if (!enabled) return
+        val p  = pool ?: return
+        val id = ids[effect] ?: return
+        p.play(id, volume, volume, 1, 0, rate)
     }
+
+    /** UI button press. */
+    fun playClick()       = play(SoundSynth.Effect.CLICK, 0.7f)
+    /** A letter typed into the grid. */
+    fun playKey()         = play(SoundSynth.Effect.KEY, 0.55f)
+    /** Countdown's last seconds. */
+    fun playTick()        = play(SoundSynth.Effect.TICK, 0.6f)
+    /** Word solved — pitch climbs with the answer streak. */
+    fun playCorrect(streak: Int = 0) = play(SoundSynth.Effect.CORRECT, 1f, SoundSynth.streakRate(streak))
+    fun playWrong()       = play(SoundSynth.Effect.WRONG, 0.9f)
+    fun playClap()        = play(SoundSynth.Effect.CLAP, 0.9f)
+    fun playCelebration() = play(SoundSynth.Effect.CELEBRATION, 1f)
 }
 
 
 // ── AMBIENT MUSIC PLAYER ──────────────────────────────────────────────────────
-// Streams MP3 files from assets/Music/ using MediaPlayer.
-// Shuffles the playlist once on first start then cycles in that order forever.
-// Advances automatically when a track ends; next() skips to the following track.
+// Streams MP3 files from assets/Music/ using MediaPlayer, shuffled once, cycling.
+//  • Requests audio focus: pauses for calls / other media, ducks for notifications.
+//  • Fades in and out (start, stop, skip) instead of cutting hard.
+//  • Prepares asynchronously (no main-thread stalls on skip).
+//  • A broken file is skipped; if every file fails, playback stops instead of
+//    recursing forever.
 //
 // @SuppressLint: we store applicationContext (process lifetime), not an Activity —
 // this is safe. Lint can't distinguish the two, so the warning is a false positive.
@@ -662,6 +595,14 @@ object AmbientMusicPlayer {
     @Volatile private var vol          = 0.4f
     @Volatile private var enabled      = false
     private var context:  Context?     = null
+    private var audioManager: AudioManager? = null
+    private var focusRequest: AudioFocusRequest? = null
+    private var hasFocus  = false
+    private var ducked    = false
+    private var failures  = 0
+    private var gain      = 0f                       // volume currently applied to the player
+    private val handler   = Handler(Looper.getMainLooper())
+    private var fade: Runnable? = null
 
     // Shuffled playlist — built once, rotated each time we advance
     private var playlist:     List<String> = emptyList()
@@ -672,6 +613,23 @@ object AmbientMusicPlayer {
         private set
     var isPlaying by mutableStateOf(false)
         private set
+
+    private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS -> {            // another app took over for good
+                hasFocus = false
+                fadeTo(0f) { runCatching { player?.pause() } }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {  // phone call, voice assistant
+                fadeTo(0f) { runCatching { player?.pause() } }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> { ducked = true; fadeTo(vol * 0.25f) }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                hasFocus = true; ducked = false
+                if (enabled) { runCatching { if (player?.isPlaying == false) player?.start() }; fadeTo(vol) }
+            }
+        }
+    }
 
     // Discover all MP3 files in assets/Music/, shuffle, store.
     private fun buildPlaylist(ctx: Context) {
@@ -688,22 +646,71 @@ object AmbientMusicPlayer {
 
     fun init(ctx: Context) {
         context = ctx.applicationContext
+        audioManager = ctx.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         context?.let { buildPlaylist(it) }
     }
 
-    // Play the track at trackIndex; when it completes advance to next.
+    private fun requestFocus(): Boolean {
+        if (hasFocus) return true
+        val am = audioManager ?: return true
+        val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val req = focusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_GAME)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                .setOnAudioFocusChangeListener(focusListener, handler)
+                .setWillPauseWhenDucked(false)
+                .build().also { focusRequest = it }
+            am.requestAudioFocus(req)
+        } else {
+            @Suppress("DEPRECATION")
+            am.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+        }
+        hasFocus = granted == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        return hasFocus
+    }
+
+    private fun abandonFocus() {
+        val am = audioManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) focusRequest?.let { am.abandonAudioFocusRequest(it) }
+        else @Suppress("DEPRECATION") am.abandonAudioFocus(focusListener)
+        hasFocus = false
+    }
+
+    /** Ramps the applied volume to [target] over ~450 ms, then runs [then]. */
+    private fun fadeTo(target: Float, then: (() -> Unit)? = null) {
+        fade?.let { handler.removeCallbacks(it) }
+        val steps = 15
+        val start = gain
+        var i = 0
+        val r = object : Runnable {
+            override fun run() {
+                i++
+                gain = start + (target - start) * (i.toFloat() / steps)
+                runCatching { player?.setVolume(gain, gain) }
+                if (i < steps) handler.postDelayed(this, 30L) else { fade = null; then?.invoke() }
+            }
+        }
+        fade = r
+        handler.post(r)
+    }
+
+    private fun prettyName(filename: String) = filename
+        .substringBeforeLast(".")     // strip .mp3
+        .replace(Regex("-\\d+"), "") // strip trailing licence numbers
+        .replace("-", " ")
+        .replaceFirstChar { it.uppercase() }
+
+    // Prepare the track at trackIndex asynchronously; it fades in once ready.
     private fun playCurrentTrack() {
         val ctx = context ?: return
         if (playlist.isEmpty()) return
         val filename = playlist[trackIndex]
-        currentTrackName = filename
-            .substringBeforeLast(".")     // strip .mp3
-            .replace(Regex("-\\d+"), "") // strip trailing licence numbers
-            .replace("-", " ")
-            .replaceFirstChar { it.uppercase() }
-
+        currentTrackName = prettyName(filename)
+        runCatching { player?.release() }
+        player = null
+        gain = 0f
         try {
-            player?.release()
             player = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -714,54 +721,83 @@ object AmbientMusicPlayer {
                 ctx.assets.openFd("Music/$filename").use { afd ->
                     setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
                 }
-                setVolume(vol, vol)
-                prepare()
+                setVolume(0f, 0f)
+                setOnPreparedListener { mp ->
+                    failures = 0
+                    if (enabled && hasFocus) { mp.start(); fadeTo(if (ducked) vol * 0.25f else vol) }
+                }
                 setOnCompletionListener { advance() }
-                if (enabled) start()
+                setOnErrorListener { _, _, _ -> onTrackFailed(); true }
+                prepareAsync()
             }
-        } catch (_: Exception) { advance() }   // skip broken file
+        } catch (_: Exception) { onTrackFailed() }
+    }
+
+    private fun onTrackFailed() {
+        failures++
+        if (failures >= playlist.size) {            // nothing playable — stop, don't loop forever
+            runCatching { player?.release() }
+            player = null
+            isPlaying = false
+            currentTrackName = ""
+            return
+        }
+        advance()
     }
 
     fun start(volume: Float) {
         vol     = volume
         enabled = true
-        isPlaying = true
         context?.let { buildPlaylist(it) }
-        if (player == null) playCurrentTrack()
-        else player?.apply { setVolume(vol, vol); if (!isPlaying) start() }
+        if (!requestFocus()) { isPlaying = false; return }
+        isPlaying = true
+        val p = player
+        if (p == null) playCurrentTrack()
+        else {
+            runCatching { if (!p.isPlaying) p.start() }
+            fadeTo(vol)
+        }
     }
 
     fun stop() {
         enabled = false
         isPlaying = false
-        try { player?.pause() } catch (_: Exception) {}
+        fadeTo(0f) { runCatching { player?.pause() } }
+        abandonFocus()
     }
 
     fun release() {
         enabled = false
         isPlaying = false
-        try { player?.stop(); player?.release() } catch (_: Exception) {}
+        fade?.let { handler.removeCallbacks(it) }
+        runCatching { player?.stop(); player?.release() }
         player = null
+        abandonFocus()
     }
 
     fun setVolume(volume: Float) {
         vol = volume.coerceIn(0f, 1f)
-        try { player?.setVolume(vol, vol) } catch (_: Exception) {}
+        if (fade == null && !ducked) { gain = vol; runCatching { player?.setVolume(vol, vol) } }
     }
 
     fun next() {
         if (playlist.isEmpty()) return
-        trackIndex = (trackIndex + 1) % playlist.size
-        playCurrentTrack()
+        fadeTo(0f) {
+            trackIndex = (trackIndex + 1) % playlist.size
+            playCurrentTrack()
+        }
     }
 
     fun previous() {
         if (playlist.isEmpty()) return
-        trackIndex = (trackIndex - 1 + playlist.size) % playlist.size
-        playCurrentTrack()
+        fadeTo(0f) {
+            trackIndex = (trackIndex - 1 + playlist.size) % playlist.size
+            playCurrentTrack()
+        }
     }
 
     private fun advance() {
+        if (playlist.isEmpty()) return
         trackIndex = (trackIndex + 1) % playlist.size
         playCurrentTrack()
     }
@@ -1043,9 +1079,10 @@ fun CrosswordApp() {
     var showColorPicker   by remember { mutableStateOf(false) }
     var showBgPicker      by remember { mutableStateOf(false) }
     var showCustomize     by remember { mutableStateOf(false) }
-    var soundEnabled       by rememberSaveable { mutableStateOf(true) }
-    var musicVolume        by rememberSaveable { mutableFloatStateOf(0.35f) }
-    var musicEnabled       by rememberSaveable { mutableStateOf(true) }
+    var soundEnabled       by rememberSaveable { mutableStateOf(saveManager.isSoundEnabled()) }
+    var musicVolume        by rememberSaveable { mutableFloatStateOf(saveManager.getMusicVolume()) }
+    var musicEnabled       by rememberSaveable { mutableStateOf(saveManager.isMusicEnabled()) }
+    var hapticsEnabled     by rememberSaveable { mutableStateOf(saveManager.isHapticsEnabled()) }
     // Cell color stored as ARGB Int so rememberSaveable handles it without a custom saver
     var currentCellColorArgb   by rememberSaveable { mutableIntStateOf(android.graphics.Color.WHITE) }
     var currentBtnColorArgb    by rememberSaveable { mutableIntStateOf(0xFF6650A4.toInt()) }
@@ -1364,9 +1401,9 @@ fun CrosswordApp() {
     }
 
     fun onCorrectFeedback() {
-        if (soundEnabled) SoundPlayer.playCorrect()
-        vibrateCorrect(context)
         currentStreak++
+        if (soundEnabled) SoundPlayer.playCorrect(currentStreak - 1)
+        vibrateCorrect(context)
         checkStreakMilestone(currentStreak)?.let { milestone ->
             streakMilestone = milestone
             if (soundEnabled) SoundPlayer.playClap()
@@ -1500,6 +1537,7 @@ fun CrosswordApp() {
     LaunchedEffect(Unit) {
         (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         AmbientMusicPlayer.init(context)
+        SoundPlayer.init(context)
         // Firebase sign-in is deferred until the player actually hosts or joins —
         // a purely offline session never touches the network.
         profileList = saveManager.getAllPlayerNames()
@@ -1644,7 +1682,11 @@ fun CrosswordApp() {
     LaunchedEffect(musicEnabled, musicVolume) {
         if (musicEnabled) AmbientMusicPlayer.start(musicVolume)
         else AmbientMusicPlayer.stop()
+        saveManager.setMusicEnabled(musicEnabled)
     }
+    // Sound-effect and haptic switches apply everywhere and persist across launches.
+    LaunchedEffect(soundEnabled)   { SoundPlayer.enabled = soundEnabled;  saveManager.setSoundEnabled(soundEnabled) }
+    LaunchedEffect(hapticsEnabled) { Haptics.enabled = hapticsEnabled;    saveManager.setHapticsEnabled(hapticsEnabled) }
 
     // Lifecycle: pause music and the puzzle clock when backgrounded, autosave the
     // puzzle so a process kill in the background loses nothing, and release the
@@ -2159,17 +2201,22 @@ fun CrosswordApp() {
                             items(savedProfiles) { name ->
                                 val score = saveManager.getScore(name)
                                 val done  = saveManager.getCompleted(name)
+                                fun selectProfile() {
+                                    playerName = name
+                                    saveManager.setLastUser(name)
+                                    currentScore = saveManager.getScore(name)
+                                    currentCompleted = saveManager.getCompleted(name)
+                                    currentCellColorArgb = saveManager.getCellColorArgb(name)
+                                    currentBtnColorArgb  = saveManager.getButtonColorArgb(name)
+                                    musicVolume = saveManager.getMusicVolume()
+                                }
                                 Card(
+                                    // "Continue as…" continues — straight to the home screen.
                                     onClick = {
-                                        playerName = name
-                                        saveManager.setLastUser(name)
-                                        currentScore = saveManager.getScore(name)
-                                        currentCompleted = saveManager.getCompleted(name)
-                                        currentCellColorArgb = saveManager.getCellColorArgb(name)
-                                        currentBtnColorArgb  = saveManager.getButtonColorArgb(name)
-                                        musicVolume = saveManager.getMusicVolume()
-                                        viewingProfile = name
-                                        appMode = AppMode.STATS
+                                        vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                                        selectProfile()
+                                        homeRefresh++
+                                        appMode = AppMode.CATEGORY_SELECT
                                     },
                                     colors = CardDefaults.cardColors(
                                         containerColor = MaterialTheme.colorScheme.secondaryContainer
@@ -2204,11 +2251,22 @@ fun CrosswordApp() {
                                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                                             )
                                         }
+                                        IconButton(onClick = {
+                                            selectProfile()
+                                            viewingProfile = name
+                                            appMode = AppMode.STATS
+                                        }) {
+                                            Icon(
+                                                imageVector   = Icons.Default.BarChart,
+                                                contentDescription = "Stats for $name",
+                                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                                            )
+                                        }
                                         IconButton(onClick = { confirmDeletePlayer = name }) {
                                             Icon(
                                                 imageVector   = Icons.Default.Delete,
                                                 contentDescription = "Delete $name",
-                                                tint = Color.Gray
+                                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
                                             )
                                         }
                                     }
@@ -2463,7 +2521,7 @@ fun CrosswordApp() {
                                     GameMode.VINDICTIVE -> " • ⚔️ Vind"
                                     else                -> ""
                                 }
-                                val titleText = activeCategory.lowercase().replaceFirstChar { it.uppercase() } + modeLabel
+                                val titleText = (if (activeDailyKey != null) "Daily Puzzle" else prettyCategory(activeCategory)) + modeLabel
                                 Text(titleText, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                                 // Subtitle: names for multiplayer, word count + time for single
                                 val mins = elapsedSeconds / 60
@@ -2792,13 +2850,15 @@ fun CrosswordApp() {
                 // ── Full-screen overlays — inside the Dashboard Box ──────────────
                 // Wrong answer banner — red border-glow around content with a centered card.
                 // Less jarring than a full red wash; plays nicely with the rest of the UI.
-                AnimatedVisibility(visible = showWrongFlash, enter = fadeIn(), exit = fadeOut()) {
+                // Vindictive: the full "WRONG!" card with a taunt is part of the mode's
+                // personality. Solo / Team: a quick, non-blocking toast is enough.
+                AnimatedVisibility(
+                    visible = showWrongFlash && activeGameMode == GameMode.VINDICTIVE,
+                    enter = fadeIn() + scaleIn(initialScale = 0.85f), exit = fadeOut()
+                ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            // Vivid red wash, alpha tuned to be readable against
-                            // both light and dark surfaces. Color.Red at 18%
-                            // muddied to a brown-purple in dark mode.
                             .background(Color(0xFFD32F2F).copy(alpha = 0.28f)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -2806,7 +2866,7 @@ fun CrosswordApp() {
                             shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = Color(0xFFB71C1C)),
                             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-                            modifier = Modifier.padding(horizontal = 36.dp)
+                            modifier = Modifier.padding(horizontal = 36.dp).semantics(mergeDescendants = true) {}
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -2814,23 +2874,35 @@ fun CrosswordApp() {
                             ) {
                                 Text(
                                     "WRONG!",
-                                    fontSize = 40.sp,
-                                    fontWeight = FontWeight.ExtraBold,
+                                    style = MaterialTheme.typography.displayMedium,
                                     color = Color.White,
                                     letterSpacing = 2.sp
                                 )
-                                if (activeGameMode == GameMode.VINDICTIVE) {
-                                    Spacer(Modifier.height(10.dp))
-                                    Text(
-                                        vindictiveTaunt(tauntIndex.intValue, nameOf(wrongAnswererIndex), nameOf(1 - wrongAnswererIndex)),
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.White.copy(alpha = 0.95f),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    vindictiveTaunt(tauntIndex.intValue, nameOf(wrongAnswererIndex), nameOf(1 - wrongAnswererIndex)),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.95f),
+                                    textAlign = TextAlign.Center
+                                )
                             }
                         }
+                    }
+                }
+                AnimatedVisibility(
+                    visible = showWrongFlash && activeGameMode != GameMode.VINDICTIVE,
+                    enter = fadeIn() + slideInVertically { -it }, exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.TopCenter)
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        shape = RoundedCornerShape(20.dp),
+                        shadowElevation = 6.dp,
+                        modifier = Modifier.padding(top = 12.dp)
+                    ) {
+                        Text("✗  Not quite — try again", style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp))
                     }
                 }
 
@@ -3039,8 +3111,30 @@ fun CrosswordApp() {
                         checked = soundEnabled,
                         onCheckedChange = {
                             soundEnabled = it
+                            SoundPlayer.enabled = it
                             vibrateLight(context)
                             if (it) SoundPlayer.playClick()
+                        }
+                    )
+                }
+
+                // Haptics toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Vibration", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        Text(if (hapticsEnabled) "Taps, correct and wrong answers" else "Off",
+                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = hapticsEnabled,
+                        onCheckedChange = {
+                            hapticsEnabled = it
+                            Haptics.enabled = it
+                            if (it) vibrateLight(context)
                         }
                     )
                 }
@@ -3072,17 +3166,17 @@ fun CrosswordApp() {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            IconButton(onClick = { AmbientMusicPlayer.previous() }, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = { AmbientMusicPlayer.previous() }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = settingsTrackColor)
                             }
-                            IconButton(onClick = { musicEnabled = !musicEnabled }, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = { musicEnabled = !musicEnabled }, modifier = Modifier.size(48.dp)) {
                                 Icon(
                                     imageVector = if (AmbientMusicPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (musicEnabled) "Pause" else "Play",
                                     tint = settingsTrackColor
                                 )
                             }
-                            IconButton(onClick = { AmbientMusicPlayer.next() }, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = { AmbientMusicPlayer.next() }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = settingsTrackColor)
                             }
                             Icon(Icons.Default.VolumeDown, contentDescription = null, tint = settingsTrackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
@@ -3793,7 +3887,7 @@ fun CrosswordApp() {
                     HorizontalDivider()
                     LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
                         items(categories) { cat ->
-                            GradientBtn(cat, appBtnGradient, onClick = {
+                            GradientBtn("${categoryIcons[cat] ?: "📝"}  ${prettyCategory(cat)}", appBtnGradient, onClick = {
                                 vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                                 showVindCategoryDialog = false
                                 difficultyPickCategory = cat
@@ -3850,7 +3944,7 @@ fun CrosswordApp() {
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Text(icon, fontSize = 18.sp)
-                                Text(cat, fontSize = 15.sp,
+                                Text(prettyCategory(cat), fontSize = 15.sp,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                     modifier = Modifier.weight(1f))
                                 if (selected) Text("✓", fontSize = 16.sp, fontWeight = FontWeight.Bold,
@@ -5037,7 +5131,7 @@ fun CategoryScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(icon, fontSize = 18.sp, modifier = Modifier.padding(end = 5.dp))
                                     Text(
-                                        category,
+                                        prettyCategory(category),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -5110,12 +5204,12 @@ fun CategoryScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            IconButton(onClick = { AmbientMusicPlayer.previous() }, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = { AmbientMusicPlayer.previous() }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = trackColor)
                             }
                             IconButton(
                                 onClick = { onMusicToggle() },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
                                     imageVector = if (AmbientMusicPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
@@ -5123,7 +5217,7 @@ fun CategoryScreen(
                                     tint = trackColor
                                 )
                             }
-                            IconButton(onClick = { AmbientMusicPlayer.next() }, modifier = Modifier.size(36.dp)) {
+                            IconButton(onClick = { AmbientMusicPlayer.next() }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = trackColor)
                             }
                             Icon(Icons.Default.VolumeDown, contentDescription = null, tint = trackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
@@ -5331,36 +5425,67 @@ fun discoverBgImages(context: Context): List<String> {
     } catch (_: Exception) { emptyList() }
 }
 
-// Loads one image from the best available density folder for this device.
-// Only checks the 4 folders that actually exist on disk.
-// Falls back from xxxhdpi → xxhdpi so lower-density phones still get an image.
-fun loadBgBitmap(context: Context, filename: String, isLandscape: Boolean = false): ImageBitmap? {
-    if (filename == BG_IMAGE_NONE) return null
+// Decoded backgrounds are cached (a few screens' worth) so re-entering a puzzle or
+// re-opening the picker doesn't re-decode multi-megabyte WebPs.
+private object BitmapCache {
+    private val cache = object : android.util.LruCache<String, ImageBitmap>(48 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
+    }
+    fun get(key: String): ImageBitmap? = cache.get(key)
+    fun put(key: String, bmp: ImageBitmap) { cache.put(key, bmp) }
+}
+
+/**
+ * Decodes an asset scaled down to roughly [targetW]×[targetH] (never upscaled).
+ * Uses bounds + inSampleSize so large source images never allocate full-size
+ * bitmaps; if a decoder returns null for the sampled path (seen with some WebP
+ * encoders) it falls back to a full decode followed by a scale.
+ */
+private fun decodeAssetScaled(context: Context, path: String, targetW: Int, targetH: Int): ImageBitmap? {
     return try {
-        val density = context.resources.displayMetrics.density
-        val isLand  = isLandscape   // caller passes Compose orientation — avoids context config lag
-
-        // Portrait folders: drawable-xxhdpi, drawable-xxxhdpi
-        // Landscape folders: drawable-land-xxhdpi, drawable-land-xxxhdpi
-        // Pick best first, fall back to the other if missing.
-        val (best, fallback) = if (density >= 4.0f)
-            Pair("xxxhdpi", "xxhdpi")   // flagship — prefer xxxhdpi
-        else
-            Pair("xxhdpi", "xxxhdpi")   // mid-range — prefer xxhdpi
-
-        val prefix = if (isLand) "drawable-land-" else "drawable-"  // correct folder per orientation
-
-        var bitmap: ImageBitmap? = null
-        for (q in listOf(best, fallback)) {
-            try {
-                context.assets.open("images/$prefix$q/$filename").use { stream ->
-                    bitmap = BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                }
-                if (bitmap != null) break
-            } catch (_: Exception) {}
-        }
-        bitmap
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.assets.open(path).use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= targetW && bounds.outHeight / (sample * 2) >= targetH) sample *= 2
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        val sampled = context.assets.open(path).use { BitmapFactory.decodeStream(it, null, opts) }
+        if (sampled != null) return sampled.asImageBitmap()
+        val full = context.assets.open(path).use { BitmapFactory.decodeStream(it) } ?: return null
+        val ratio = minOf(1f, maxOf(targetW.toFloat() / full.width, targetH.toFloat() / full.height))
+        if (ratio >= 1f) return full.asImageBitmap()
+        val scaled = android.graphics.Bitmap.createScaledBitmap(
+            full, (full.width * ratio).toInt().coerceAtLeast(1), (full.height * ratio).toInt().coerceAtLeast(1), true)
+        if (scaled !== full) full.recycle()
+        scaled.asImageBitmap()
     } catch (_: Exception) { null }
+}
+
+// Loads a puzzle background sized for this screen (the art ships in portrait
+// drawable-xxhdpi / drawable-xxxhdpi folders only).
+fun loadBgBitmap(context: Context, filename: String): ImageBitmap? {
+    if (filename == BG_IMAGE_NONE) return null
+    val dm = context.resources.displayMetrics
+    val key = "bg:$filename:${dm.widthPixels}x${dm.heightPixels}"
+    BitmapCache.get(key)?.let { return it }
+    val folders = if (dm.density >= 4.0f) listOf("drawable-xxxhdpi", "drawable-xxhdpi")
+                  else listOf("drawable-xxhdpi", "drawable-xxxhdpi")
+    for (folder in folders) {
+        val bmp = decodeAssetScaled(context, "images/$folder/$filename", dm.widthPixels, dm.heightPixels)
+        if (bmp != null) { BitmapCache.put(key, bmp); return bmp }
+    }
+    return null
+}
+
+/** ~220 px-wide thumbnail for the picker, decoded from the smaller asset. */
+fun loadBgThumbnail(context: Context, filename: String): ImageBitmap? {
+    val key = "thumb:$filename"
+    BitmapCache.get(key)?.let { return it }
+    for (folder in listOf("drawable-xxhdpi", "drawable-xxxhdpi")) {
+        val bmp = decodeAssetScaled(context, "images/$folder/$filename", 220, 390)
+        if (bmp != null) { BitmapCache.put(key, bmp); return bmp }
+    }
+    return null
 }
 
 // Composable that loads a background image asynchronously.
@@ -5372,8 +5497,7 @@ fun rememberBgPainter(filename: String): Painter? {
     var painter by remember(filename, config.orientation) { mutableStateOf<Painter?>(null) }
     LaunchedEffect(filename, config.orientation) {
         if (filename == BG_IMAGE_NONE) { painter = null; return@LaunchedEffect }
-        val isLand = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-        val bmp = withContext(Dispatchers.IO) { loadBgBitmap(context, filename, isLand) }
+        val bmp = withContext(Dispatchers.IO) { loadBgBitmap(context, filename) }
         painter = bmp?.let { BitmapPainter(it) }
     }
     return painter
@@ -5720,55 +5844,16 @@ fun BgPickerScreen(
 ) {
     // Load thumbnails asynchronously — small bitmaps for the grid.
     // Purge any cached entries whose files no longer exist in the current pool.
-    val thumbnails = remember { mutableStateMapOf<String, ImageBitmap?>() }
+    val thumbnails   = remember { mutableStateMapOf<String, ImageBitmap?>() }
+    val displayNames = remember(bgImagePool) { backgroundDisplayNames(bgImagePool) }
     LaunchedEffect(bgImagePool) {
-        // Remove thumbnails for deleted images
+        // Drop thumbnails for images no longer in the pool, then load the rest
+        // one by one (each ~220 px wide, cached app-wide).
         val poolSet = bgImagePool.toSet()
         thumbnails.keys.toList().forEach { key -> if (!poolSet.contains(key)) thumbnails.remove(key) }
         bgImagePool.forEach { name ->
             if (!thumbnails.containsKey(name)) {
-                // Use inSampleSize=8 — loads image at 1/8 resolution (≈135×240 for 1080p source).
-                // More reliable with WebP than manual scaling, and uses far less memory.
-                // Mirror the game's folder selection so we read from the same file that's proven to load.
-                // Original working approach: plain decodeStream (no Options) then
-                // manual createScaledBitmap. BitmapFactory.Options with inSampleSize
-                // silently returns null for some WebP variants — this avoids that entirely.
-                // Mirror loadBgBitmap's density-aware folder selection so we read
-                // from the same file that successfully loads as the game background.
-                // High-density devices (Pixel 10 Pro XL etc) may only have clean files
-                // in xxxhdpi — always trying xxhdpi first caused silent null returns.
-                val bmp = withContext(Dispatchers.IO) {
-                    val density = context.resources.displayMetrics.density
-                    val folders = if (density >= 4.0f)
-                        listOf("drawable-xxxhdpi", "drawable-xxhdpi")
-                    else
-                        listOf("drawable-xxhdpi", "drawable-xxxhdpi")
-
-                    var result: ImageBitmap? = null
-                    for (folder in folders) {
-                        try {
-                            context.assets.open("images/$folder/$name").use { stream ->
-                                val full = BitmapFactory.decodeStream(stream)
-                                if (full != null) {
-                                    val ratio = 200f / full.width
-                                    result = if (ratio < 1f) {
-                                        val tw = (full.width  * ratio).toInt().coerceAtLeast(1)
-                                        val th = (full.height * ratio).toInt().coerceAtLeast(1)
-                                        val scaled = android.graphics.Bitmap
-                                            .createScaledBitmap(full, tw, th, true)
-                                        full.recycle()
-                                        scaled.asImageBitmap()
-                                    } else {
-                                        full.asImageBitmap()
-                                    }
-                                }
-                            }
-                        } catch (_: Exception) {}
-                        if (result != null) break
-                    }
-                    result
-                }
-                thumbnails[name] = bmp
+                thumbnails[name] = withContext(Dispatchers.IO) { loadBgThumbnail(context, name) }
             }
         }
     }
@@ -5831,12 +5916,12 @@ fun BgPickerScreen(
                                     shape = RoundedCornerShape(10.dp)
                                 )
                                 .background(Color.DarkGray)
-                                .clickable { onSelect(name) }
+                                .clickable(onClickLabel = "Use this background") { onSelect(name) }
                         ) {
                             if (thumb != null) {
                                 Image(
                                     bitmap         = thumb,
-                                    contentDescription = name,
+                                    contentDescription = "Background: ${displayNames[name] ?: ""}",
                                     contentScale   = ContentScale.Crop,
                                     modifier       = Modifier.fillMaxSize()
                                 )
@@ -5874,9 +5959,9 @@ fun BgPickerScreen(
                                     .padding(4.dp)
                             ) {
                                 Text(
-                                    name.substringBeforeLast(".").take(28),
+                                    displayNames[name] ?: "",
                                     color    = Color.White,
-                                    fontSize = 9.sp,
+                                    style    = MaterialTheme.typography.labelMedium,
                                     maxLines = 1,
                                     modifier = Modifier.fillMaxWidth(),
                                     textAlign = TextAlign.Center
@@ -5904,37 +5989,60 @@ fun StatsScreen(
     onResume:         (SaveSlot) -> Unit,  // resume a specific in-progress puzzle
     onBack:           () -> Unit
 ) {
-    val stats      = remember(playerName) { saveManager.getAllStats(playerName) }
-    val inProgress = remember(playerName) { saveManager.getInProgressPuzzles(playerName) }
-    val score      = saveManager.getScore(playerName)
-    val done       = saveManager.getCompleted(playerName)
+    val stats       = remember(playerName) { saveManager.getAllStats(playerName) }
+    val inProgress  = remember(playerName) { saveManager.getInProgressPuzzles(playerName) }
+    val score       = remember(playerName) { saveManager.getScore(playerName) }
+    val done        = remember(playerName) { saveManager.getCompleted(playerName) }
+    val dailyStreak = remember(playerName) {
+        DailyPuzzle.streak(saveManager.getDailyCompletedKeys(playerName), DailyPuzzle.dateKey(System.currentTimeMillis()))
+    }
+    val hintFree    = stats.count { it.hintsUsed == 0 && it.gameMode != GameMode.VINDICTIVE.name }
+    val sections = listOf(
+        "📅 Daily"       to stats.filter { it.gameMode == GameMode.DAILY.name || it.diffName == "DAILY" },
+        "👤 Solo"        to stats.filter { it.gameMode == GameMode.SINGLE.name && it.diffName != "DAILY" },
+        "🤝 Team"        to stats.filter { it.gameMode == GameMode.TEAM.name },
+        "⚔️ Vindictive"  to stats.filter { it.gameMode == GameMode.VINDICTIVE.name }
+    ).filter { it.second.isNotEmpty() }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(playerName, fontWeight = FontWeight.Bold) },
+            title = { Text(playerName, style = MaterialTheme.typography.titleLarge) },
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         )
 
-        // Summary row
+        // Summary tiles
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("$score", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary)
-                Text("Total Score", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            @Composable
+            fun Tile(value: String, label: String, tint: Color, modifier: Modifier) {
+                Column(
+                    modifier = modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(tint.copy(alpha = 0.12f))
+                        .padding(vertical = 12.dp)
+                        .semantics(mergeDescendants = true) {},
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(value, style = MaterialTheme.typography.headlineMedium, color = tint)
+                    Text(label, style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("$done", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.secondary)
-                Text("Puzzles", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Tile("$score", "Score", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+            Tile("$done", "Puzzles", MaterialTheme.colorScheme.secondary, Modifier.weight(1f))
+            Tile(if (dailyStreak > 0) "🔥$dailyStreak" else "0", "Daily streak", MaterialTheme.colorScheme.tertiary, Modifier.weight(1f))
+        }
+        if (hintFree > 0) {
+            Text("✨ $hintFree personal best${if (hintFree == 1) "" else "s"} solved without hints",
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 6.dp))
         }
 
         HorizontalDivider()
@@ -5945,12 +6053,11 @@ fun StatsScreen(
             if (inProgress.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(12.dp))
-                    Text("▶  In Progress",
-                        fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+                    Text("▶  In Progress", style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(6.dp))
                 }
-                items(inProgress) { slot ->
+                items(inProgress, key = { it.id }) { slot ->
                     Card(
                         modifier  = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         colors    = CardDefaults.cardColors(
@@ -5960,13 +6067,14 @@ fun StatsScreen(
                         onClick   = { onResume(slot) }
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment     = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text(slotTitle(slot), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("Tap to resume", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(Modifier.weight(1f)) {
+                                Text(slotTitle(slot), style = MaterialTheme.typography.titleSmall)
+                                Text("Tap to resume", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Text("▶", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
                         }
@@ -5975,7 +6083,7 @@ fun StatsScreen(
                 item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             }
 
-            // ── COMPLETED RECORDS ─────────────────────────────────────────────
+            // ── PERSONAL BESTS ────────────────────────────────────────────────
             if (stats.isEmpty() && inProgress.isEmpty()) {
                 item {
                     Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
@@ -5985,105 +6093,119 @@ fun StatsScreen(
                             modifier = Modifier.padding(32.dp)
                         ) {
                             Text("🧩", fontSize = 56.sp)
-                            Text(
-                                "No records yet",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            Text("No records yet", style = MaterialTheme.typography.titleLarge)
                             Text(
                                 "Solve a puzzle and your best times and scores will appear here.",
-                                fontSize = 13.sp,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                         }
                     }
                 }
-            } else if (stats.isNotEmpty()) {
-                item {
-                    Text("Completed Puzzles",
-                        fontSize = 13.sp, fontWeight = FontWeight.ExtraBold,
+            }
+            sections.forEach { (header, records) ->
+                item(key = "hdr:$header") {
+                    Text(header, style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
+                        modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
                 }
-                items(stats) { stat ->
-                    // Exclude Daily records — their pseudo-category "Daily" is
-                    // never in allCategoryNames so they used to falsely show
-                    // the "★ Legacy" badge on every record.
-                    val isDiscontinued = stat.gameMode == "SINGLE" &&
-                        stat.diffName != "DAILY" &&
-                        !allCategoryNames.contains(stat.category)
-                    val bgColor = if (isDiscontinued) Color(0xFFFFF8DC) else MaterialTheme.colorScheme.surface
-                    Card(
-                        modifier  = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        colors    = CardDefaults.cardColors(containerColor = bgColor),
-                        elevation = CardDefaults.cardElevation(2.dp)
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (isDiscontinued) Text("⭐ ", fontSize = 16.sp)
-                                Text(
-                                    "${stat.category} — ${stat.diffName}",
-                                    fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                                    color = if (isDiscontinued) Color(0xFF8B6914) else Color.Unspecified
-                                )
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            val mins = stat.timeSeconds / 60; val secs = stat.timeSeconds % 60
-                            val desc = when {
-                                stat.diffName == "DAILY" ->
-                                    "$playerName solved the Daily Puzzle using ${stat.hintsUsed} hint(s) in %d:%02d".format(mins, secs)
-                                stat.gameMode == "TEAM" ->
-                                    "$playerName completed ${stat.category} in Team Mode with ${stat.partner} using ${stat.hintsUsed} hint(s) in %d:%02d".format(mins, secs)
-                                stat.gameMode == "VINDICTIVE" ->
-                                    if (stat.won)
-                                        "$playerName CONQUERED ${stat.partner} in Vindictive Mode — ${stat.score}pts vs ${stat.partnerScore}pts — %d:%02d".format(mins, secs)
-                                    else
-                                        "$playerName got DEMOLISHED by ${stat.partner} in Vindictive Mode — ${stat.score}pts vs ${stat.partnerScore}pts — %d:%02d".format(mins, secs)
-                                else ->
-                                    "$playerName completed ${stat.category} at ${stat.diffName} using ${stat.hintsUsed} hint(s) in %d:%02d".format(mins, secs)
-                            }
-                            Text(desc, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (isDiscontinued) {
-                                Text("★ Legacy record — category no longer available",
-                                    fontSize = 10.sp, color = Color(0xFF8B6914),
-                                    fontStyle = FontStyle.Italic)
-                            }
-                        }
-                    }
+                items(records, key = { "${it.gameMode}:${it.category}:${it.diffName}" }) { stat ->
+                    StatCard(stat, playerName, allCategoryNames)
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
         }
 
-        // ── Action buttons — anchored above Android nav bar ──────────────────
-        Column(
+        // ── Action button — anchored above Android nav bar ──────────────────
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Button(
                 onClick  = onPlay,
+                shape    = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) { Text("START PLAYING", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+            ) { Text("Play", style = MaterialTheme.typography.titleMedium) }
+        }
+    }
+}
+
+@Composable
+private fun StatCard(stat: StatRecord, playerName: String, allCategoryNames: Set<String>) {
+    // A solo record for a category that's no longer in the word list.
+    val isLegacy = stat.gameMode == GameMode.SINGLE.name && stat.diffName != "DAILY" &&
+        !allCategoryNames.contains(stat.category)
+    val time = "%d:%02d".format(stat.timeSeconds / 60, stat.timeSeconds % 60)
+    val title = when {
+        stat.diffName == "DAILY" -> "Daily Puzzle"
+        else -> "${prettyCategory(stat.category)} · ${stat.diffName.lowercase().replaceFirstChar { it.uppercase() }}"
+    }
+    Card(
+        modifier  = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        colors    = CardDefaults.cardColors(
+            containerColor = if (isLegacy) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+                             else MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Column(Modifier.padding(12.dp).semantics(mergeDescendants = true) {}) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            if (stat.gameMode == GameMode.VINDICTIVE.name) {
+                Text(
+                    if (stat.won) "$playerName CONQUERED ${stat.partner}" else "$playerName got DEMOLISHED by ${stat.partner}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (stat.won) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            } else if (stat.gameMode == GameMode.TEAM.name && stat.partner.isNotBlank()) {
+                Text("with ${stat.partner}", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                @Composable
+                fun Chip(text: String) {
+                    Text(text, style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.secondaryContainer)
+                            .padding(horizontal = 8.dp, vertical = 3.dp))
+                }
+                Chip("⏱ $time")
+                if (stat.gameMode == GameMode.VINDICTIVE.name) {
+                    Chip("${stat.score}–${stat.partnerScore}")
+                } else {
+                    Chip(if (stat.hintsUsed == 0) "✨ no hints" else "💡 ${stat.hintsUsed}")
+                    Chip("★ ${stat.score} pts")
+                }
+            }
+            if (isLegacy) {
+                Text("★ Legacy record — category no longer available",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    fontStyle = FontStyle.Italic, modifier = Modifier.padding(top = 4.dp))
+            }
         }
     }
 }
 
 // ── CONFETTI ──────────────────────────────────────────────────────────────────
+// Each particle's position is a pure function of elapsed time (no state mutated
+// during draw), so it runs at the same speed on 60 Hz and 120 Hz screens. Sizes
+// are in dp, the burst launches from the top, and everything fades out.
 private enum class ConfettiShape { RECT, CIRCLE, STREAMER }
 
-private data class ConfettiParticle(
-    var x: Float, var y: Float,
-    var vx: Float, var vy: Float,
-    var rotation: Float, var rotSpeed: Float,
-    val color: Color,
-    val shape: ConfettiShape,
-    val size:  Float                  // multiplier on base draw dimensions
+private class ConfettiParticle(
+    val x0: Float, val delay: Float,          // normalised start x, launch delay (s)
+    val vx: Float, val vy: Float,              // normalised units per second
+    val spin: Float, val rot0: Float,          // degrees per second, start angle
+    val color: Color, val shape: ConfettiShape, val scale: Float
 )
+
+private const val CONFETTI_SECONDS = 3.6f
 
 @Composable
 fun ConfettiOverlay() {
@@ -6093,50 +6215,47 @@ fun ConfettiOverlay() {
             Color(0xFF69F0AE), Color(0xFFE040FB), Color(0xFF00E5FF),
             Color(0xFFFFAB40), Color(0xFFFFFFFF)
         )
-        List(110) {
-            val shape = when (Random.nextInt(10)) {
-                in 0..4 -> ConfettiShape.RECT       // 50% rectangles
-                in 5..7 -> ConfettiShape.CIRCLE     // 30% circles
-                else    -> ConfettiShape.STREAMER   // 20% long streamers
-            }
+        List(120) {
             ConfettiParticle(
-                x        = Random.nextFloat(),
-                y        = Random.nextFloat() * -0.3f - 0.1f,
-                vx       = (Random.nextFloat() - 0.5f) * 0.012f,
-                vy       = Random.nextFloat() * 0.006f + 0.003f,
-                rotation = Random.nextFloat() * 360f,
-                rotSpeed = (Random.nextFloat() - 0.5f) * 10f,
-                color    = colors.random(),
-                shape    = shape,
-                size     = 0.7f + Random.nextFloat() * 0.9f
+                x0    = Random.nextFloat(),
+                delay = Random.nextFloat() * 0.6f,
+                vx    = (Random.nextFloat() - 0.5f) * 0.35f,
+                vy    = 0.15f + Random.nextFloat() * 0.25f,
+                spin  = (Random.nextFloat() - 0.5f) * 540f,
+                rot0  = Random.nextFloat() * 360f,
+                color = colors.random(),
+                shape = when (Random.nextInt(10)) { in 0..4 -> ConfettiShape.RECT; in 5..7 -> ConfettiShape.CIRCLE; else -> ConfettiShape.STREAMER },
+                scale = 0.7f + Random.nextFloat() * 0.8f
             )
-        }.toMutableList()
+        }
     }
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) { while (true) { withFrameMillis { tick++ } } }
-
+    val elapsed by produceState(0f) {
+        val start = withFrameNanos { it }
+        while (value < CONFETTI_SECONDS) {
+            withFrameNanos { now -> value = (now - start) / 1_000_000_000f }
+        }
+    }
+    val unit = LocalDensity.current.density   // px per dp
     Canvas(modifier = Modifier.fillMaxSize()) {
-        @Suppress("UNUSED_EXPRESSION") tick  // read tick to trigger redraw
+        val gravity = 0.55f                    // normalised units / s²
+        val fade    = ((CONFETTI_SECONDS - elapsed) / 0.8f).coerceIn(0f, 1f)
         particles.forEach { p ->
-            p.x        += p.vx
-            p.y        += p.vy
-            p.vy       += 0.00009f  // gravity
-            p.rotation += p.rotSpeed
-            if (p.y > 1.1f) { p.y = -0.1f; p.x = Random.nextFloat() }
-            val px = p.x * size.width
-            val py = p.y * size.height
-            canvasRotate(p.rotation, Offset(px, py)) {
+            val t = elapsed - p.delay
+            if (t < 0f) return@forEach
+            val px = (p.x0 + p.vx * t) * size.width
+            val py = (-0.05f + p.vy * t + 0.5f * gravity * t * t) * size.height
+            if (py > size.height + 40f) return@forEach
+            canvasRotate(p.rot0 + p.spin * t, Offset(px, py)) {
+                val c = p.color.copy(alpha = fade)
                 when (p.shape) {
                     ConfettiShape.RECT -> {
-                        val w = 14f * p.size; val h = 9f * p.size
-                        drawRect(p.color, Offset(px - w/2f, py - h/2f), GeoSize(w, h))
+                        val w = 7f * unit * p.scale; val h = 4.5f * unit * p.scale
+                        drawRect(c, Offset(px - w / 2f, py - h / 2f), GeoSize(w, h))
                     }
-                    ConfettiShape.CIRCLE -> {
-                        drawCircle(p.color, radius = 6f * p.size, center = Offset(px, py))
-                    }
+                    ConfettiShape.CIRCLE -> drawCircle(c, radius = 3f * unit * p.scale, center = Offset(px, py))
                     ConfettiShape.STREAMER -> {
-                        val w = 28f * p.size; val h = 4f * p.size
-                        drawRect(p.color, Offset(px - w/2f, py - h/2f), GeoSize(w, h))
+                        val w = 12f * unit * p.scale; val h = 2f * unit * p.scale
+                        drawRect(c, Offset(px - w / 2f, py - h / 2f), GeoSize(w, h))
                     }
                 }
             }
