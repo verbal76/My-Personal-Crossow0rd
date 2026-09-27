@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -125,6 +126,7 @@ import com.google.firebase.database.Transaction
 import com.google.firebase.database.MutableData
 import com.google.firebase.database.ServerValue
 import androidx.activity.compose.BackHandler
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -135,6 +137,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
 import com.hag.mypersonalcrossword.ui.theme.MyPersonalCrosswordTheme
 import com.hag.mypersonalcrossword.core.*
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -1029,6 +1041,8 @@ fun GradientBtn(
 fun CrosswordApp() {
     val context  = LocalContext.current
     val saveManager = remember { SaveManager(context) }
+    // Puzzle state lives in a ViewModel (survives rotation, theme change and process death).
+    val vm: PuzzleViewModel = viewModel()
 
     // Enums use listSaver — saves as List<String> which is natively bundleable.
     var appMode by rememberSaveable(
@@ -1039,22 +1053,20 @@ fun CrosswordApp() {
     var currentScore by rememberSaveable { mutableIntStateOf(0) }
     var currentCompleted by rememberSaveable { mutableIntStateOf(0) }
 
-    var currentBgColor     by remember { mutableStateOf(Color.LightGray) }
-    var currentBgImageName by rememberSaveable { mutableStateOf(BG_IMAGE_NONE) }
+    var currentBgColor     by vm::currentBgColor
+    var currentBgImageName by vm::currentBgImageName
     var bgImagePool        by remember { mutableStateOf(emptyList<String>()) }
-    var activeCategory     by remember { mutableStateOf("") }
-    var combinedCategories by remember { mutableStateOf(emptyList<String>()) }
+    var activeCategory     by vm::activeCategory
+    var combinedCategories by vm::combinedCategories
 
     var allEntries by remember { mutableStateOf(emptyList<RawEntry>()) }
     var categories by remember { mutableStateOf(emptyList<String>()) }
-    var placedWords by remember { mutableStateOf(emptyList<PlacedWord>()) }
-    var gridCells by remember { mutableStateOf(emptyList<GridCell>()) }
-    var userInputs by remember { mutableStateOf(mapOf<Pair<Int, Int>, Char>()) }
+    var placedWords by vm::placedWords
+    var gridCells by vm::gridCells
+    var userInputs by vm::userInputs
 
-    var wordToInput by remember { mutableStateOf<PlacedWord?>(null) }
-    var inputText by remember { mutableStateOf("") }
 
-    var puzzleSolved by remember { mutableStateOf(false) }
+    var puzzleSolved by vm::puzzleSolved
     var isGenerating by rememberSaveable { mutableStateOf(false) }
 
     // ── Online multiplayer state ───────────────────────────────────────────────
@@ -1070,9 +1082,7 @@ fun CrosswordApp() {
     var remoteInputs        by remember { mutableStateOf<Map<Pair<Int,Int>, Char>>(emptyMap()) }
     var remoteIsAnswering   by remember { mutableStateOf(false) }
     var remoteAnsweringName by remember { mutableStateOf("") }
-    var activeDifficulty by rememberSaveable(
-        stateSaver = listSaver(save = { listOf(it.name) }, restore = { Difficulty.valueOf(it[0]) })
-    ) { mutableStateOf(Difficulty.MEDIUM) }
+    var activeDifficulty by vm::activeDifficulty
     var resumePrompt by remember { mutableStateOf<SaveSlot?>(null) }
     var difficultyPickCategory by remember { mutableStateOf<String?>(null) }
     var showSettings      by remember { mutableStateOf(false) }
@@ -1097,13 +1107,10 @@ fun CrosswordApp() {
     // Derived from the saveable Int every recompose — safe because currentCellColorArgb is State
     val currentCellColor = Color(currentCellColorArgb.toLong() and 0xFFFFFFFFL)
     // Word the player single-tapped — used to pan grid to its start cell
-    var centreOnWord by remember { mutableStateOf<PlacedWord?>(null) }
 
     // ── GAME MODE STATE ───────────────────────────────────────────────────────
-    var activeGameMode by rememberSaveable(
-        stateSaver = listSaver(save = { listOf(it.name) }, restore = { GameMode.valueOf(it[0]) })
-    ) { mutableStateOf(GameMode.SINGLE) }
-    var player2Name         by rememberSaveable { mutableStateOf("") }
+    var activeGameMode by vm::activeGameMode
+    var player2Name         by vm::player2Name
     var viewingProfile      by remember { mutableStateOf("") }   // profile tapped on login
     var confirmDeletePlayer  by remember { mutableStateOf<String?>(null) }  // name pending deletion
     var showNoPlayer2Dialog  by remember { mutableStateOf(false) }  // missing p2 name warning
@@ -1111,21 +1118,19 @@ fun CrosswordApp() {
     var showTurnDialog         by remember { mutableStateOf(false) }  // between-turn popup
     var turnDialogMessage      by remember { mutableStateOf("") }     // text shown in turn popup
     // Team mode scoring
-    var teamP1Score            by rememberSaveable { mutableIntStateOf(0) }
-    var teamP2Score            by rememberSaveable { mutableIntStateOf(0) }
-    var teamCurrentPlayer      by rememberSaveable { mutableIntStateOf(0) }  // 0=p1, 1=p2
+    var teamP1Score            by vm::teamP1Score
+    var teamP2Score            by vm::teamP2Score
+    var teamCurrentPlayer      by vm::teamCurrentPlayer  // 0=p1, 1=p2
     var profileList         by remember { mutableStateOf(listOf<String>()) }  // refreshable login list
 
     // ── VINDICTIVE STATE ──────────────────────────────────────────────────────
-    var vindPhase by rememberSaveable(
-        stateSaver = listSaver(save = { listOf(it.name) }, restore = { VindicativePhase.valueOf(it[0]) })
-    ) { mutableStateOf(VindicativePhase.PICK_OWN) }
-    var vindCurrentPlayer   by rememberSaveable { mutableIntStateOf(0) }  // 0=p1, 1=p2
-    var vindAssignedWord       by remember { mutableStateOf<PlacedWord?>(null) }
+    var vindPhase by vm::vindPhase
+    var vindCurrentPlayer   by vm::vindCurrentPlayer  // 0=p1, 1=p2
+    var vindAssignedWord       by vm::vindAssignedWord
     var vindPassDialogVisible   by remember { mutableStateOf(false) }  // pass/answer popup
     var pendingTurnDialog       by remember { mutableStateOf(false) }  // delayed turn dialog after wrong flash
     var vindOpponentCountdown   by remember { mutableIntStateOf(30) }  // countdown seconds
-    var vindTimerSeconds        by rememberSaveable { mutableIntStateOf(30) }  // selected timer (15/30/60)
+    var vindTimerSeconds        by vm::vindTimerSeconds  // selected timer (15/30/60)
     var showVindTimerDialog     by remember { mutableStateOf(false) }  // timer selection popup
     var showVindCategoryDialog  by remember { mutableStateOf(false) }  // category selection after p2 setup
     // Multi-category combine flow — modal dialog launched from inside the
@@ -1136,46 +1141,42 @@ fun CrosswordApp() {
     var combineSelection        by remember { mutableStateOf<List<String>>(emptyList()) }
     // Passive-aggressive wrong responses — cycles through 20 taunts
     val tauntIndex              = rememberSaveable { mutableIntStateOf(0) }
-    var vindP1Score         by rememberSaveable { mutableIntStateOf(0) }
-    var vindP2Score         by rememberSaveable { mutableIntStateOf(0) }
+    var vindP1Score         by vm::vindP1Score
+    var vindP2Score         by vm::vindP2Score
     var showWrongFlash      by remember { mutableStateOf(false) }
 
     // ── TEAM STATE ────────────────────────────────────────────────────────────
-    var teamP1Hints         by rememberSaveable { mutableIntStateOf(0) }
+    var teamP1Hints         by vm::teamP1Hints
 
     // ── TIMER ─────────────────────────────────────────────────────────────────
-    var elapsedSeconds      by rememberSaveable { mutableLongStateOf(0L) }
+    var elapsedSeconds      by vm::elapsedSeconds
     var timerRunning        by remember { mutableStateOf(false) }
 
     // ── HINTS ─────────────────────────────────────────────────────────────────
-    var hintsUsedThisPuzzle by rememberSaveable { mutableIntStateOf(0) }
-    var selectedHintWord    by remember { mutableStateOf<PlacedWord?>(null) }
+    var hintsUsedThisPuzzle by vm::hintsUsed
 
     // ── STREAK ────────────────────────────────────────────────────────────────
-    var currentStreak       by rememberSaveable { mutableIntStateOf(0) }
+    var currentStreak       by vm::streak
     var streakMilestone     by remember { mutableStateOf<String?>(null) }
 
     // ── ANIMATION ─────────────────────────────────────────────────────────────
-    var animatingCell       by remember { mutableStateOf<Pair<Int,Int>?>(null) }
-    var cellsToAnimate      by remember { mutableStateOf<List<Pair<Int,Int>>>(emptyList()) }
 
     // ── CONFETTI ──────────────────────────────────────────────────────────────
     var showConfetti        by remember { mutableStateOf(false) }
 
     // ── HIGHLIGHTED WORD (single tap) ─────────────────────────────────────────
-    var highlightedWord     by remember { mutableStateOf<PlacedWord?>(null) }
 
     // ── DAILY ─────────────────────────────────────────────────────────────────
-    var isDailyPuzzle       by rememberSaveable { mutableStateOf(false) }
+    var isDailyPuzzle       by vm::isDailyPuzzle
     // Date key (yyyy-MM-dd, UTC) of the Daily being played; null for every other puzzle.
     // Drives the Daily save slot, the once-per-day reward, and Next Puzzle behaviour.
-    var activeDailyKey      by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeDailyKey      by vm::activeDailyKey
     // Mode selected on the home screen before a Daily was started (Daily is always solo).
     var modeBeforeDaily     by rememberSaveable(
         stateSaver = listSaver(save = { listOf(it.name) }, restore = { GameMode.valueOf(it[0]) })
     ) { mutableStateOf(GameMode.SINGLE) }
-    var revealedCells       by remember { mutableStateOf<Set<Pair<Int, Int>>>(emptySet()) }   // hint letters
-    var teamP2Hints         by rememberSaveable { mutableIntStateOf(0) }
+    var revealedCells       by vm::revealedCells   // hint letters
+    var teamP2Hints         by vm::teamP2Hints
     var teamFirstPlayer     by rememberSaveable { mutableIntStateOf(0) }   // "who goes first" for Team
     var appResumed          by remember { mutableStateOf(true) }           // Activity in foreground
     var onlineNotice        by remember { mutableStateOf<String?>(null) }  // blocking online message
@@ -1184,6 +1185,14 @@ fun CrosswordApp() {
     var showResults         by remember { mutableStateOf(false) }          // results card (after confetti)
     var lastResult          by remember { mutableStateOf<PuzzleResult?>(null) }
     var turnDialogTitle     by remember { mutableStateOf("Pass the Phone!") }
+    // ── Cell input ─────────────────────────────────────────────────────────
+    var selection           by vm::selection
+    val board               = remember(placedWords) { Board(placedWords) }
+    val lockedCells         = remember(board, userInputs, revealedCells) { board.lockedCells(userInputs, revealedCells) }
+    val activeWord          = board.activeWord(selection)
+    var waveFx              by remember { mutableStateOf<GridFx?>(null) }   // solved-word wave
+    var shakeFx             by remember { mutableStateOf<GridFx?>(null) }   // wrong-word shake
+    var showClueList        by remember { mutableStateOf(false) }
     var wrongAnswererIndex  by remember { mutableIntStateOf(0) }
 
     // derivedStateOf means this only recomputes when gridCells or userInputs
@@ -1254,8 +1263,8 @@ fun CrosswordApp() {
 
     fun resetOverlays() {
         showConfetti = false; showResults = false; showTurnDialog = false
-        vindPassDialogVisible = false; pendingTurnDialog = false; wordToInput = null
-        showWrongFlash = false; streakMilestone = null
+        vindPassDialogVisible = false; pendingTurnDialog = false
+        showWrongFlash = false; streakMilestone = null; showClueList = false
     }
 
     // Releases all online-game state. The Firebase listener itself is torn down by
@@ -1296,6 +1305,7 @@ fun CrosswordApp() {
         gridCells          = buildGridCells(s.words)
         userInputs         = s.inputs
         revealedCells      = s.revealed
+        Board(s.words).let { b -> selection = InputEngine.initialSelection(b, s.inputs, b.lockedCells(s.inputs, s.revealed)) }
         elapsedSeconds     = s.elapsedSeconds
         hintsUsedThisPuzzle = s.hintsUsed
         currentStreak      = s.streak
@@ -1305,8 +1315,6 @@ fun CrosswordApp() {
         vindTimerSeconds   = s.vindTimerSecs
         currentBgColor     = Color(s.bgArgb)
         currentBgImageName = s.bgImage
-        selectedHintWord   = null
-        highlightedWord    = null
         resetOverlays()
         puzzleSolved       = false
         isGenerating       = false
@@ -1397,7 +1405,7 @@ fun CrosswordApp() {
         val cells = word.cells()
         userInputs = userInputs + cells.mapIndexed { i, c -> c to word.word[i] }
         if (isOnlineGame) cells.forEachIndexed { i, c -> FirebaseGameManager.writeInput(onlineCode, c.first, c.second, word.word[i]) }
-        cellsToAnimate = cells
+        waveFx = GridFx(cells, System.nanoTime())
     }
 
     fun onCorrectFeedback() {
@@ -1410,13 +1418,14 @@ fun CrosswordApp() {
         }
     }
 
-    fun onWrongFeedback(answererIndex: Int) {
+    fun onWrongFeedback(answererIndex: Int, word: PlacedWord) {
         if (soundEnabled) SoundPlayer.playWrong()
         vibrateWrong(context)
         currentStreak = 0
         wrongAnswererIndex = answererIndex
         tauntIndex.intValue++
         showWrongFlash = true
+        shakeFx = GridFx(word.cells(), System.nanoTime())
     }
 
     fun syncVind(extra: Map<String, Any> = emptyMap()) {
@@ -1432,8 +1441,21 @@ fun CrosswordApp() {
         ) + extra)
     }
 
-    fun submitAnswer(word: PlacedWord, answer: String) {
-        val correct = answer == word.word
+    /** Word the rules force the player onto (Vindictive: the assigned clue). */
+    fun forcedWord(): PlacedWord? =
+        if (activeGameMode == GameMode.VINDICTIVE && vindPhase == VindicativePhase.OPPONENT_WAIT) vindAssignedWord else null
+
+    fun moveToNextUnsolved(forward: Boolean = true) {
+        forcedWord()?.let { selection = InputEngine.selectWord(it, userInputs, lockedCells); return }
+        selection = InputEngine.nextUnsolved(board, selection, userInputs, board.lockedCells(userInputs, revealedCells), forward)
+    }
+
+    /**
+     * A word was completely filled by the player whose turn it is — judge it.
+     * Solo/Daily keep wrong letters so they can be corrected; Team and Vindictive
+     * attempts are one-shot, so a wrong attempt's letters are cleared.
+     */
+    fun onAttempt(word: PlacedWord, correct: Boolean) {
         when (activeGameMode) {
             GameMode.VINDICTIVE -> {
                 val before = vindSnapshot()
@@ -1441,9 +1463,11 @@ fun CrosswordApp() {
                 val (after, outcome) = when (before.phase) {
                     VindicativePhase.PICK_OWN      -> VindictiveRules.onOwnAnswer(before, correct)
                     VindicativePhase.OPPONENT_WAIT -> VindictiveRules.onAssignedAnswer(before, correct)
-                    VindicativePhase.ASSIGN_CLUE   -> return   // assigning never goes through the answer box
+                    VindicativePhase.ASSIGN_CLUE   -> return   // typing is blocked while assigning
                 }
-                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(actor)
+                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(actor, word)
+                // The turn changes hands: no half-typed letters carry over.
+                userInputs = InputEngine.clearUnlocked(userInputs, board.lockedCells(userInputs, revealedCells))
                 applyVind(after)
                 syncVind(mapOf("vindCountdown" to 0))
                 // Same player keeps the phone to pick a clue for the other — say so, don't say "pass".
@@ -1459,7 +1483,11 @@ fun CrosswordApp() {
             }
             GameMode.TEAM -> {
                 val before = teamSnapshot()
-                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(before.turn)
+                if (correct) { commitWord(word); onCorrectFeedback() }
+                else {
+                    onWrongFeedback(before.turn, word)
+                    userInputs = InputEngine.clearWord(word, userInputs, board.lockedCells(userInputs, revealedCells))
+                }
                 val after = TeamRules.onAttempt(before, correct)
                 applyTeam(after)
                 if (isOnlineGame) {
@@ -1475,12 +1503,90 @@ fun CrosswordApp() {
                 }
             }
             GameMode.SINGLE, GameMode.DAILY -> {
-                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(0)
+                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(0, word)
             }
         }
-        wordToInput     = null
-        highlightedWord = null
-        inputText       = ""
+        if (correct || activeGameMode != GameMode.SINGLE && activeGameMode != GameMode.DAILY) moveToNextUnsolved()
+    }
+
+    /** Judges the words a keystroke (or hint) completed. Only the active word is an "attempt". */
+    fun judgeFilled(filled: List<PlacedWord>, active: PlacedWord) {
+        if (filled.isEmpty()) return
+        // A crossing word finished correctly by the same letter simply counts as solved.
+        filled.filter { it != active && isWordSolved(it, userInputs) }.forEach { w ->
+            commitWord(w)
+            if (activeGameMode == GameMode.SINGLE || activeGameMode == GameMode.DAILY) onCorrectFeedback()
+        }
+        if (active in filled) onAttempt(active, isWordSolved(active, userInputs))
+    }
+
+    /** Why the keyboard is disabled right now; null when this player may type. */
+    fun typingBlockedReason(): String? = when {
+        isGenerating || puzzleSolved || placedWords.isEmpty() -> ""
+        showTurnDialog || pendingTurnDialog -> "Pass the phone…"
+        activeGameMode == GameMode.VINDICTIVE -> {
+            val s = vindSnapshot()
+            when {
+                !VindictiveRules.canAct(s, isOnlineGame, myIndex()) -> "${nameOf(s.currentPlayer)}'s turn"
+                s.phase == VindicativePhase.ASSIGN_CLUE -> "Choose a clue for ${nameOf(1 - s.currentPlayer)}, then tap Give"
+                vindPassDialogVisible -> "Time's up — answer or pass"
+                else -> null
+            }
+        }
+        activeGameMode == GameMode.TEAM && isOnlineGame && teamCurrentPlayer != myIndex() ->
+            "Waiting for ${nameOf(teamCurrentPlayer)}…"
+        else -> null
+    }
+
+    /** Locked cells computed from live state (not the last composition's snapshot). */
+    fun lockedNow(): Set<Pair<Int, Int>> = board.lockedCells(userInputs, revealedCells)
+
+    fun onCellTap(cell: Pair<Int, Int>) {
+        val forced = forcedWord()
+        selection = if (forced != null) {
+            if (cell in forced.cells()) Selection(cell, forced.direction)
+            else InputEngine.selectWord(forced, userInputs, lockedNow())
+        } else InputEngine.tap(board, selection, cell)
+        vibrateLight(context)
+    }
+
+    fun selectClue(word: PlacedWord) {
+        val forced = forcedWord()
+        if (forced != null && word != forced) return
+        selection = InputEngine.selectWord(word, userInputs, lockedNow())
+    }
+
+    fun toggleDirection() {
+        val sel = selection ?: return
+        if (forcedWord() != null) return
+        selection = InputEngine.tap(board, sel, sel.cell)
+    }
+
+    fun onKey(ch: Char) {
+        if (typingBlockedReason() != null) return
+        val forced = forcedWord()
+        var sel = selection
+        if (sel == null || (forced != null && board.activeWord(sel) != forced)) {
+            sel = forced?.let { InputEngine.selectWord(it, userInputs, lockedNow()) }
+                ?: InputEngine.initialSelection(board, userInputs, lockedNow()) ?: return
+        }
+        val active = board.activeWord(sel) ?: return
+        if (isWordSolved(active, userInputs)) { moveToNextUnsolved(); return }
+        val r = InputEngine.type(board, sel, userInputs, lockedNow(), ch)
+        if (r.inputs == userInputs && r.selection == sel) return
+        userInputs = r.inputs
+        selection  = r.selection
+        if (soundEnabled) SoundPlayer.playKey()
+        vibrateLight(context)
+        judgeFilled(r.filled, active)
+    }
+
+    fun onBackspace() {
+        if (typingBlockedReason() != null) return
+        val r = InputEngine.backspace(board, selection, userInputs, lockedNow())
+        userInputs = r.inputs
+        selection  = r.selection
+        vibrateLight(context)
     }
 
     /** Vindictive: the acting player hands [word] to the opponent. */
@@ -1491,8 +1597,8 @@ fun CrosswordApp() {
         applyVind(after)
         vindPassDialogVisible = false
         vindOpponentCountdown = vindTimerSeconds
-        inputText = ""
         syncVind(mapOf("vindCountdown" to vindTimerSeconds))
+        selection = InputEngine.selectWord(word, userInputs, lockedCells)
         if (!isOnlineGame) {
             turnDialogTitle   = "Pass the Phone!"
             turnDialogMessage = "✋ Pass to ${nameOf(after.currentPlayer)}!\n" +
@@ -1509,9 +1615,9 @@ fun CrosswordApp() {
         val (after, _) = VindictiveRules.onPass(before)
         applyVind(after)
         vindPassDialogVisible = false
-        wordToInput = null
-        inputText   = ""
+        userInputs = InputEngine.clearUnlocked(userInputs, board.lockedCells(userInputs, revealedCells))
         syncVind(mapOf("vindCountdown" to 0))
+        moveToNextUnsolved()
         if (!isOnlineGame) {
             turnDialogTitle   = "$who picks next"
             turnDialogMessage = "⏭ $who passed (${Economy.VIND_PASS})\n$who now picks a clue for ${nameOf(1 - before.currentPlayer)}.\n" +
@@ -1523,8 +1629,7 @@ fun CrosswordApp() {
     /** Vindictive: answer timer ran out on the answering device — offer Answer It / Pass. */
     fun onVindTimeout() {
         vindOpponentCountdown = 0
-        wordToInput = null            // typed text is kept in inputText for "Answer It"
-        vindPassDialogVisible = true
+        vindPassDialogVisible = true  // letters typed so far stay in the grid for "Answer It"
         if (soundEnabled) SoundPlayer.playWrong()
         vibrateWrong(context)
         if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("vindCountdown" to 0))
@@ -1567,6 +1672,15 @@ fun CrosswordApp() {
             val restored = needsRestore &&
                 saveManager.getInProgressPuzzles(playerName).firstOrNull()?.let { resumeSlot(it) } == true
             if (!restored && (appMode == AppMode.LOGIN || needsRestore)) appMode = AppMode.CATEGORY_SELECT
+            // The ViewModel brought the grid back by itself (SavedStateHandle).
+            if (appMode == AppMode.DASHBOARD && placedWords.isNotEmpty()) {
+                if (puzzleSolved && lastResult == null) {
+                    // Rewards were already paid before the process died; just go home.
+                    puzzleSolved = false
+                    placedWords = emptyList(); gridCells = emptyList()
+                    appMode = AppMode.CATEGORY_SELECT
+                } else if (!isGenerating) timerRunning = true
+            }
         } else {
             appMode = AppMode.LOGIN
         }
@@ -1582,8 +1696,6 @@ fun CrosswordApp() {
         showTurnDialog = false
         vindPassDialogVisible = false
         pendingTurnDialog = false
-        wordToInput = null
-
         val dailyKey = activeDailyKey
         val isDaily  = dailyKey != null
         val hints    = hintsUsedThisPuzzle
@@ -1722,19 +1834,6 @@ fun CrosswordApp() {
         }
     }
 
-    // Cell pop animation — cycles through correct word cells 3× in random order
-    LaunchedEffect(cellsToAnimate) {
-        if (cellsToAnimate.isEmpty()) return@LaunchedEffect
-        repeat(3) {
-            cellsToAnimate.shuffled().forEach { pos ->
-                animatingCell = pos
-                delay(60L)
-            }
-        }
-        animatingCell = null
-        cellsToAnimate = emptyList()
-    }
-
     // Streak milestone — auto-clear after 2 seconds
     LaunchedEffect(streakMilestone) {
         if (streakMilestone != null) {
@@ -1790,15 +1889,6 @@ fun CrosswordApp() {
         }
     }
 
-    // Green cell highlight — auto-fade after 2 seconds (momentary indicator only).
-    // The hint target (selectedHintWord) is NOT cleared with it.
-    LaunchedEffect(highlightedWord) {
-        if (highlightedWord != null) {
-            delay(2000L)
-            highlightedWord = null
-        }
-    }
-
     // ── Firebase sync listener — active only during online games ─────────────
     // Owned by this effect: it is registered for exactly (code) and removed in
     // `finally` when the key changes or the game ends — no leaked listeners.
@@ -1834,11 +1924,10 @@ fun CrosswordApp() {
                     gridCells          = buildGridCells(parsed)
                     userInputs         = emptyMap()
                     revealedCells      = emptySet()
+                    selection          = InputEngine.initialSelection(Board(parsed), emptyMap(), emptySet())
                     elapsedSeconds     = 0L
                     hintsUsedThisPuzzle = 0
                     currentStreak      = 0
-                    selectedHintWord   = null
-                    highlightedWord    = null
                     activeDailyKey     = null
                     isDailyPuzzle      = false
                     resetOverlays()
@@ -1959,18 +2048,18 @@ fun CrosswordApp() {
         gridCells = buildGridCells(placedWords)
         userInputs = emptyMap()
         revealedCells = emptySet()
+        selection = InputEngine.initialSelection(Board(generated), emptyMap(), emptySet())
+        waveFx = null; shakeFx = null
         elapsedSeconds = 0L
         hintsUsedThisPuzzle = 0
         teamP1Hints = 0
         teamP2Hints = 0
-        selectedHintWord = null
         vindP1Score = 0; vindP2Score = 0
         teamP1Score = 0; teamP2Score = 0
         teamCurrentPlayer = teamFirstPlayer
         vindPhase = VindicativePhase.PICK_OWN
         // vindCurrentPlayer is set by the player setup dialog — don't overwrite it here
         vindAssignedWord = null
-        highlightedWord = null
         currentStreak = 0
         tauntIndex.intValue = 0
         lastResult = null
@@ -2404,7 +2493,6 @@ fun CrosswordApp() {
                     showTurnDialog = false
                     vindPassDialogVisible = false
                     pendingTurnDialog = false
-                    wordToInput = null
                     showWrongFlash = false
                     streakMilestone = null
                     vindPhase = VindicativePhase.PICK_OWN
@@ -2510,7 +2598,26 @@ fun CrosswordApp() {
             val safeAccent  = if (brandLum < 0.2f || brandLum > 0.7f)
                 MaterialTheme.colorScheme.onSurface
             else appBtnColor
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Physical keyboards (Chromebooks, tablets, emulators): letters, Backspace,
+            // Tab / Enter for next clue (Shift+Tab for previous), Space to flip direction.
+            val keyFocus = remember { FocusRequester() }
+            LaunchedEffect(isGenerating) { if (!isGenerating) runCatching { keyFocus.requestFocus() } }
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(keyFocus)
+                .focusable()
+                .onPreviewKeyEvent { e ->
+                    if (e.type != KeyEventType.KeyDown || showSettings || showClueList) return@onPreviewKeyEvent false
+                    val ch = e.utf16CodePoint.toChar().uppercaseChar()
+                    when {
+                        e.key == Key.Backspace || e.key == Key.Delete -> { onBackspace(); true }
+                        e.key == Key.Tab || e.key == Key.Enter -> { moveToNextUnsolved(!e.isShiftPressed); true }
+                        e.key == Key.Spacebar -> { toggleDirection(); true }
+                        ch in 'A'..'Z' -> { onKey(ch); true }
+                        else -> false
+                    }
+                }
+            ) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     TopAppBar(
                         title = {
@@ -2581,7 +2688,63 @@ fun CrosswordApp() {
                         )
                     )
 
-                    Box(modifier = Modifier.weight(1.4f).fillMaxWidth()) {
+                    // ── Vindictive / Team mode banner — inside the Column layout ──
+                    if (activeGameMode == GameMode.VINDICTIVE && !isGenerating && !puzzleSolved) {
+                        val vCurrentName = if (vindCurrentPlayer == 0) onlineP0Name else onlineP1Name
+                        val vOtherName   = if (vindCurrentPlayer == 0) onlineP1Name else onlineP0Name
+                        val isWaiting    = vindPhase == VindicativePhase.OPPONENT_WAIT
+                        val bannerBg     = if (isWaiting) Color(0xFFB71C1C) else MaterialTheme.colorScheme.tertiaryContainer
+                        val bannerFg     = if (isWaiting) Color.White else MaterialTheme.colorScheme.onTertiaryContainer
+                        // Online, the other device watches instead of acting.
+                        val iAct         = VindictiveRules.canAct(vindSnapshot(), isOnlineGame, myIndex())
+                        val vPhaseText   = when {
+                            !iAct -> when (vindPhase) {
+                                VindicativePhase.PICK_OWN      -> "$vCurrentName is picking a clue to answer…"
+                                VindicativePhase.ASSIGN_CLUE   -> "$vCurrentName is choosing a clue for you 😈"
+                                VindicativePhase.OPPONENT_WAIT ->
+                                    if (vindOpponentCountdown > 0) "$vCurrentName is answering your clue… (${vindOpponentCountdown}s)"
+                                    else "Time's up — $vCurrentName is deciding whether to answer or pass…"
+                            }
+                            vindPhase == VindicativePhase.PICK_OWN    -> "$vCurrentName — First turn! Pick any clue and answer it."
+                            vindPhase == VindicativePhase.ASSIGN_CLUE -> "$vCurrentName — Choose a clue for $vOtherName, then tap Give 🎯"
+                            showTurnDialog -> "$vCurrentName — Your clue is waiting… hit I'm Ready when you have the phone!"
+                            vindOpponentCountdown > 0 ->
+                                "$vCurrentName — answer your clue! ⏱ ${vindOpponentCountdown}s"
+                            else -> "$vCurrentName — Time's up! Answer or pass."
+                        }
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                                .background(bannerBg)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(vPhaseText, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                color = bannerFg, textAlign = TextAlign.Center)
+                            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                                Text("$onlineP0Name: ${vindP1Score}pts", fontSize = 11.sp, color = bannerFg)
+                                Text("$onlineP1Name: ${vindP2Score}pts", fontSize = 11.sp, color = bannerFg)
+                            }
+                        }
+                    } else if (activeGameMode == GameMode.TEAM && !isGenerating && !puzzleSolved) {
+                        val tCurrentName = if (teamCurrentPlayer == 0) onlineP0Name else onlineP1Name
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val myTurn = !isOnlineGame || teamCurrentPlayer == myIndex()
+                            Text(if (myTurn) "🤝 ${tCurrentName}'s turn" else "⏳ Waiting for $tCurrentName…",
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer)
+                            Text("$onlineP0Name  +  $onlineP1Name",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                        }
+                    }
+
+                    // ── Grid ─────────────────────────────────────────────────────
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         if (isGenerating) {
                             Box(
                                 modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.72f)),
@@ -2613,238 +2776,122 @@ fun CrosswordApp() {
                                 }
                             }
                         } else {
-                            PuzzleScreenReference(
-                                cells            = gridCells,
-                                userInputs       = userInputs,
-                                bgColor          = currentBgColor,
-                                bgImageName      = currentBgImageName,
-                                cellColor        = currentCellColor,
-                                placedWords      = placedWords,
-                                centreOnWord     = centreOnWord,
-                                animatingCell    = animatingCell,
-                                highlightedWord  = highlightedWord,
-                                onCentred        = { centreOnWord = null },
-                                onClearWords = { wordsToClear ->
-                                    val newMap = userInputs.toMutableMap()
-                                    wordsToClear.forEach { w ->
-                                        for (i in w.word.indices) {
-                                            val pos = if (w.isHorizontal) Pair(w.startX + i, w.startY)
-                                            else Pair(w.startX, w.startY + i)
-                                            newMap.remove(pos)
-                                        }
-                                    }
-                                    userInputs = newMap
-                                }
+                            // Layer 1: colour fallback, layer 2: background art, layer 3: grid.
+                            val bgPainter = rememberBgPainter(currentBgImageName)
+                            Box(Modifier.fillMaxSize().background(currentBgColor))
+                            if (bgPainter != null) {
+                                Image(
+                                    painter = bgPainter, contentDescription = null,
+                                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            CrosswordGrid(
+                                board        = board,
+                                cells        = gridCells,
+                                inputs       = userInputs,
+                                revealed     = revealedCells,
+                                locked       = lockedCells,
+                                selection    = selection,
+                                activeWord   = activeWord,
+                                assignedWord = forcedWord(),
+                                cellColor    = currentCellColor,
+                                accent       = appBtnColor,
+                                wave         = waveFx,
+                                shake        = shakeFx,
+                                onTapCell    = { onCellTap(it) },
+                                modifier     = Modifier.fillMaxSize().padding(6.dp)
                             )
                         }
                     }
 
-                    // ── Hint button ───────────────────────────────────────────────
-                    // Target = the clue last tapped in the list. Reveals the first wrong/empty
-                    // letter of that word, costs Economy.HINT_COST lifetime points (charged once,
-                    // right now), and is synced to the other device in online games.
-                    if (!puzzleSolved && !isGenerating) {
-                        val hintWord    = selectedHintWord?.takeIf { !isWordSolved(it, userInputs) }
-                        val canAfford   = currentScore >= Economy.HINT_COST
-                        val hintEnabled = hintWord != null && canAfford
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .padding(horizontal = 12.dp, vertical = 4.dp)
-                                .shadow(if (hintEnabled) 4.dp else 0.dp, RoundedCornerShape(12.dp))
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    if (hintEnabled) appBtnGradient
-                                    else Brush.verticalGradient(listOf(Color.Gray.copy(alpha = 0.22f), Color.Gray.copy(alpha = 0.22f)))
-                                )
-                                .clickable(enabled = hintEnabled, onClickLabel = "Reveal a letter") {
-                                    val word = hintWord ?: return@clickable
-                                    val (pos, ch) = pickHintCell(word, userInputs) ?: return@clickable
+                    // ── Clue bar, actions, keyboard ──────────────────────────────
+                    if (!isGenerating && !puzzleSolved) {
+                        ClueBar(
+                            word      = activeWord,
+                            inputs    = userInputs,
+                            accent    = appBtnColor,
+                            onPrev    = { moveToNextUnsolved(false) },
+                            onNext    = { moveToNextUnsolved(true) },
+                            onTapClue = { toggleDirection() },
+                            trailing  = {
+                                IconButton(onClick = { showClueList = true }) {
+                                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "All clues")
+                                }
+                            }
+                        )
+                        val blocked   = typingBlockedReason()
+                        val assigning = activeGameMode == GameMode.VINDICTIVE &&
+                            vindPhase == VindicativePhase.ASSIGN_CLUE &&
+                            VindictiveRules.canAct(vindSnapshot(), isOnlineGame, myIndex())
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Hint: reveals the selected square (or the word's first open one).
+                            val hintWord    = activeWord?.takeIf { !isWordSolved(it, userInputs) }
+                            val canAfford   = currentScore >= Economy.HINT_COST
+                            val hintEnabled = hintWord != null && canAfford && blocked == null
+                            OutlinedButton(
+                                onClick = {
+                                    val word = hintWord ?: return@OutlinedButton
+                                    val (pos, ch) = pickHintCell(word, userInputs, selection?.cell) ?: return@OutlinedButton
                                     vibrateLight(context)
                                     if (soundEnabled) SoundPlayer.playClick()
+                                    val before = userInputs
                                     userInputs    = userInputs + (pos to ch)
                                     revealedCells = revealedCells + pos
                                     currentScore  = (currentScore - Economy.HINT_COST).coerceAtLeast(0)
                                     saveManager.addScore(playerName, -Economy.HINT_COST)
                                     hintsUsedThisPuzzle++
                                     if (activeGameMode == GameMode.TEAM) {
-                                        // Online, the hint belongs to this device's player; locally to whoever has the turn.
+                                        // Online the hint belongs to this device's player; locally to whoever has the turn.
                                         val t = teamSnapshot()
-                                        applyTeam(TeamRules.onHint(if (isOnlineGame) t.copy(turn = myIndex()) else t)
-                                            .copy(turn = t.turn))
+                                        applyTeam(TeamRules.onHint(if (isOnlineGame) t.copy(turn = myIndex()) else t).copy(turn = t.turn))
                                     }
                                     if (isOnlineGame) FirebaseGameManager.writeInput(onlineCode, pos.first, pos.second, ch)
-                                    if (isWordSolved(word, userInputs)) selectedHintWord = null
+                                    // A reveal can complete words — judge them like a typed letter.
+                                    val filled = board.wordsAt(pos).filter { isWordFilled(it, userInputs) && !isWordFilled(it, before) }
+                                    judgeFilled(filled.sortedBy { if (it == word) 0 else 1 }, word)
                                 },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (hintEnabled) {
-                                Box(Modifier.fillMaxWidth().height(1.5.dp)
-                                    .background(Color.White.copy(alpha = 0.25f))
-                                    .align(Alignment.TopCenter))
-                            }
-                            val dirLabel = if (hintWord?.isHorizontal == true) "Across" else "Down"
-                            Text(
-                                when {
-                                    hintEnabled       -> "💡  Reveal a letter in ${hintWord!!.number} $dirLabel  (−${Economy.HINT_COST} pt · $currentScore available)"
-                                    hintWord == null  -> "💡  Tap a clue below to choose a hint"
-                                    else              -> "💡  Hints cost ${Economy.HINT_COST} pt — earn points by solving puzzles"
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (hintEnabled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                            )
-                        }
-                    }
-
-                    // ── Vindictive / Team mode banner — inside the Column layout ──
-                    if (activeGameMode == GameMode.VINDICTIVE && !isGenerating && !puzzleSolved) {
-                        val vCurrentName = if (vindCurrentPlayer == 0) onlineP0Name else onlineP1Name
-                        val vOtherName   = if (vindCurrentPlayer == 0) onlineP1Name else onlineP0Name
-                        val isWaiting    = vindPhase == VindicativePhase.OPPONENT_WAIT
-                        val bannerBg     = if (isWaiting) Color(0xFFB71C1C) else MaterialTheme.colorScheme.tertiaryContainer
-                        val bannerFg     = if (isWaiting) Color.White else MaterialTheme.colorScheme.onTertiaryContainer
-                        // Online, the other device watches instead of acting.
-                        val iAct         = VindictiveRules.canAct(vindSnapshot(), isOnlineGame, myIndex())
-                        val vPhaseText   = when {
-                            !iAct -> when (vindPhase) {
-                                VindicativePhase.PICK_OWN      -> "$vCurrentName is picking a clue to answer…"
-                                VindicativePhase.ASSIGN_CLUE   -> "$vCurrentName is choosing a clue for you 😈"
-                                VindicativePhase.OPPONENT_WAIT ->
-                                    if (vindOpponentCountdown > 0) "$vCurrentName is answering your clue… (${vindOpponentCountdown}s)"
-                                    else "Time's up — $vCurrentName is deciding whether to answer or pass…"
-                            }
-                            vindPhase == VindicativePhase.PICK_OWN    -> "$vCurrentName — First turn! Double-tap a clue to pick it for yourself."
-                            vindPhase == VindicativePhase.ASSIGN_CLUE -> "$vCurrentName — Double-tap a clue to assign to $vOtherName 👆"
-                            showTurnDialog -> "$vCurrentName — Your clue is waiting… hit I'm Ready when you have the phone!"
-                            vindOpponentCountdown > 0 ->
-                                "$vCurrentName — ${vindAssignedWord?.clue ?: "?"} — Tap to answer! (${vindOpponentCountdown}s)"
-                            else -> "$vCurrentName — Time's up! Answer or pass."
-                        }
-                        Column(
-                            modifier = Modifier.fillMaxWidth()
-                                .background(bannerBg)
-                                .then(if (isWaiting && vindAssignedWord != null && iAct)
-                                    Modifier.clickable(onClickLabel = "Answer your clue") {
-                                        vindPassDialogVisible = false
-                                        wordToInput = vindAssignedWord   // keeps anything already typed
-                                    }
-                                else Modifier)
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(vPhaseText, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                                color = bannerFg, textAlign = TextAlign.Center)
-                            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                                Text("$onlineP0Name: ${vindP1Score}pts", fontSize = 11.sp, color = bannerFg)
-                                Text("$onlineP1Name: ${vindP2Score}pts", fontSize = 11.sp, color = bannerFg)
-                            }
-                            if (isWaiting && vindAssignedWord != null && iAct) {
-                                Text("👆 Tap this bar to answer",
-                                    fontSize = 11.sp, color = bannerFg.copy(alpha = 0.8f),
-                                    modifier = Modifier.padding(top = 2.dp))
-                            }
-                        }
-                    } else if (activeGameMode == GameMode.TEAM && !isGenerating && !puzzleSolved) {
-                        val tCurrentName = if (teamCurrentPlayer == 0) onlineP0Name else onlineP1Name
-                        Row(
-                            modifier = Modifier.fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.secondaryContainer)
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val myTurn = !isOnlineGame || teamCurrentPlayer == myIndex()
-                            Text(if (myTurn) "🤝 ${tCurrentName}'s turn" else "⏳ Waiting for $tCurrentName…",
-                                fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer)
-                            Text("$onlineP0Name  +  $onlineP1Name",
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        }
-                    }
-
-                    // Next Song bar — anchored just above nav bar inside the clue list area
-                    Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
-                            // In OPPONENT_WAIT: show only assigned clue (hidden while turn dialog is open)
-                            val visibleWords = if (activeGameMode == GameMode.VINDICTIVE &&
-                                vindPhase == VindicativePhase.OPPONENT_WAIT &&
-                                vindAssignedWord != null && !showTurnDialog)
-                                listOf(vindAssignedWord!!)
-                            else if (activeGameMode == GameMode.VINDICTIVE &&
-                                vindPhase == VindicativePhase.OPPONENT_WAIT &&
-                                showTurnDialog)
-                                emptyList()  // hide all clues while phone is being passed
-                            else placedWords
-                            FullHintsList(
-                                words           = visibleWords,
-                                userInputs      = userInputs,
-                                highlightedWord = highlightedWord,
-                                selectedWord    = selectedHintWord,
-                                onSingleTap     = { word ->
-                                    if (!isGenerating) {
-                                        centreOnWord     = word
-                                        highlightedWord  = word
-                                        selectedHintWord = word
-                                    }
-                                },
-                                onDoubleTap     = { word ->
-                                    if (puzzleSolved || isGenerating || isWordSolved(word, userInputs)) return@FullHintsList
-                                    // Online: only the player whose turn it is may answer / pick / assign.
-                                    if (isOnlineGame) {
-                                        val mine = when (activeGameMode) {
-                                            GameMode.VINDICTIVE -> VindictiveRules.canAct(vindSnapshot(), true, myIndex())
-                                            GameMode.TEAM       -> teamCurrentPlayer == myIndex()
-                                            else                -> true
-                                        }
-                                        if (!mine) return@FullHintsList
-                                    }
-                                    // During OPPONENT_WAIT: only the assigned clue can be answered
-                                    if (activeGameMode == GameMode.VINDICTIVE &&
-                                        vindPhase == VindicativePhase.OPPONENT_WAIT &&
-                                        word != vindAssignedWord) return@FullHintsList
-                                    // Assigning a clue doesn't open the answer box.
-                                    if (activeGameMode == GameMode.VINDICTIVE && vindPhase == VindicativePhase.ASSIGN_CLUE) {
-                                        assignClue(word)
-                                        return@FullHintsList
-                                    }
-                                    wordToInput      = word
-                                    highlightedWord  = word
-                                    selectedHintWord = word
-                                    inputText        = ""
-                                }
-                            )
-                        }   // end FullHintsList Box
-                        // ── Next Song strip ─────────────────────────────────────
-                        if (musicEnabled) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .navigationBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment     = Alignment.CenterVertically
+                                enabled  = hintEnabled,
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                shape    = RoundedCornerShape(12.dp)
                             ) {
                                 Text(
-                                    "♪ ${AmbientMusicPlayer.currentTrackName.ifEmpty { "No track" }.take(32)}",
-                                    fontSize = 11.sp,
-                                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1
+                                    when {
+                                        !canAfford -> "💡 Hint (need ${Economy.HINT_COST} pt)"
+                                        else       -> "💡 Reveal square  −${Economy.HINT_COST}"
+                                    },
+                                    style = MaterialTheme.typography.labelLarge, maxLines = 1
                                 )
-                                TextButton(
-                                    onClick  = { AmbientMusicPlayer.next() },
-                                    modifier = Modifier.padding(start = 8.dp)
-                                ) { Text("Next ⏭", fontSize = 13.sp, fontWeight = FontWeight.Bold) }
                             }
-                        } else {
-                            // Still need nav bar padding when music is off
-                            Spacer(Modifier.navigationBarsPadding())
+                            if (assigning) {
+                                val target = activeWord?.takeIf { !isWordSolved(it, userInputs) }
+                                Button(
+                                    onClick = {
+                                        target ?: return@Button
+                                        vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                                        assignClue(target)
+                                    },
+                                    enabled  = target != null,
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                    shape    = RoundedCornerShape(12.dp),
+                                    colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C), contentColor = Color.White)
+                                ) {
+                                    Text("🎯 Give to ${nameOf(1 - vindCurrentPlayer)}", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                                }
+                            }
                         }
-                    }   // end Column wrapping FullHintsList + Next Song
+                        CrosswordKeyboard(
+                            enabled        = blocked == null,
+                            onKey          = { onKey(it) },
+                            onBackspace    = { onBackspace() },
+                            disabledReason = blocked?.takeIf { it.isNotEmpty() },
+                            modifier       = Modifier.navigationBarsPadding()
+                        )
+                    } else {
+                        Spacer(Modifier.navigationBarsPadding())
+                    }
                 }   // end main Column
 
                 // ── Full-screen overlays — inside the Dashboard Box ──────────────
@@ -2930,31 +2977,6 @@ fun CrosswordApp() {
                     }
                 }
 
-                // Vindictive countdown overlay — shown on BOTH devices (assigner waits, answerer races)
-                if (activeGameMode == GameMode.VINDICTIVE &&
-                    vindOpponentCountdown > 0 && !vindPassDialogVisible && !puzzleSolved &&
-                    !showTurnDialog && (vindPhase == VindicativePhase.OPPONENT_WAIT || (isOnlineGame && vindAssignedWord != null))) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = 200.dp),  // push above clue list
-                        contentAlignment = Alignment.BottomCenter
-                    ) {
-                        Card(
-                            modifier  = Modifier.size(80.dp),
-                            colors    = CardDefaults.cardColors(containerColor = Color(0xFFB71C1C)),
-                            elevation = CardDefaults.cardElevation(8.dp),
-                            shape     = androidx.compose.foundation.shape.CircleShape
-                        ) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("$vindOpponentCountdown",
-                                    fontSize = 32.sp, fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White)
-                            }
-                        }
-                    }
-                }
-
                 // Streak milestone
                 AnimatedVisibility(visible = streakMilestone != null, enter = fadeIn(), exit = fadeOut()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2972,49 +2994,6 @@ fun CrosswordApp() {
         }
     }
     }   // end AnimatedContent
-
-    if (wordToInput != null && !puzzleSolved && appMode == AppMode.DASHBOARD) {
-        val word = wordToInput!!
-        AlertDialog(
-            onDismissRequest = { wordToInput = null },
-            title = { Text("Enter Answer") },
-            text = {
-                Column {
-                    Text("${word.number} ${if (word.isHorizontal) "Across" else "Down"}: ${word.clue}", fontWeight = FontWeight.Bold)
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = { v -> inputText = v.uppercase().filter { it in 'A'..'Z' }.take(word.word.length) },
-                        label = { Text("(${word.word.length} Letters)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Characters,
-                            autoCorrectEnabled = false,
-                            keyboardType = KeyboardType.Password,   // suppresses suggestions/autocorrect on most IMEs
-                            imeAction = ImeAction.Done
-                        ),
-                        keyboardActions = KeyboardActions(onDone = {
-                            if (inputText.length == word.word.length) submitAnswer(word, inputText)
-                        }),
-                        visualTransformation = VisualTransformation.None,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { submitAnswer(word, inputText) },
-                    enabled  = inputText.length == word.word.length,
-                    shape    = RoundedCornerShape(12.dp),
-                    colors   = ButtonDefaults.buttonColors(containerColor = appBtnColor, contentColor = Color.White),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Submit", fontSize = 15.sp, fontWeight = FontWeight.Bold) }
-            },
-            dismissButton = {
-                GradientBtn("Cancel", appBtnGradient, onClick = { wordToInput = null }, modifier = Modifier.fillMaxWidth())
-            }
-        )
-    }
 
     // ── ONLINE JOIN DIALOG ────────────────────────────────────────────────────────
     if (showOnlineJoin) {
@@ -3072,6 +3051,20 @@ fun CrosswordApp() {
                 }, modifier = Modifier.fillMaxWidth())
             }
         )
+    }
+
+    // ── CLUE LIST SHEET ────────────────────────────────────────────────────────
+    if (showClueList && appMode == AppMode.DASHBOARD && !isGenerating) {
+        val clueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+        ModalBottomSheet(onDismissRequest = { showClueList = false }, sheetState = clueSheetState) {
+            val forced = forcedWord()
+            FullHintsList(
+                words        = if (forced != null) listOf(forced) else placedWords,
+                userInputs   = userInputs,
+                selectedWord = activeWord,
+                onSelect     = { w -> selectClue(w); showClueList = false }
+            )
+        }
     }
 
     // ── SETTINGS BOTTOM SHEET ─────────────────────────────────────────────────────
@@ -3444,8 +3437,7 @@ fun CrosswordApp() {
             confirmButton = {
                 GradientBtn("Answer It  ▶", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
-                    vindPassDialogVisible = false
-                    wordToInput = vindAssignedWord     // keeps whatever was already typed
+                    vindPassDialogVisible = false      // keyboard re-enables; typed letters are kept
                 }, modifier = Modifier.fillMaxWidth())
             },
             dismissButton = {
@@ -3468,9 +3460,10 @@ fun CrosswordApp() {
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     listOf(
-                        "👆 Tap a clue" to "Single-tap to highlight it on the grid.",
-                        "✍️ Answer" to "Double-tap a clue to type your answer.",
-                        "💡 Hint" to "Tap the lightbulb to reveal one letter. Costs 1 point.",
+                        "👆 Tap a square" to "Select it and type. Tap it again to switch Across / Down.",
+                        "⌨️ Type" to "Letters fill in and skip ahead. A finished word is checked instantly.",
+                        "◀ ▶ Clues" to "Arrows jump between unsolved clues; ☰ shows the full list.",
+                        "💡 Hint" to "Reveals the selected square. Costs 1 point.",
                         "🔀 Combine" to "Merge multiple categories into one big puzzle.",
                         "📅 Daily" to "A new puzzle every day using all categories.",
                         "🤝 Team Mode" to "Both players work together and take turns answering.",
@@ -3503,12 +3496,12 @@ fun CrosswordApp() {
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     listOf(
-                        "1️⃣ First turn" to "The starting player picks any clue and tries to answer it. +1 if correct, -1 if wrong.",
-                        "2️⃣ Assign" to "That same player picks a clue for the other player and passes the phone.",
-                        "3️⃣ Opponent" to "The next player has a timer (you'll pick 15s, 30s, or 60s next) to answer. Double-tap the clue to answer early.",
+                        "1️⃣ First turn" to "The starting player picks any clue and types an answer. +1 if correct, -1 if wrong.",
+                        "2️⃣ Assign" to "That same player selects a clue for the other player, taps 🎯 Give, and passes the phone.",
+                        "3️⃣ Opponent" to "The next player types the answer before the timer (15s, 30s or 60s) runs out.",
                         "✅ Correct" to "+1 point. Now pick a clue for the other player.",
                         "❌ Wrong" to "-2 points. Still pick a clue for the other player.",
-                        "⏭ Pass" to "-1 point. Still pick a clue for the other player.",
+                        "⏭ Pass" to "When time runs out: answer anyway, or pass for -1 point.",
                         "🏆 Win" to "The game ends when the puzzle is complete. Highest score wins!"
                     ).forEach { (title, desc) ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3542,12 +3535,13 @@ fun CrosswordApp() {
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     listOf(
-                        "👆 Single-tap"  to "Highlight a clue on the grid and scroll to it.",
-                        "✍️ Double-tap"  to "Open the answer box for that clue.",
-                        "💡 Hint"        to "Reveals one random letter in the selected word. Costs 1 point.",
-                        "🔴 Wrong cell"  to "Tap an incorrect cell on the grid to erase it.",
+                        "👆 Tap a square" to "Selects it — tap again to switch Across / Down.",
+                        "⌨️ Type"        to "Letters fill in and jump to the next gap. Backspace erases.",
+                        "✅ Check"       to "A word is checked as soon as it's full. Fix wrong letters and try again.",
+                        "💡 Hint"        to "Reveals the selected square. Costs 1 point.",
+                        "🔒 Locked"      to "Solved words and revealed squares can't be erased.",
                         "🏆 Scoring"     to "Points depend on difficulty. Hints reduce your score.",
-                        "💾 Auto-save"   to "Progress is saved when you hit back or quit."
+                        "💾 Auto-save"   to "Progress saves automatically, even if you leave the app."
                     ).forEach { (title, desc) ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp,
@@ -3582,7 +3576,7 @@ fun CrosswordApp() {
                 ) {
                     listOf(
                         "🤝 Goal"        to "Both players work together to solve the same puzzle.",
-                        "🔄 Take turns"  to "Players alternate answering clues — pass the phone each turn.",
+                        "🔄 Take turns"  to "Fill in one word per turn — right or wrong, then pass the phone.",
                         "✅ Correct"     to "+1 answer credit for that player. Both earn full points at puzzle end.",
                         "💡 Hints"       to "Either player can use hints. Each costs 1 point from the final score.",
                         "🏆 Win"         to "Puzzle complete when all words are solved — both players share the reward!"
@@ -4259,11 +4253,13 @@ fun CrosswordApp() {
         )
     }
 
-    // Broadcast to Firebase when this device opens/closes the answer dialog
-    LaunchedEffect(wordToInput, isOnlineGame) {
+    // Tell the other device when this player is the one typing an answer.
+    val iAmAnswering = isOnlineGame && appMode == AppMode.DASHBOARD && typingBlockedReason() == null &&
+        activeGameMode != GameMode.SINGLE && !(activeGameMode == GameMode.VINDICTIVE && vindPhase == VindicativePhase.ASSIGN_CLUE)
+    LaunchedEffect(iAmAnswering, isOnlineGame) {
         if (isOnlineGame && onlineCode.isNotEmpty()) {
             val field = if (onlineRole == OnlineRole.HOST) "p0answering" else "p1answering"
-            FirebaseGameManager.writeState(onlineCode, mapOf(field to (wordToInput != null)))
+            FirebaseGameManager.writeState(onlineCode, mapOf(field to iAmAnswering))
         }
     }
 
@@ -4281,11 +4277,21 @@ fun CrosswordApp() {
         for (i in vindTimerSeconds downTo 1) {
             vindOpponentCountdown = i
             if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("vindCountdown" to i))
+            if (i <= 5 && soundEnabled) SoundPlayer.playTick()
             delay(1000L)
             if (vindPhase != VindicativePhase.OPPONENT_WAIT || puzzleSolved) return@LaunchedEffect
         }
         onVindTimeout()
     }
+
+    // Vindictive: the answerer's cursor lives on the assigned clue.
+    LaunchedEffect(vindPhase, vindAssignedWord) {
+        forcedWord()?.let { w ->
+            if (board.activeWord(selection) != w) selection = InputEngine.selectWord(w, userInputs, lockedCells)
+        }
+    }
+    // Online sessions can't be resumed, so the ViewModel doesn't persist them.
+    LaunchedEffect(isOnlineGame) { vm.isOnline = isOnlineGame }
 
     // ── RESULTS CARD ─────────────────────────────────────────────────────────
     val result = lastResult
@@ -4420,299 +4426,6 @@ fun CrosswordApp() {
 // ============================================================
 // UI COMPOSABLES
 // ============================================================
-
-@Composable
-fun PuzzleScreenReference(
-    cells:           List<GridCell>,
-    userInputs:      Map<Pair<Int, Int>, Char>,
-    bgColor:         Color,
-    bgImageName:     String,
-    cellColor:       Color,
-    placedWords:     List<PlacedWord>,
-    centreOnWord:    PlacedWord?,
-    animatingCell:   Pair<Int,Int>?,    // cell currently popping at 125%
-    highlightedWord: PlacedWord?,       // word whose start cell glows green
-    onCentred:       () -> Unit,
-    onClearWords:    (List<PlacedWord>) -> Unit
-) {
-    var scale         by remember { mutableFloatStateOf(1f) }
-    var offsetX       by remember { mutableFloatStateOf(0f) }
-    var offsetY       by remember { mutableFloatStateOf(0f) }
-    var containerSize by remember { mutableStateOf(IntSize.Zero) }
-    // Grid footprint in px at scale 1, and the zoom that fits it on screen —
-    // published from BoxWithConstraints so the gesture handler can clamp.
-    var gridPx        by remember { mutableStateOf(IntSize.Zero) }
-    var minScale      by remember { mutableFloatStateOf(0.5f) }
-
-    val latestInputs by rememberUpdatedState(userInputs)
-    val latestWords  by rememberUpdatedState(placedWords)
-    val latestClear  by rememberUpdatedState(onClearWords)
-
-    // Pre-compute grid bounds once per cells change — stable integers used by both
-    // the layout pass and the pointerInput coroutines.
-    val minX = if (cells.isEmpty()) 0 else cells.minOf { it.x }
-    val maxX = if (cells.isEmpty()) 0 else cells.maxOf { it.x }
-    val minY = if (cells.isEmpty()) 0 else cells.minOf { it.y }
-    val maxY = if (cells.isEmpty()) 0 else cells.maxOf { it.y }
-    val gridW = if (cells.isEmpty()) 1 else maxX - minX + 1
-    val gridH = if (cells.isEmpty()) 1 else maxY - minY + 1
-
-    // Load the background image asynchronously; null = still loading or no image.
-    val bgPainter = rememberBgPainter(bgImageName)
-
-    // Outer Box is the true full-size container for both background and grid.
-    // Keeping the background OUTSIDE BoxWithConstraints is critical — if the
-    // Image is a child of BoxWithConstraints, the box measures to its content
-    // size (the grid footprint) rather than the available space, so the image
-    // only covers the grid area and leaves white strips above and below.
-    // Track previous container size — reset pan/zoom if dimensions change significantly
-    // (rotation causes width/height to swap, making stale offsets invalid).
-    var prevContainerSize by remember { mutableStateOf(IntSize.Zero) }
-    LaunchedEffect(containerSize) {
-        if (prevContainerSize != IntSize.Zero && containerSize != IntSize.Zero) {
-            val widthChanged  = kotlin.math.abs(containerSize.width  - prevContainerSize.width)  > 50
-            val heightChanged = kotlin.math.abs(containerSize.height - prevContainerSize.height) > 50
-            if (widthChanged || heightChanged) {
-                scale   = 1f
-                offsetX = 0f
-                offsetY = 0f
-            }
-        }
-        prevContainerSize = containerSize
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clipToBounds()
-            .onSizeChanged { containerSize = it }   // captures real pixel dimensions for parallax clamping
-            .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(minScale, 4f)
-                    // Keep at least part of the grid on screen.
-                    val maxX = (gridPx.width  * scale + containerSize.width)  / 2f - 48f
-                    val maxY = (gridPx.height * scale + containerSize.height) / 2f - 48f
-                    offsetX = (offsetX + pan.x).coerceIn(-maxX.coerceAtLeast(0f), maxX.coerceAtLeast(0f))
-                    offsetY = (offsetY + pan.y).coerceIn(-maxY.coerceAtLeast(0f), maxY.coerceAtLeast(0f))
-                }
-            }
-    ) {
-        // Layer 1: solid color fallback — always visible, instant
-        Box(modifier = Modifier.fillMaxSize().background(bgColor))
-
-        // Layer 2: background image — scaled 1.25x to guarantee full coverage.
-        // ContentScale.Crop alone can leave thin gaps on some image/container aspect ratios
-        // due to bitmap sizing or sub-pixel rounding. The 1.25x overbleed ensures the image
-        // always bleeds 12.5% past every edge with no parallax movement.
-        if (bgPainter != null) {
-            Image(
-                painter            = bgPainter,
-                contentDescription = null,
-                contentScale       = ContentScale.Crop,
-                modifier           = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer(scaleX = 1.25f, scaleY = 1.25f)
-            )
-        }
-
-        // Layer 3: grid — BoxWithConstraints measures available space correctly
-        // now that it is no longer responsible for the background.
-        BoxWithConstraints(
-            modifier          = Modifier.fillMaxSize(),
-            contentAlignment  = Alignment.Center
-        ) {
-            // Fit the whole grid into the available area.
-            // Cap between 18 dp (readable minimum) and 52 dp (comfortable maximum).
-            // When cells is empty (generating) default to 45 so nothing crashes.
-            val cellSize: Float = if (cells.isEmpty()) 45f else
-                minOf(
-                    maxWidth.value  / gridW,
-                    maxHeight.value / gridH,
-                    52f
-                ).coerceAtLeast(18f)
-
-            // rememberUpdatedState wraps cellSize so the long-lived pointerInput
-            // coroutine below always reads the current value without restarting.
-            val cellSizeState   = rememberUpdatedState(cellSize)
-            // Screen density — needed to convert dp→px for graphicsLayer translations.
-            val screenDensity   = LocalDensity.current.density
-            val densityState    = rememberUpdatedState(screenDensity)
-
-            // Centre the grid on a word's start cell when single-tapped in the clue list.
-            // Reset pan/zoom to the fitted view whenever screen dimensions change
-            // (rotation, multi-window resize, foldable state change).
-            // Big grids (Genius) can't fit at the 18dp minimum cell size: let the player
-            // zoom out to see the whole board, and start somewhere readable.
-            val fitScale = if (cells.isEmpty()) 1f else
-                minOf(maxWidth.value / (gridW * cellSize), maxHeight.value / (gridH * cellSize), 1f)
-            LaunchedEffect(maxWidth, maxHeight, gridW, gridH) {
-                minScale = (fitScale * 0.9f).coerceAtMost(1f)
-                gridPx   = IntSize((gridW * cellSize * screenDensity).toInt(), (gridH * cellSize * screenDensity).toInt())
-                scale    = maxOf(fitScale, 0.75f).coerceAtMost(1f)
-                offsetX  = 0f
-                offsetY  = 0f
-            }
-
-            LaunchedEffect(centreOnWord) {
-                val w   = centreOnWord ?: return@LaunchedEffect
-                if (cells.isEmpty()) return@LaunchedEffect
-                // Keep the player's zoom (never below a readable level) and bring the
-                // MIDDLE of the word to the centre of the view.
-                scale = scale.coerceAtLeast(minOf(1f, maxOf(minScale, 0.75f)))
-                val csPx    = cellSizeState.value * densityState.value
-                val half    = (w.word.length - 1) / 2f
-                val midX    = w.startX - minX + 0.5f + (if (w.isHorizontal) half else 0f)
-                val midY    = w.startY - minY + 0.5f + (if (w.isHorizontal) 0f else half)
-                val gridWpx = gridW * csPx
-                val gridHpx = gridH * csPx
-                offsetX = -(midX * csPx - gridWpx / 2f) * scale
-                offsetY = -(midY * csPx - gridHpx / 2f) * scale
-                onCentred()
-            }
-
-            // Tap on a grid cell to clear its word's incorrect answer.
-            // Uses a separate pointerInput so it doesn't conflict with pan/zoom.
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(cells) {
-                        detectTapGestures { tapOffset ->
-                            if (cells.isEmpty()) return@detectTapGestures
-                            val cs      = cellSizeState.value
-                            val csPx    = cs * density          // dp → px for this device
-                            val gridWpx = gridW * csPx
-                            val gridHpx = gridH * csPx
-
-                            // Reverse the graphicsLayer transform to get grid-local coords.
-                            val lx = (tapOffset.x - size.width  / 2f - offsetX) / scale + gridWpx / 2f
-                            val ly = (tapOffset.y - size.height / 2f - offsetY) / scale + gridHpx / 2f
-                            if (lx < 0 || ly < 0 || lx >= gridWpx || ly >= gridHpx) return@detectTapGestures
-
-                            val tappedX   = minX + (lx / csPx).toInt()
-                            val tappedY   = minY + (ly / csPx).toInt()
-                            val tappedPos = Pair(tappedX, tappedY)
-                            if (cells.none { it.x == tappedX && it.y == tappedY }) return@detectTapGestures
-
-                            val inputs    = latestInputs
-                            val words     = latestWords
-                            val wordsHere = words.filter { w -> getCellsForWord(w).contains(tappedPos) }
-                            val wrongWords = wordsHere.filter { w ->
-                                w.word.indices.any { idx ->
-                                    val pos = if (w.isHorizontal) Pair(w.startX + idx, w.startY)
-                                    else Pair(w.startX, w.startY + idx)
-                                    val ch  = inputs[pos]
-                                    ch != null && ch != w.word[idx]
-                                }
-                            }
-                            if (wrongWords.isNotEmpty()) latestClear(wrongWords)
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (cells.isNotEmpty()) {
-                    // Scale font sizes proportionally so clue numbers and letters
-                    // stay readable at any cell size (small on dense Genius grids,
-                    // larger on Easy grids or tablets).
-                    val numberFontSp = (cellSize * 0.22f).coerceIn(6f, 11f)
-                    val letterFontSp = (cellSize * 0.48f).coerceIn(10f, 22f)
-
-                    Box(
-                        modifier = Modifier
-                            // requiredSize: a grid wider than the screen must NOT be squeezed to
-                            // the incoming constraints, or drawing and tap maths disagree.
-                            .requiredSize((gridW * cellSize).dp, (gridH * cellSize).dp)
-                            // Lambda form: pan/zoom only re-draws, never recomposes the grid.
-                            .graphicsLayer {
-                                scaleX       = scale
-                                scaleY       = scale
-                                translationX = offsetX
-                                translationY = offsetY
-                            }
-                    ) {
-                        cells.forEach { cell ->
-                            val cellPos      = Pair(cell.x, cell.y)
-                            val isAnimCell   = animatingCell == cellPos
-                            val isStartCell  = highlightedWord != null && cell.x == highlightedWord.startX && cell.y == highlightedWord.startY
-                            val animScale    by animateFloatAsState(
-                                targetValue  = if (isAnimCell) 1.25f else 1f,
-                                animationSpec = tween(60), label = "cellPop"
-                            )
-                            val baseBg = when {
-                                isStartCell -> Color(0xFF4CAF50)   // green — the numbered start cell
-                                else        -> cellColor
-                            }
-                            // Outer cell box: background + border, absolute position.
-                            // absoluteOffset uses raw pixel values — eliminates sub-pixel
-                            // rounding gaps that appear with .offset() + dp conversion.
-                            val cellOffPx = { v: Int -> (v * cellSize * screenDensity).toInt() }
-                            Box(
-                                modifier = Modifier
-                                    .absoluteOffset { IntOffset(
-                                        cellOffPx(cell.x - minX),
-                                        cellOffPx(cell.y - minY)
-                                    )}
-                                    .size(cellSize.dp)
-                                    .graphicsLayer(scaleX = animScale, scaleY = animScale)
-                                    .shadow(1.dp, RoundedCornerShape(4.dp))
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(baseBg)
-                                    .border(0.5.dp, Color.Black.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
-                            ) {
-                                // Clue number — pinned to top-left corner
-                                if (cell.number != null) {
-                                    Text(
-                                        text       = "${cell.number}",
-                                        fontSize   = numberFontSp.sp,
-                                        lineHeight = numberFontSp.sp,
-                                        modifier   = Modifier
-                                            .align(Alignment.TopStart)
-                                            .padding(start = 1.dp, top = 1.dp),
-                                        color      = Color.Black
-                                    )
-                                }
-                                // Player letter — use a fill+center inner Box so centering is
-                                // driven by layout, not by alignment hints that break inside
-                                // ?.let lambdas or are defeated by font padding.
-                                val enteredChar = userInputs[Pair(cell.x, cell.y)]
-                                if (enteredChar != null) {
-                                    val isCorrect = enteredChar == cell.char
-                                    Box(
-                                        modifier           = Modifier.fillMaxSize(),
-                                        contentAlignment   = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text       = "$enteredChar",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize   = letterFontSp.sp,
-                                            textAlign  = TextAlign.Center,
-                                            // includeFontPadding = false removes the implicit
-                                            // ascent/descent space Compose adds around glyphs,
-                                            // which otherwise pushes letters above true centre.
-                                            style      = TextStyle(
-                                                platformStyle = PlatformTextStyle(
-                                                    includeFontPadding = false
-                                                )
-                                            ),
-                                            // Pick text colour that contrasts with the cell background
-                                            color      = if (isCorrect) {
-                                                if (cellLuminance(cellColor) > 0.4f) Color(0xFF006400)
-                                                else Color(0xFF90EE90)  // light green on dark cells
-                                            } else {
-                                                if (cellLuminance(cellColor) > 0.4f) Color.Black
-                                                else Color.White        // white text on dark cells
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }   // end BoxWithConstraints
-    }   // end outer Box
-}
-
 
 // Category emoji icons — matched by uppercase category name
 val categoryIcons = mapOf(
@@ -5243,20 +4956,16 @@ fun CategoryScreen(
 
 @Composable
 fun FullHintsList(
-    words:           List<PlacedWord>,
-    userInputs:      Map<Pair<Int, Int>, Char>,
-    highlightedWord: PlacedWord?,
-    selectedWord:    PlacedWord? = null,
-    onSingleTap:     (PlacedWord) -> Unit,
-    onDoubleTap:     (PlacedWord) -> Unit
+    words:        List<PlacedWord>,
+    userInputs:   Map<Pair<Int, Int>, Char>,
+    selectedWord: PlacedWord?,
+    onSelect:     (PlacedWord) -> Unit
 ) {
     val across        = words.filter { it.isHorizontal }.sortedBy { it.number }
     val down          = words.filter { !it.isHorizontal }.sortedBy { it.number }
     val acrossUnsolved = across.filter { !isWordSolved(it, userInputs) }
     val downUnsolved   = down.filter   { !isWordSolved(it, userInputs) }
-    val acrossSolved   = across.filter {  isWordSolved(it, userInputs) }
-    val downSolved     = down.filter   {  isWordSolved(it, userInputs) }
-    val solvedCount    = acrossSolved.size + downSolved.size
+    val solved         = (across + down).filter { isWordSolved(it, userInputs) }
     val totalCount     = words.size
 
     @Composable
@@ -5269,13 +4978,11 @@ fun FullHintsList(
                 .background(color)
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            Text(label, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = Color.White,
-                letterSpacing = 1.5.sp)
+            Text(label, style = MaterialTheme.typography.labelLarge, color = Color.White, letterSpacing = 1.5.sp)
         }
     }
 
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-        // Progress summary
+    LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         if (totalCount > 0) {
             item {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -5283,16 +4990,12 @@ fun FullHintsList(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Progress", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            "$solvedCount / $totalCount",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2E7D32)
-                        )
+                        Text("Progress", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${solved.size} / $totalCount", style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                     }
                     LinearProgressIndicator(
-                        progress = { solvedCount.toFloat() / totalCount },
+                        progress = { solved.size.toFloat() / totalCount },
                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
                         color = Color(0xFF2E7D32)
                     )
@@ -5300,25 +5003,25 @@ fun FullHintsList(
             }
         }
         if (acrossUnsolved.isNotEmpty()) {
-            item { SectionHeader("ACROSS", Color(0xFF5C6BC0)) }
-            items(acrossUnsolved) { ClueItem(it, userInputs, highlightedWord == it || selectedWord == it, onSingleTap, onDoubleTap) }
+            item(key = "h-across") { SectionHeader("ACROSS", Color(0xFF5C6BC0)) }
+            items(acrossUnsolved, key = { "a${it.number}" }) { ClueItem(it, userInputs, it == selectedWord, onSelect) }
         }
         if (downUnsolved.isNotEmpty()) {
-            item { SectionHeader("DOWN", Color(0xFF00838F)) }
-            items(downUnsolved) { ClueItem(it, userInputs, highlightedWord == it || selectedWord == it, onSingleTap, onDoubleTap) }
+            item(key = "h-down") { SectionHeader("DOWN", Color(0xFF00838F)) }
+            items(downUnsolved, key = { "d${it.number}" }) { ClueItem(it, userInputs, it == selectedWord, onSelect) }
         }
-        // Solved section — compact
-        if (solvedCount > 0) {
-            item {
+        if (solved.isNotEmpty()) {
+            item(key = "h-solved") {
                 Box(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp)
                     .clip(RoundedCornerShape(6.dp)).background(Color(0xFF2E7D32))
                     .padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    Text("✓ SOLVED ($solvedCount)", fontWeight = FontWeight.ExtraBold,
-                        fontSize = 13.sp, color = Color.White, letterSpacing = 1.5.sp)
+                    Text("✓ SOLVED (${solved.size})", style = MaterialTheme.typography.labelLarge,
+                        color = Color.White, letterSpacing = 1.5.sp)
                 }
             }
-            items(acrossSolved) { ClueItem(it, userInputs, highlightedWord == it || selectedWord == it, onSingleTap, onDoubleTap) }
-            items(downSolved)   { ClueItem(it, userInputs, highlightedWord == it || selectedWord == it, onSingleTap, onDoubleTap) }
+            items(solved, key = { "s${if (it.isHorizontal) "a" else "d"}${it.number}" }) {
+                ClueItem(it, userInputs, it == selectedWord, onSelect)
+            }
         }
         item { Spacer(Modifier.height(8.dp)) }
     }
@@ -5326,31 +5029,22 @@ fun FullHintsList(
 
 @Composable
 fun ClueItem(
-    word:            PlacedWord,
-    userInputs:      Map<Pair<Int, Int>, Char>,
-    isHighlight:     Boolean,
-    onSingleTap:     (PlacedWord) -> Unit,
-    onDoubleTap:     (PlacedWord) -> Unit
+    word:        PlacedWord,
+    userInputs:  Map<Pair<Int, Int>, Char>,
+    isSelected:  Boolean,
+    onSelect:    (PlacedWord) -> Unit
 ) {
     val solved      = isWordSolved(word, userInputs)
     val solvedGreen = Color(0xFF2E7D32)
-
+    val dir         = if (word.isHorizontal) "Across" else "Down"
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isHighlight) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent)
-            .pointerInput(word) {
-                // onPress fires immediately on touch-down — no waiting for the
-                // 300 ms double-tap window. The single-tap action (centre +
-                // highlight) is non-destructive, so firing it as the first
-                // half of a double-tap is harmless. Double-tap still opens
-                // the answer dialog.
-                detectTapGestures(
-                    onPress     = { onSingleTap(word) },
-                    onDoubleTap = { onDoubleTap(word) }
-                )
-            }
-            .padding(vertical = 10.dp)
+            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else Color.Transparent)
+            .clickable(onClickLabel = "Select ${word.number} $dir") { onSelect(word) }
+            .semantics(mergeDescendants = true) {}
+            .heightIn(min = 48.dp)
+            .padding(vertical = 10.dp, horizontal = 4.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -5360,29 +5054,23 @@ fun ClueItem(
             Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Top) {
                 Text(
                     text = "${word.number}.",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    style = MaterialTheme.typography.labelLarge,
                     color = if (solved) solvedGreen else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.width(28.dp)
+                    modifier = Modifier.width(30.dp)
                 )
                 Text(
                     text = word.clue,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = if (solved) solvedGreen else Color.Unspecified,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (solved) solvedGreen else MaterialTheme.colorScheme.onSurface,
                     textDecoration = if (solved) TextDecoration.LineThrough else TextDecoration.None,
                     modifier = Modifier.weight(1f)
                 )
             }
             if (solved) {
-                Surface(
-                    color = solvedGreen.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(4.dp)
-                ) {
+                Surface(color = solvedGreen.copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
                     Text(
                         text = "✓ ${word.word}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                         color = solvedGreen,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
@@ -5390,10 +5078,13 @@ fun ClueItem(
             }
         }
         if (!solved) {
-            Text(text = "(${word.word.length} letters)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val filled = word.cells().count { userInputs[it] != null }
+            Text(text = "${word.word.length} letters" + (if (filled > 0) " · $filled filled" else ""),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 30.dp))
         }
-        HorizontalDivider(modifier = Modifier.padding(top = 8.dp), thickness = 0.5.dp, color = Color.LightGray)
     }
+    HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 
