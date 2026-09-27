@@ -55,6 +55,7 @@ import androidx.core.content.edit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.awaitCancellation
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -115,11 +116,21 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import com.google.firebase.database.Transaction
+import com.google.firebase.database.MutableData
+import com.google.firebase.database.ServerValue
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.hag.mypersonalcrossword.ui.theme.MyPersonalCrosswordTheme
+import com.hag.mypersonalcrossword.core.*
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.lazy.rememberLazyListState
 import kotlin.math.abs as kabs
@@ -143,64 +154,48 @@ class MainActivity : ComponentActivity() {
 
 enum class AppMode { LOGIN, STATS, CATEGORY_SELECT, DASHBOARD, ONLINE_LOBBY }
 
-enum class GameMode { SINGLE, TEAM, VINDICTIVE, DAILY }
-
-enum class VindicativePhase { PICK_OWN, ASSIGN_CLUE, OPPONENT_WAIT }
-
-// Word count caps for each difficulty level
-enum class Difficulty(val label: String, val wordCount: Int, val emoji: String) {
-    EASY("Easy",     8,  "🟢"),
-    MEDIUM("Medium", 12, "🟡"),
-    HARD("Hard",     15, "🔴"),
-    EXPERT("Expert", 25, "🟣"),
-    GENIUS("Genius", 50, "⭐")
-}
-
-data class RawEntry(val answer: String, val clue: String, val category: String)
-data class PlacedWord(val word: String, val clue: String, val startX: Int, val startY: Int, val isHorizontal: Boolean, val number: Int = 0)
-data class GridCell(val x: Int, val y: Int, val char: Char, val number: Int? = null)
-data class PuzzleSave(
-    val words: List<PlacedWord>,
-    val inputs: Map<Pair<Int,Int>, Char>,
-    val bgArgb: Int,
-    val bgImageName: String
+/** Everything the results card needs about the puzzle that was just completed. */
+data class PuzzleResult(
+    val mode:             GameMode,
+    val isDaily:          Boolean,
+    val reward:           Int,          // completion reward before hints
+    val hints:            Int,
+    val net:              Int,          // reward − hints, floored at 0
+    val awarded:          Int?,         // points actually added now (null for Vindictive)
+    val dailyAlreadyPaid: Boolean,
+    val seconds:          Long,
+    val team:             TeamState,
+    val vind:             VindState,
+    val myIndex:          Int
 )
 
-// Serialised as: category§diff§mode§hints§timeSeconds§score§partner§partnerScore§won
-data class StatRecord(
-    val category:     String,
-    val diffName:     String,
-    val gameMode:     String,   // GameMode.name
-    val hintsUsed:    Int,
-    val timeSeconds:  Long,
-    val score:        Int,
-    val partner:      String  = "",
-    val partnerScore: Int     = 0,
-    val won:          Boolean = true
-)
+private val CATEGORY_DISPLAY = mapOf("VIDEOGAMES" to "Video Games")
 
-// Forbidden delimiter chars in player / partner names. SaveManager serialises
-// stat and puzzle records with §, |, and ; — letting the user type any of those
-// silently corrupts the next save. Strip them at input time.
-private val FORBIDDEN_NAME_CHARS = setOf('§', '|', ';', '\n', '\r', '\t')
-fun sanitizeName(s: String): String =
-    s.filter { it !in FORBIDDEN_NAME_CHARS }.take(24)
+/** "VIDEOGAMES" → "Video Games", "FOOD+CITIES" → "Food + Cities". Labels like "3 Categories" pass through. */
+fun prettyCategory(raw: String): String =
+    if (raw.any { it.isDigit() }) raw
+    else raw.split("+").joinToString(" + ") { part ->
+        CATEGORY_DISPLAY[part] ?: part.lowercase().replaceFirstChar { it.uppercase() }
+    }
 
-fun pointsForDifficulty(diff: Difficulty): Int = when (diff) {
-    Difficulty.EASY   -> 1
-    Difficulty.MEDIUM -> 2
-    Difficulty.HARD   -> 4
-    Difficulty.EXPERT -> 8
-    Difficulty.GENIUS -> 20
+/** Player-facing name of a resumable save. */
+fun slotTitle(slot: SaveSlot): String = when (slot.mode) {
+    GameMode.DAILY      -> "Daily Puzzle (${slot.category})"
+    GameMode.TEAM       -> "🤝 Team · ${prettyCategory(slot.category)} · ${slot.difficulty.label}"
+    GameMode.VINDICTIVE -> "⚔️ Vindictive · ${prettyCategory(slot.category)} · ${slot.difficulty.label}"
+    GameMode.SINGLE     -> "${prettyCategory(slot.category)} · ${slot.difficulty.label}"
 }
 
-fun checkStreakMilestone(streak: Int): String? = when {
-    streak == 3              -> "On Fire! 🔥"
-    streak == 5              -> "Unstoppable! ⚡"
-    streak == 10             -> "Legendary! 🏆"
-    streak == 15             -> "Crossword God! 👑"
-    streak > 15 && streak % 5 == 0 -> "Still Going! 🌟 ($streak in a row)"
-    else                     -> null
+/** Reads and validates assets/test.csv. Rejected rows are logged, never turned into grid cells. */
+fun loadWordData(context: Context): WordData = try {
+    context.assets.open("test.csv").bufferedReader().useLines { parseWordCsv(it) }.also { data ->
+        data.rejected.forEach { r ->
+            android.util.Log.w("CrosswordData", "test.csv line ${r.lineNumber} rejected (${r.reason}): ${r.line}")
+        }
+    }
+} catch (e: Exception) {
+    android.util.Log.e("CrosswordData", "Couldn't read test.csv", e)
+    WordData(emptyList(), emptyList())
 }
 
 fun vibrateLight(context: Context) {
@@ -277,85 +272,105 @@ class SaveManager(context: Context) {
         return prefs.getStringSet("used_${name}_${category}", emptySet()) ?: emptySet()
     }
     fun addUsedWords(name: String, category: String, words: List<String>) {
+        if (words.isEmpty()) return
         val current = getUsedWords(name, category).toMutableSet()
         current.addAll(words)
         prefs.edit { putStringSet("used_${name}_${category}", current) }
     }
 
     // ── PUZZLE SAVE / RESUME ──────────────────────────────────────────────────
-    // Serialisation format:
-    //   PlacedWord fields: word§clue§startX§startY§isHorizontal§number  (words joined by |)
-    //   UserInputs:       x|y|char  (entries joined by ;)
-    // One save slot per player + category + difficulty combination.
+    // One save per player + SaveSlot. The whole PuzzleSession (words, letters,
+    // hints, timer, streak, Player 2, Team/Vindictive state, background) is
+    // stored as one SessionCodec string, so resume restores everything and a
+    // Team/Vindictive/Daily game can never land in the single-player slot.
+    //
+    // Legacy (pre-session) single-player saves used separate keys
+    // puzzle_<name>_<cat>_<DIFF>_{words,inputs,bg,bgimg,time} + elapsed_…;
+    // they are still read, and removed when the slot is cleared.
 
-    private fun saveKey(name: String, cat: String, diff: Difficulty) =
-        "puzzle_${name}_${cat}_${diff.name}"
+    private fun sessionKey(name: String, slot: SaveSlot) = "psession_${name}_${slot.id}"
+    private fun sessionTimeKey(name: String, slot: SaveSlot) = "psession_time_${name}_${slot.id}"
+    private fun legacyKey(name: String, cat: String, diff: Difficulty) = "puzzle_${name}_${cat}_${diff.name}"
 
-    fun savePuzzle(
-        name: String, cat: String, diff: Difficulty,
-        words: List<PlacedWord>,
-        inputs: Map<Pair<Int,Int>, Char>,
-        bgArgb: Int,
-        bgImageName: String = BG_IMAGE_NONE
-    ) {
-        val wordsStr = words.joinToString("|") {
-            "${it.word}§${it.clue}§${it.startX}§${it.startY}§${it.isHorizontal}§${it.number}"
-        }
-        val inputsStr = inputs.entries.joinToString(";") { (pos, ch) ->
-            "${pos.first}|${pos.second}|$ch"
-        }
-        val k = saveKey(name, cat, diff)
-        // Single atomic edit — prevents index/data mismatch if killed mid-save
-        val saved = getSavedKeys(name).toMutableSet()
-        saved.add("${cat}__${diff.name}")
+    fun savePuzzle(name: String, session: PuzzleSession) {
+        val slot  = session.slot
+        val saved = getSavedSlotIds(name).toMutableSet().apply { add(slot.id) }
         prefs.edit {
-            putString("${k}_words",   wordsStr)
-            putString("${k}_inputs",  inputsStr)
-            putInt("${k}_bg",         bgArgb)
-            putString("${k}_bgimg",   bgImageName)
-            putLong("${k}_time",      System.currentTimeMillis())
+            putString(sessionKey(name, slot), SessionCodec.encode(session))
+            putLong(sessionTimeKey(name, slot), System.currentTimeMillis())
             putStringSet("saves_$name", saved)
         }
     }
 
-    fun loadPuzzle(name: String, cat: String, diff: Difficulty): PuzzleSave? {
-        val k = saveKey(name, cat, diff)
-        val wordsStr    = prefs.getString("${k}_words",  null) ?: return null
-        val inputsStr   = prefs.getString("${k}_inputs", null) ?: return null
-        val bgArgb      = prefs.getInt("${k}_bg", android.graphics.Color.LTGRAY)
-        val bgImageName = prefs.getString("${k}_bgimg", BG_IMAGE_NONE) ?: BG_IMAGE_NONE
-        return try {
-            val words = wordsStr.split("|").filter { it.isNotBlank() }.map { seg ->
-                val p = seg.split("§")
-                PlacedWord(p[0], p[1], p[2].toInt(), p[3].toInt(), p[4].toBoolean(), p[5].toInt())
+    fun loadPuzzle(name: String, slot: SaveSlot): PuzzleSession? {
+        prefs.getString(sessionKey(name, slot), null)?.let { raw ->
+            return SessionCodec.decode(raw)
+        }
+        if (slot.mode != GameMode.SINGLE) return null
+        // Legacy single-player save.
+        val k        = legacyKey(name, slot.category, slot.difficulty)
+        val wordsStr = prefs.getString("${k}_words", null) ?: return null
+        val words    = SessionCodec.decodeWords(wordsStr)
+        if (words.isEmpty()) return null
+        return PuzzleSession(
+            mode           = GameMode.SINGLE,
+            category       = slot.category,
+            difficulty     = slot.difficulty,
+            words          = words,
+            inputs         = SessionCodec.decodeInputs(prefs.getString("${k}_inputs", "") ?: ""),
+            elapsedSeconds = prefs.getLong("elapsed_${name}_${slot.category}_${slot.difficulty.name}", 0L),
+            bgArgb         = prefs.getInt("${k}_bg", android.graphics.Color.LTGRAY),
+            bgImage        = prefs.getString("${k}_bgimg", BG_IMAGE_NONE) ?: BG_IMAGE_NONE
+        )
+    }
+
+    /** Removes the save for [slot] (new and legacy formats) and its index entry, atomically. */
+    fun clearPuzzle(name: String, slot: SaveSlot) {
+        val saved = getSavedSlotIds(name).toMutableSet().apply { remove(slot.id) }
+        val k = legacyKey(name, slot.category, slot.difficulty)
+        prefs.edit {
+            remove(sessionKey(name, slot)); remove(sessionTimeKey(name, slot))
+            if (slot.mode == GameMode.SINGLE) {
+                remove("${k}_words"); remove("${k}_inputs")
+                remove("${k}_bg");    remove("${k}_bgimg"); remove("${k}_time")
+                remove("elapsed_${name}_${slot.category}_${slot.difficulty.name}")
             }
-            val inputs = if (inputsStr.isBlank()) emptyMap() else
-                inputsStr.split(";").filter { it.isNotBlank() }.associate { seg ->
-                    val p = seg.split("|")
-                    Pair(p[0].toInt(), p[1].toInt()) to p[2][0]
-                }
-            PuzzleSave(words, inputs, bgArgb, bgImageName)
-        } catch (_: Exception) { null }
-    }
-
-    fun clearPuzzle(name: String, cat: String, diff: Difficulty) {
-        val k = saveKey(name, cat, diff)
-        val saved = getSavedKeys(name).toMutableSet()
-        saved.remove("${cat}__${diff.name}")
-        prefs.edit {
-            remove("${k}_words"); remove("${k}_inputs")
-            remove("${k}_bg");    remove("${k}_bgimg"); remove("${k}_time")
-            // Without this the timer carries over from the abandoned run.
-            // Belt-and-suspenders — most win paths also call clearElapsed,
-            // but back-out / save flows do not.
-            remove("elapsed_${name}_${cat}_${diff.name}")
             putStringSet("saves_$name", saved)
         }
     }
 
-    // Returns set of "CATEGORY__DIFFICULTY" strings for which a save exists
-    fun getSavedKeys(name: String): Set<String> =
+    /** Raw slot ids in the save index. */
+    fun getSavedSlotIds(name: String): Set<String> =
         prefs.getStringSet("saves_$name", emptySet()) ?: emptySet()
+
+    fun hasSave(name: String, slot: SaveSlot): Boolean = slot.id in getSavedSlotIds(name)
+
+    /**
+     * Resumable saves, most recently saved first. Legacy Daily saves (written
+     * before Dailies were date-keyed) can't be tied to a date and are dropped.
+     */
+    fun getInProgressPuzzles(name: String): List<SaveSlot> {
+        val slots = getSavedSlotIds(name).mapNotNull { SaveSlot.parse(it) }
+        slots.filter { it.mode == GameMode.SINGLE && it.category == DailyPuzzle.CATEGORY }
+            .forEach { clearPuzzle(name, it) }
+        fun savedAt(slot: SaveSlot): Long =
+            prefs.getLong(sessionTimeKey(name, slot), 0L).takeIf { it > 0 }
+                ?: prefs.getLong("${legacyKey(name, slot.category, slot.difficulty)}_time", 0L)
+        return slots
+            .filterNot { it.mode == GameMode.SINGLE && it.category == DailyPuzzle.CATEGORY }
+            .sortedByDescending { savedAt(it) }
+    }
+
+    // ── DAILY COMPLETION ──────────────────────────────────────────────────────
+    // Set of UTC date keys on which this profile solved the Daily (last 60 kept).
+    fun isDailyCompleted(name: String, dateKey: String): Boolean =
+        (prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet()).contains(dateKey)
+
+    fun markDailyCompleted(name: String, dateKey: String) {
+        val done = (prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet())
+            .plus(dateKey).sortedDescending().take(60).toSet()
+        prefs.edit { putStringSet("dailydone_$name", done) }
+    }
 
     // ── PLAYER PROFILES ───────────────────────────────────────────────────────
     fun getAllPlayerNames(): List<String> =
@@ -385,8 +400,11 @@ class SaveManager(context: Context) {
                         key == "recentcolors_$name" ||
                         key == "saves_$name" ||
                         key == "statkeys_$name" ||
+                        key == "dailydone_$name" ||
                         key.startsWith("used_${name}_") ||
                         key.startsWith("puzzle_${name}_") ||
+                        key.startsWith("psession_${name}_") ||
+                        key.startsWith("psession_time_${name}_") ||
                         key.startsWith("stat_${name}_") ||
                         key.startsWith("elapsed_${name}_")
                 if (isPerPlayer) remove(key)
@@ -395,27 +413,24 @@ class SaveManager(context: Context) {
         }
     }
 
-    // Returns list of (category, difficulty) pairs for in-progress saves for this player
-    fun getInProgressPuzzles(name: String): List<Pair<String, Difficulty>> {
-        val keys = getSavedKeys(name)
-        return keys.mapNotNull { key ->
-            val parts = key.split("__")
-            if (parts.size == 2) {
-                val cat  = parts[0]
-                val diff = runCatching { Difficulty.valueOf(parts[1]) }.getOrNull()
-                if (diff != null) Pair(cat, diff) else null
-            } else null
-        }.sortedWith(compareBy({ it.first }, { it.second.name }))
-    }
-
     // ── STAT RECORDS ──────────────────────────────────────────────────────────
-    // One best record per player + category + difficulty.
+    // One best record per player + mode + category + difficulty.
+    // Solo records keep the legacy key/index form (`cat__DIFF`); Team and
+    // Vindictive are namespaced (`TEAM::cat__DIFF`) so they can't overwrite a
+    // solo personal best.
     // Serialised: category§diffName§gameMode§hints§time§score§partner§partnerScore§won
-    private fun statKey(player: String, cat: String, diff: String) =
-        "stat_${player}_${cat}_${diff}"
+    private fun statIndexId(record: StatRecord): String =
+        if (record.gameMode == GameMode.SINGLE.name || record.gameMode == GameMode.DAILY.name)
+            "${record.category}__${record.diffName}"
+        else "${record.gameMode}::${record.category}__${record.diffName}"
+
+    private fun statKey(player: String, indexId: String): String =
+        if ("::" in indexId) "stat_${player}_${indexId}"
+        else "stat_${player}_${indexId.substringBeforeLast("__")}_${indexId.substringAfterLast("__")}"
 
     fun saveStat(player: String, record: StatRecord) {
-        val k = statKey(player, record.category, record.diffName)
+        val id = statIndexId(record)
+        val k  = statKey(player, id)
         // Keep the better record: higher score wins; ties broken by fewer hints, then faster time
         val existing = prefs.getString(k, null)?.let { parseStat(it) }
         if (existing != null) {
@@ -428,11 +443,9 @@ class SaveManager(context: Context) {
         val line = "${record.category}§${record.diffName}§${record.gameMode}§${record.hintsUsed}" +
                 "§${record.timeSeconds}§${record.score}§${record.partner}" +
                 "§${record.partnerScore}§${record.won}"
-        // One atomic edit. The previous two-edit version could be torn by a
-        // process kill — leaving the stat record visible without its index
-        // entry, or vice-versa.
+        // One atomic edit so the record and its index entry can't be torn apart.
         val keys = (prefs.getStringSet("statkeys_$player", emptySet()) ?: emptySet()).toMutableSet()
-        keys.add("${record.category}__${record.diffName}")
+        keys.add(id)
         prefs.edit {
             putString(k, line)
             putStringSet("statkeys_$player", keys)
@@ -441,16 +454,13 @@ class SaveManager(context: Context) {
 
     fun getAllStats(player: String): List<StatRecord> {
         val keys = prefs.getStringSet("statkeys_$player", emptySet()) ?: emptySet()
-        return keys.mapNotNull { key ->
-            // Defensive: a malformed key (legacy data, corrupt prefs) used to crash
-            // the StatsScreen with IndexOutOfBoundsException. Skip silently instead.
+        return keys.mapNotNull { id ->
+            // A malformed key (legacy data, corrupt prefs) is skipped, never fatal.
             runCatching {
-                val parts = key.split("__")
-                if (parts.size < 2) return@runCatching null
-                val (cat, diff) = parts[0] to parts[1]
-                prefs.getString(statKey(player, cat, diff), null)?.let { parseStat(it) }
+                if (!id.contains("__")) return@runCatching null
+                prefs.getString(statKey(player, id), null)?.let { parseStat(it) }
             }.getOrNull()
-        }.sortedBy { it.category }
+        }.sortedWith(compareBy({ it.category }, { it.gameMode }, { it.diffName }))
     }
 
     private fun parseStat(line: String): StatRecord? = try {
@@ -459,16 +469,6 @@ class SaveManager(context: Context) {
             p.getOrElse(6) { "" }, p.getOrElse(7) { "0" }.toInt(),
             p.getOrElse(8) { "true" }.toBoolean())
     } catch (_: Exception) { null }
-
-    // ── TIMER SAVE ────────────────────────────────────────────────────────────
-    fun saveElapsed(name: String, cat: String, diff: Difficulty, seconds: Long) =
-        prefs.edit { putLong("elapsed_${name}_${cat}_${diff.name}", seconds) }
-
-    fun loadElapsed(name: String, cat: String, diff: Difficulty): Long =
-        prefs.getLong("elapsed_${name}_${cat}_${diff.name}", 0L)
-
-    fun clearElapsed(name: String, cat: String, diff: Difficulty) =
-        prefs.edit { remove("elapsed_${name}_${cat}_${diff.name}") }
 
     // ── CELL COLOUR PREFERENCES ───────────────────────────────────────────────
     // Cell color stored as ARGB Int per player.
@@ -515,33 +515,6 @@ class SaveManager(context: Context) {
     }
 }
 
-
-// ── PASSIVE-AGGRESSIVE WRONG ANSWER TAUNTS ───────────────────────────────────
-fun vindictiveTaunt(index: Int, playerName: String, player2Name: String): String {
-    val taunts = listOf(
-        "$player2Name knew you didn't know that. 😏",
-        "That was what you thought? Really?",
-        "I told $player2Name you'd never figure that out.",
-        "Get good, scrub.",
-        "Total pleb answer.",
-        "Even $player2Name cringed a little.",
-        "Was that a guess? Bold strategy.",
-        "$playerName, honey… no.",
-        "The answer was right there, $playerName.",
-        "That's… not it, chief.",
-        "$player2Name is going to love this.",
-        "Yikes. Just… yikes.",
-        "Did you just make that up?",
-        "$playerName with the classic wrong answer.",
-        "At least you tried. (You didn't try.)",
-        "Wrong! $player2Name says thanks for the easy win.",
-        "That one hurt to read, $playerName.",
-        "Somewhere, $player2Name is smiling.",
-        "Not even close. Not even in the same ZIP code.",
-        "Confidently incorrect. Respect, kind of."
-    )
-    return taunts[index % taunts.size]
-}
 
 // ── SOUND EFFECTS ─────────────────────────────────────────────────────────────
 // Synthesised entirely with AudioTrack — no audio asset files needed.
@@ -796,78 +769,133 @@ object AmbientMusicPlayer {
 
 // ── ONLINE MULTIPLAYER ─────────────────────────────────────────────────────────
 
-enum class OnlineRole { HOST, GUEST }
-
 object FirebaseGameManager {
     private const val DB_URL = "https://mypersonalcrossword-default-rtdb.firebaseio.com/"
     private val db: DatabaseReference by lazy {
         FirebaseDatabase.getInstance(DB_URL).reference
     }
-    private val codeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    // No 0/O/1/I to avoid misreads. 32^6 ≈ 1.07 billion codes.
+    private const val CODE_CHARS  = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    const val CODE_LENGTH         = 6
 
-    fun generateCode(): String = (1..6).map { codeChars.random() }.joinToString("")
+    const val STATUS_WAITING   = "waiting"
+    const val STATUS_PLAYING   = "playing"
+    const val STATUS_COMPLETE  = "complete"
+    const val STATUS_ABANDONED = "abandoned"
+
+    fun generateCode(): String = (1..CODE_LENGTH).map { CODE_CHARS.random() }.joinToString("")
 
     private fun gameRef(code: String) = db.child("games").child(code)
 
-    fun signInAnonymously(onDone: () -> Unit) {
+    val myUid: String? get() = FirebaseAuth.getInstance().currentUser?.uid
+
+    /**
+     * Ensures an anonymous Firebase user exists. Reports failure (offline,
+     * Anonymous auth disabled in the console, bad config) instead of pretending
+     * it worked — the old version called onDone() on failure too, which surfaced
+     * later as a confusing "Connection error".
+     */
+    fun signInAnonymously(onResult: (ok: Boolean, error: String?) -> Unit) {
         val auth = FirebaseAuth.getInstance()
-        if (auth.currentUser != null) { onDone(); return }
-        auth.signInAnonymously().addOnCompleteListener { onDone() }
+        if (auth.currentUser != null) { onResult(true, null); return }
+        auth.signInAnonymously().addOnCompleteListener { task ->
+            if (task.isSuccessful) onResult(true, null)
+            else onResult(false, "Couldn't reach the game server. Check your connection and try again.")
+        }
     }
 
+    /**
+     * Creates a game node only if [code] is unused (transaction), retrying with
+     * a fresh code on collision, then registers onDisconnect so a host who
+     * vanishes marks the game abandoned instead of stranding the guest.
+     */
     fun createGame(
-        code: String, hostName: String,
-        mode: GameMode, category: String, difficulty: Difficulty
+        hostName: String, mode: GameMode, difficulty: Difficulty,
+        attempt: Int = 0,
+        onResult: (code: String?, error: String?) -> Unit
     ) {
-        gameRef(code).setValue(mapOf(
-            "mode" to mode.name, "category" to category, "difficulty" to difficulty.name,
-            "hostName" to hostName, "guestName" to "", "status" to "waiting",
-            "puzzle" to "", "inputs" to mapOf<String, String>(),
-            "turn" to 0, "hostScore" to 0, "guestScore" to 0,
-            "vindPhase" to VindicativePhase.PICK_OWN.name,
-            "vindAssignedWordIdx" to -1, "vindCurrentPlayer" to 0, "solved" to false
-        ))
+        val code = generateCode()
+        val uid  = myUid
+        gameRef(code).runTransaction(object : Transaction.Handler {
+            override fun doTransaction(current: MutableData): Transaction.Result {
+                if (current.value != null) return Transaction.abort()
+                current.value = mapOf(
+                    "mode" to mode.name, "category" to "", "difficulty" to difficulty.name,
+                    "hostName" to hostName, "hostUid" to (uid ?: ""),
+                    "guestName" to "", "guestUid" to "",
+                    "status" to STATUS_WAITING, "createdAt" to ServerValue.TIMESTAMP,
+                    "puzzle" to "", "inputs" to mapOf<String, String>(),
+                    "turn" to 0, "hostScore" to 0, "guestScore" to 0,
+                    "vindPhase" to VindicativePhase.PICK_OWN.name,
+                    "vindAssignedWordIdx" to -1, "vindCurrentPlayer" to 0, "solved" to false
+                )
+                return Transaction.success(current)
+            }
+            override fun onComplete(error: DatabaseError?, committed: Boolean, snap: DataSnapshot?) {
+                when {
+                    error != null      -> onResult(null, "Couldn't create the game (${error.message}).")
+                    !committed && attempt < 4 -> createGame(hostName, mode, difficulty, attempt + 1, onResult)
+                    !committed         -> onResult(null, "Couldn't create a game code. Try again.")
+                    else -> {
+                        gameRef(code).child("status").onDisconnect().setValue(STATUS_ABANDONED)
+                        onResult(code, null)
+                    }
+                }
+            }
+        })
     }
 
+    /**
+     * Claims the guest seat atomically: the transaction only succeeds if the game
+     * exists, is still waiting, and has no guest — so two phones entering the same
+     * code can't both join.
+     */
     fun joinGame(
         code: String, guestName: String,
         onSuccess: (mode: String, category: String, difficulty: String, hostName: String) -> Unit,
         onError: (String) -> Unit
     ) {
-        gameRef(code).get()
-            .addOnSuccessListener { snap ->
-                if (!snap.exists()) { onError("Game not found. Check the code."); return@addOnSuccessListener }
-                val status = snap.child("status").getValue(String::class.java) ?: ""
-                if (status != "waiting") { onError("Game already started."); return@addOnSuccessListener }
-                val existing = snap.child("guestName").getValue(String::class.java) ?: ""
-                if (existing.isNotEmpty()) { onError("Game is full."); return@addOnSuccessListener }
-                gameRef(code).child("guestName").setValue(guestName)
-                onSuccess(
-                    snap.child("mode").getValue(String::class.java) ?: "TEAM",
-                    snap.child("category").getValue(String::class.java) ?: "",
-                    snap.child("difficulty").getValue(String::class.java) ?: "MEDIUM",
-                    snap.child("hostName").getValue(String::class.java) ?: ""
-                )
+        val uid = myUid ?: ""
+        var reason = "That game is no longer available."
+        gameRef(code).runTransaction(object : Transaction.Handler {
+            override fun doTransaction(current: MutableData): Transaction.Result {
+                // First call may see an empty local cache; pass it through unchanged so the
+                // server re-runs the handler with real data (or confirms the node is absent).
+                if (current.value == null) return Transaction.success(current)
+                val status = current.child("status").getValue(String::class.java) ?: ""
+                if (status != STATUS_WAITING) { reason = "That game has already started or ended."; return Transaction.abort() }
+                val existing = current.child("guestName").getValue(String::class.java) ?: ""
+                if (existing.isNotEmpty()) { reason = "That game is already full."; return Transaction.abort() }
+                current.child("guestName").value = guestName
+                current.child("guestUid").value  = uid
+                return Transaction.success(current)
             }
-            .addOnFailureListener { onError("Connection error. Try again.") }
+            override fun onComplete(error: DatabaseError?, committed: Boolean, snap: DataSnapshot?) {
+                when {
+                    error != null -> onError("Connection error. Try again.")
+                    !committed || snap == null -> onError(reason)
+                    snap.child("guestUid").getValue(String::class.java) != uid ||
+                        snap.child("guestName").getValue(String::class.java) != guestName ->
+                        onError("Game not found. Check the code.")
+                    else -> {
+                        gameRef(code).child("status").onDisconnect().setValue(STATUS_ABANDONED)
+                        onSuccess(
+                            snap.child("mode").getValue(String::class.java) ?: "TEAM",
+                            snap.child("category").getValue(String::class.java) ?: "",
+                            snap.child("difficulty").getValue(String::class.java) ?: "MEDIUM",
+                            snap.child("hostName").getValue(String::class.java) ?: ""
+                        )
+                    }
+                }
+            }
+        })
     }
 
     fun writePuzzle(code: String, words: List<PlacedWord>) {
-        val serial = words.joinToString("|") {
-            "${it.word}§${it.clue}§${it.startX}§${it.startY}§${it.isHorizontal}§${it.number}"
-        }
-        gameRef(code).updateChildren(mapOf("puzzle" to serial, "status" to "playing"))
+        gameRef(code).updateChildren(mapOf("puzzle" to SessionCodec.encodeWords(words), "status" to STATUS_PLAYING))
     }
 
-    fun parsePuzzle(raw: String): List<PlacedWord> {
-        if (raw.isBlank()) return emptyList()
-        return raw.split("|").mapNotNull { part ->
-            val p = part.split("§")
-            if (p.size >= 6) runCatching {
-                PlacedWord(p[0], p[1], p[2].toInt(), p[3].toInt(), p[4].toBoolean(), p[5].toInt())
-            }.getOrNull() else null
-        }
-    }
+    fun parsePuzzle(raw: String): List<PlacedWord> = SessionCodec.decodeWords(raw)
 
     fun writeInput(code: String, x: Int, y: Int, char: Char) {
         gameRef(code).child("inputs").child("${x}_${y}").setValue(char.toString())
@@ -877,16 +905,14 @@ object FirebaseGameManager {
         gameRef(code).updateChildren(updates)
     }
 
-    fun listen(code: String, onUpdate: (DataSnapshot) -> Unit): ValueEventListener {
+    fun listen(code: String, onUpdate: (DataSnapshot) -> Unit, onError: (String) -> Unit): ValueEventListener {
         val listener = object : ValueEventListener {
             override fun onDataChange(snap: DataSnapshot) { onUpdate(snap) }
             override fun onCancelled(e: DatabaseError) {
-                // Was a silent empty body — permission failures, network errors,
-                // and rule rejections were undetectable. Log so adb logcat shows
-                // them during testing; user-facing toast is intentionally not
-                // added here (would interrupt gameplay for transient errors).
-                android.util.Log.w("CrosswordFirebase",
-                    "Listener cancelled for game $code: ${e.message}", e.toException())
+                android.util.Log.w("CrosswordFirebase", "Listener cancelled for game $code: ${e.message}", e.toException())
+                onError(if (e.code == DatabaseError.PERMISSION_DENIED)
+                    "The game server refused access to this game."
+                else "Lost connection to the game.")
             }
         }
         gameRef(code).addValueEventListener(listener)
@@ -897,8 +923,16 @@ object FirebaseGameManager {
         gameRef(code).removeEventListener(listener)
     }
 
+    /** Normal end: cancel the abandon-on-disconnect hook, then mark the game complete. */
     fun closeGame(code: String) {
-        gameRef(code).child("status").setValue("complete")
+        gameRef(code).child("status").onDisconnect().cancel()
+        gameRef(code).child("status").setValue(STATUS_COMPLETE)
+    }
+
+    /** A player left mid-game: tell the other device. */
+    fun abandonGame(code: String) {
+        gameRef(code).child("status").onDisconnect().cancel()
+        gameRef(code).child("status").setValue(STATUS_ABANDONED)
     }
 }
 
@@ -1003,7 +1037,7 @@ fun CrosswordApp() {
     var activeDifficulty by rememberSaveable(
         stateSaver = listSaver(save = { listOf(it.name) }, restore = { Difficulty.valueOf(it[0]) })
     ) { mutableStateOf(Difficulty.MEDIUM) }
-    var resumePrompt by remember { mutableStateOf<Pair<String,Difficulty>?>(null) }
+    var resumePrompt by remember { mutableStateOf<SaveSlot?>(null) }
     var difficultyPickCategory by remember { mutableStateOf<String?>(null) }
     var showSettings      by remember { mutableStateOf(false) }
     var showColorPicker   by remember { mutableStateOf(false) }
@@ -1096,27 +1130,387 @@ fun CrosswordApp() {
 
     // ── DAILY ─────────────────────────────────────────────────────────────────
     var isDailyPuzzle       by rememberSaveable { mutableStateOf(false) }
-    var dailyEntries        by remember { mutableStateOf(emptyList<RawEntry>()) }
+    // Date key (yyyy-MM-dd, UTC) of the Daily being played; null for every other puzzle.
+    // Drives the Daily save slot, the once-per-day reward, and Next Puzzle behaviour.
+    var activeDailyKey      by rememberSaveable { mutableStateOf<String?>(null) }
+    // Mode selected on the home screen before a Daily was started (Daily is always solo).
+    var modeBeforeDaily     by rememberSaveable(
+        stateSaver = listSaver(save = { listOf(it.name) }, restore = { GameMode.valueOf(it[0]) })
+    ) { mutableStateOf(GameMode.SINGLE) }
+    var revealedCells       by remember { mutableStateOf<Set<Pair<Int, Int>>>(emptySet()) }   // hint letters
+    var teamP2Hints         by rememberSaveable { mutableIntStateOf(0) }
+    var teamFirstPlayer     by rememberSaveable { mutableIntStateOf(0) }   // "who goes first" for Team
+    var appResumed          by remember { mutableStateOf(true) }           // Activity in foreground
+    var onlineNotice        by remember { mutableStateOf<String?>(null) }  // blocking online message
+    var dailyInfoMessage    by remember { mutableStateOf<String?>(null) }
+    var homeRefresh         by remember { mutableIntStateOf(0) }           // bump to re-read saves on home
+    var showResults         by remember { mutableStateOf(false) }          // results card (after confetti)
+    var lastResult          by remember { mutableStateOf<PuzzleResult?>(null) }
+    var turnDialogTitle     by remember { mutableStateOf("Pass the Phone!") }
+    var wrongAnswererIndex  by remember { mutableIntStateOf(0) }
 
+    // derivedStateOf means this only recomputes when gridCells or userInputs
+    // actually change — not on every recomposition (e.g. while typing in dialog).
+    val isWinner by remember { derivedStateOf {
+        gridCells.isNotEmpty() && gridCells.all { cell ->
+            userInputs[Pair(cell.x, cell.y)] == cell.char
+        }
+    }}
+
+    // ── STATE HELPERS ─────────────────────────────────────────────────────────
+    // Player index of THIS device: online HOST = 0, GUEST = 1. Offline the
+    // logged-in player is index 0 and Player 2 is index 1.
+    fun myIndex(): Int = if (isOnlineGame && onlineRole == OnlineRole.GUEST) 1 else 0
+
+    fun vindSnapshot() = VindState(
+        vindPhase, vindCurrentPlayer, vindP1Score, vindP2Score,
+        vindAssignedWord?.let { placedWords.indexOf(it) } ?: -1
+    )
+    fun applyVind(s: VindState) {
+        vindPhase         = s.phase
+        vindCurrentPlayer = s.currentPlayer
+        vindP1Score       = s.p1Score
+        vindP2Score       = s.p2Score
+        vindAssignedWord  = placedWords.getOrNull(s.assignedIndex)
+    }
+    fun teamSnapshot() = TeamState(teamP1Score, teamP2Score, teamCurrentPlayer, teamP1Hints, teamP2Hints)
+    fun applyTeam(s: TeamState) {
+        teamP1Score = s.p1Correct; teamP2Score = s.p2Correct
+        teamCurrentPlayer = s.turn
+        teamP1Hints = s.p1Hints; teamP2Hints = s.p2Hints
+    }
+
+    /** Snapshot of the puzzle in progress, or null when there is nothing resumable. */
+    fun currentSession(): PuzzleSession? {
+        if (placedWords.isEmpty() || isGenerating || puzzleSolved || isOnlineGame) return null
+        val isDaily = activeDailyKey != null
+        return PuzzleSession(
+            mode           = if (isDaily) GameMode.DAILY else activeGameMode,
+            category       = activeCategory,
+            difficulty     = activeDifficulty,
+            words          = placedWords,
+            inputs         = userInputs,
+            revealed       = revealedCells,
+            combined       = combinedCategories,
+            dailyKey       = activeDailyKey,
+            elapsedSeconds = elapsedSeconds,
+            hintsUsed      = hintsUsedThisPuzzle,
+            streak         = currentStreak,
+            player2        = if (activeGameMode == GameMode.TEAM || activeGameMode == GameMode.VINDICTIVE) player2Name else "",
+            team           = teamSnapshot(),
+            vind           = vindSnapshot(),
+            vindTimerSecs  = vindTimerSeconds,
+            bgArgb         = currentBgColor.toArgb(),
+            bgImage        = currentBgImageName
+        )
+    }
+
+    /** Persists the puzzle in progress to its own mode-specific slot. No-op for online/solved games. */
+    fun saveCurrentPuzzle() {
+        if (playerName.isBlank()) return
+        currentSession()?.let { saveManager.savePuzzle(playerName, it) }
+    }
+
+    fun currentSlot(): SaveSlot =
+        activeDailyKey?.let { SaveSlot.daily(it) }
+            ?: SaveSlot(if (activeGameMode == GameMode.DAILY) GameMode.SINGLE else activeGameMode, activeCategory, activeDifficulty)
+
+    fun resetOverlays() {
+        showConfetti = false; showResults = false; showTurnDialog = false
+        vindPassDialogVisible = false; pendingTurnDialog = false; wordToInput = null
+        showWrongFlash = false; streakMilestone = null
+    }
+
+    // Releases all online-game state. The Firebase listener itself is torn down by
+    // the LaunchedEffect keyed on (onlineCode, isOnlineGame) as soon as
+    // isOnlineGame flips false. Leaving an unfinished game marks it abandoned so
+    // the other device is told instead of waiting forever. Idempotent.
+    fun cleanupOnlineSession() {
+        if (isOnlineGame && onlineCode.isNotEmpty()) {
+            val code  = onlineCode
+            val field = if (onlineRole == OnlineRole.HOST) "p0answering" else "p1answering"
+            runCatching { FirebaseGameManager.writeState(code, mapOf(field to false)) }
+            runCatching {
+                if (puzzleSolved) FirebaseGameManager.closeGame(code) else FirebaseGameManager.abandonGame(code)
+            }
+        }
+        onlineListener?.let { listener ->
+            if (onlineCode.isNotEmpty()) FirebaseGameManager.stopListening(onlineCode, listener)
+        }
+        onlineListener = null
+        if (isOnlineGame) player2Name = ""   // the online opponent isn't a local Player 2
+        isOnlineGame = false
+        onlineRole   = null
+        onlineCode   = ""
+        onlineStatus = ""
+        remoteInputs = emptyMap()
+        remoteIsAnswering   = false
+        remoteAnsweringName = ""
+    }
+
+    fun restoreSession(s: PuzzleSession) {
+        activeGameMode     = if (s.isDaily) GameMode.DAILY else s.mode
+        activeCategory     = s.category
+        activeDifficulty   = s.difficulty
+        combinedCategories = s.combined
+        activeDailyKey     = s.dailyKey
+        isDailyPuzzle      = s.isDaily
+        placedWords        = s.words
+        gridCells          = buildGridCells(s.words)
+        userInputs         = s.inputs
+        revealedCells      = s.revealed
+        elapsedSeconds     = s.elapsedSeconds
+        hintsUsedThisPuzzle = s.hintsUsed
+        currentStreak      = s.streak
+        if (s.player2.isNotBlank()) player2Name = s.player2
+        applyTeam(s.team)
+        applyVind(s.vind)
+        vindTimerSeconds   = s.vindTimerSecs
+        currentBgColor     = Color(s.bgArgb)
+        currentBgImageName = s.bgImage
+        selectedHintWord   = null
+        highlightedWord    = null
+        resetOverlays()
+        puzzleSolved       = false
+        isGenerating       = false
+        timerRunning       = true
+        appMode            = AppMode.DASHBOARD
+        // A Vindictive save taken while a clue was waiting resumes at the hand-off,
+        // so the answer timer restarts only once the right player has the phone.
+        if (s.mode == GameMode.VINDICTIVE && s.vind.phase == VindicativePhase.OPPONENT_WAIT) {
+            val who = if (s.vind.currentPlayer == 0) playerName else player2Name
+            turnDialogMessage = "✋ $who — your clue is waiting!"
+            showTurnDialog = true
+        }
+    }
+
+    /** Resumes a saved slot. Returns false (and drops the unreadable save) if it can't be loaded. */
+    fun resumeSlot(slot: SaveSlot): Boolean {
+        val s = saveManager.loadPuzzle(playerName, slot)
+        if (s == null) { saveManager.clearPuzzle(playerName, slot); homeRefresh++; return false }
+        if (isOnlineGame) cleanupOnlineSession()
+        restoreSession(s)
+        return true
+    }
+
+    fun launchPuzzle(category: String, difficulty: Difficulty, combined: List<String> = emptyList()) {
+        if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
+        activeCategory     = category
+        activeDifficulty   = difficulty
+        combinedCategories = combined
+        activeDailyKey     = null
+        isDailyPuzzle      = false
+        resetOverlays()
+        appMode            = AppMode.DASHBOARD
+        puzzleSolved       = false
+        if (!isOnlineGame && activeGameMode != GameMode.SINGLE && player2Name.isNotBlank()) {
+            saveManager.ensurePlayer(player2Name)
+        }
+        isGenerating = true
+    }
+
+    fun launchDailyPuzzle() {
+        val now = System.currentTimeMillis()
+        val key = DailyPuzzle.dateKey(now)
+        if (playerName.isNotBlank() && saveManager.isDailyCompleted(playerName, key)) {
+            val hrs  = DailyPuzzle.millisUntilNext(now) / 3_600_000L
+            val mins = (DailyPuzzle.millisUntilNext(now) / 60_000L) % 60
+            dailyInfoMessage = "You've already solved today's Daily Puzzle. A new one arrives in " +
+                (if (hrs > 0) "${hrs}h ${mins}m." else "${mins}m.")
+            return
+        }
+        if (isOnlineGame) cleanupOnlineSession()
+        if (activeGameMode != GameMode.DAILY) modeBeforeDaily = activeGameMode
+        val slot = SaveSlot.daily(key)
+        if (saveManager.hasSave(playerName, slot) && resumeSlot(slot)) return
+        activeGameMode     = GameMode.DAILY
+        activeDailyKey     = key
+        isDailyPuzzle      = true
+        activeCategory     = DailyPuzzle.CATEGORY
+        activeDifficulty   = Difficulty.EXPERT
+        combinedCategories = emptyList()
+        resetOverlays()
+        appMode            = AppMode.DASHBOARD
+        puzzleSolved       = false
+        isGenerating       = true
+    }
+
+    /** Leave the puzzle screen for home, saving progress (solo/local modes) first. */
+    fun goHome() {
+        timerRunning = false
+        saveCurrentPuzzle()
+        cleanupOnlineSession()
+        resetOverlays()
+        puzzleSolved = false
+        if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
+        activeDailyKey = null
+        isDailyPuzzle  = false
+        homeRefresh++
+        appMode = AppMode.CATEGORY_SELECT
+    }
+
+    // ── ANSWER / TURN HANDLING ───────────────────────────────────────────────
+    // All scoring goes through core TeamRules / VindictiveRules; this layer only
+    // renders feedback and syncs the result.
+    fun nameOf(idx: Int): String =
+        if (isOnlineGame && onlineRole == OnlineRole.GUEST) (if (idx == 0) player2Name else playerName)
+        else (if (idx == 0) playerName else player2Name)
+
+    fun commitWord(word: PlacedWord) {
+        val cells = word.cells()
+        userInputs = userInputs + cells.mapIndexed { i, c -> c to word.word[i] }
+        if (isOnlineGame) cells.forEachIndexed { i, c -> FirebaseGameManager.writeInput(onlineCode, c.first, c.second, word.word[i]) }
+        cellsToAnimate = cells
+    }
+
+    fun onCorrectFeedback() {
+        if (soundEnabled) SoundPlayer.playCorrect()
+        vibrateCorrect(context)
+        currentStreak++
+        checkStreakMilestone(currentStreak)?.let { milestone ->
+            streakMilestone = milestone
+            if (soundEnabled) SoundPlayer.playClap()
+        }
+    }
+
+    fun onWrongFeedback(answererIndex: Int) {
+        if (soundEnabled) SoundPlayer.playWrong()
+        vibrateWrong(context)
+        currentStreak = 0
+        wrongAnswererIndex = answererIndex
+        tauntIndex.intValue++
+        showWrongFlash = true
+    }
+
+    fun syncVind(extra: Map<String, Any> = emptyMap()) {
+        if (!isOnlineGame) return
+        val s = vindSnapshot()
+        val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
+        val myVal = if (onlineRole == OnlineRole.HOST) s.p1Score else s.p2Score
+        FirebaseGameManager.writeState(onlineCode, mapOf(
+            "vindPhase"           to s.phase.name,
+            "vindAssignedWordIdx" to s.assignedIndex,
+            "vindCurrentPlayer"   to s.currentPlayer,
+            myKey                 to myVal
+        ) + extra)
+    }
+
+    fun submitAnswer(word: PlacedWord, answer: String) {
+        val correct = answer == word.word
+        when (activeGameMode) {
+            GameMode.VINDICTIVE -> {
+                val before = vindSnapshot()
+                val actor  = before.currentPlayer
+                val (after, outcome) = when (before.phase) {
+                    VindicativePhase.PICK_OWN      -> VindictiveRules.onOwnAnswer(before, correct)
+                    VindicativePhase.OPPONENT_WAIT -> VindictiveRules.onAssignedAnswer(before, correct)
+                    VindicativePhase.ASSIGN_CLUE   -> return   // assigning never goes through the answer box
+                }
+                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(actor)
+                applyVind(after)
+                syncVind(mapOf("vindCountdown" to 0))
+                // Same player keeps the phone to pick a clue for the other — say so, don't say "pass".
+                if (!isOnlineGame && before.phase == VindicativePhase.OPPONENT_WAIT) {
+                    val who  = nameOf(actor)
+                    val line = if (outcome == VindOutcome.ASSIGNED_CORRECT) "✅ Correct! +${Economy.VIND_ASSIGNED_CORRECT} for $who"
+                               else "❌ Wrong! ${Economy.VIND_ASSIGNED_WRONG} for $who"
+                    turnDialogTitle   = "$who picks next"
+                    turnDialogMessage = "$line\n$who now picks a clue for ${nameOf(1 - actor)}.\n" +
+                        "${nameOf(0)}: ${vindP1Score} pts  |  ${nameOf(1)}: ${vindP2Score} pts"
+                    if (correct) showTurnDialog = true else pendingTurnDialog = true
+                }
+            }
+            GameMode.TEAM -> {
+                val before = teamSnapshot()
+                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(before.turn)
+                val after = TeamRules.onAttempt(before, correct)
+                applyTeam(after)
+                if (isOnlineGame) {
+                    val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
+                    val myVal = if (onlineRole == OnlineRole.HOST) after.p1Correct else after.p2Correct
+                    FirebaseGameManager.writeState(onlineCode, mapOf("turn" to after.turn, myKey to myVal))
+                } else {
+                    turnDialogTitle   = "Pass the Phone!"
+                    turnDialogMessage = (if (correct) "✅ Nice one, ${nameOf(before.turn)}!" else "❌ Not quite, ${nameOf(before.turn)}.") +
+                        "\n✋ Pass to ${nameOf(after.turn)}\n" +
+                        "${nameOf(0)}: ${after.p1Correct} solved  |  ${nameOf(1)}: ${after.p2Correct} solved"
+                    if (correct) showTurnDialog = true else pendingTurnDialog = true
+                }
+            }
+            GameMode.SINGLE, GameMode.DAILY -> {
+                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(0)
+            }
+        }
+        wordToInput     = null
+        highlightedWord = null
+        inputText       = ""
+    }
+
+    /** Vindictive: the acting player hands [word] to the opponent. */
+    fun assignClue(word: PlacedWord) {
+        val idx = placedWords.indexOf(word)
+        if (idx < 0 || isWordSolved(word, userInputs)) return
+        val after = VindictiveRules.onAssign(vindSnapshot(), idx)
+        applyVind(after)
+        vindPassDialogVisible = false
+        vindOpponentCountdown = vindTimerSeconds
+        inputText = ""
+        syncVind(mapOf("vindCountdown" to vindTimerSeconds))
+        if (!isOnlineGame) {
+            turnDialogTitle   = "Pass the Phone!"
+            turnDialogMessage = "✋ Pass to ${nameOf(after.currentPlayer)}!\n" +
+                "A clue is waiting — the ${vindTimerSeconds}s timer starts when they tap I'm Ready."
+            showTurnDialog = true
+        }
+    }
+
+    /** Vindictive: the answerer passes on the assigned clue (−1, per the tutorial). */
+    fun passAssigned() {
+        val before = vindSnapshot()
+        if (before.phase != VindicativePhase.OPPONENT_WAIT) return
+        val who = nameOf(before.currentPlayer)
+        val (after, _) = VindictiveRules.onPass(before)
+        applyVind(after)
+        vindPassDialogVisible = false
+        wordToInput = null
+        inputText   = ""
+        syncVind(mapOf("vindCountdown" to 0))
+        if (!isOnlineGame) {
+            turnDialogTitle   = "$who picks next"
+            turnDialogMessage = "⏭ $who passed (${Economy.VIND_PASS})\n$who now picks a clue for ${nameOf(1 - before.currentPlayer)}.\n" +
+                "${nameOf(0)}: ${vindP1Score} pts  |  ${nameOf(1)}: ${vindP2Score} pts"
+            showTurnDialog = true
+        }
+    }
+
+    /** Vindictive: answer timer ran out on the answering device — offer Answer It / Pass. */
+    fun onVindTimeout() {
+        vindOpponentCountdown = 0
+        wordToInput = null            // typed text is kept in inputText for "Answer It"
+        vindPassDialogVisible = true
+        if (soundEnabled) SoundPlayer.playWrong()
+        vibrateWrong(context)
+        if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("vindCountdown" to 0))
+    }
+
+    // ── STARTUP ───────────────────────────────────────────────────────────────
     // Lock to portrait permanently — crossword grid only works in portrait.
     // Suppress lint: orientation lock is intentional for this game.
     @Suppress("SourceLockedOrientationActivity")
     LaunchedEffect(Unit) {
         (context as? Activity)?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         AmbientMusicPlayer.init(context)
-        FirebaseGameManager.signInAnonymously {}   // sign in silently; no-op if already signed in
+        // Firebase sign-in is deferred until the player actually hosts or joins —
+        // a purely offline session never touches the network.
         profileList = saveManager.getAllPlayerNames()
         if (saveManager.isFirstLaunch()) {
             showHowToPlay = true
             saveManager.markLaunched()
         }
-        // Try the renamed file first, fall back to the original name
-        // so the app works whether or not test.csv has been renamed yet
-        val raw = loadCsv(context, "word-hints.csv").ifEmpty {
-            loadCsv(context, "test.csv")
-        }
-        allEntries = raw
-        categories = raw.map { it.category }.distinct().sorted()
+        // Asset I/O and validation off the main thread.
+        val data = withContext(Dispatchers.IO) { loadWordData(context) }
+        allEntries = data.entries
+        categories = data.categories
 
         // Discover background images from assets — runs once at startup
         bgImagePool = withContext(Dispatchers.IO) { discoverBgImages(context) }
@@ -1129,108 +1523,121 @@ fun CrosswordApp() {
             currentCellColorArgb = saveManager.getCellColorArgb(playerName)
             currentBtnColorArgb  = saveManager.getButtonColorArgb(playerName)
             musicVolume = saveManager.getMusicVolume()
-            appMode = AppMode.CATEGORY_SELECT
+            // The Activity was recreated mid-puzzle (process death, theme change):
+            // the grid lives in memory, but it was autosaved on pause — resume it.
+            val needsRestore = appMode == AppMode.DASHBOARD && placedWords.isEmpty()
+            val restored = needsRestore &&
+                saveManager.getInProgressPuzzles(playerName).firstOrNull()?.let { resumeSlot(it) } == true
+            if (!restored && (appMode == AppMode.LOGIN || needsRestore)) appMode = AppMode.CATEGORY_SELECT
+        } else {
+            appMode = AppMode.LOGIN
         }
     }
 
-    // derivedStateOf means this only recomputes when gridCells or userInputs
-    // actually change — not on every recomposition (e.g. while typing in dialog).
-    val isWinner by remember { derivedStateOf {
-        gridCells.isNotEmpty() && gridCells.all { cell ->
-            userInputs[Pair(cell.x, cell.y)] == cell.char
-        }
-    }}
-
+    // ── COMPLETION ────────────────────────────────────────────────────────────
     LaunchedEffect(isWinner) {
-        if (isWinner && !puzzleSolved && !isGenerating) {
-            puzzleSolved = true
-            timerRunning = false
-            showConfetti = true
-            if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("solved" to true))
-            // Clear any lingering multiplayer dialogs so complete screen is unobstructed
-            showTurnDialog = false
-            vindPassDialogVisible = false
-            pendingTurnDialog = false
-            wordToInput = null
-            if (soundEnabled) SoundPlayer.playCelebration()
+        if (!isWinner || puzzleSolved || isGenerating) return@LaunchedEffect
+        puzzleSolved = true
+        timerRunning = false
+        if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("solved" to true))
+        // Clear any lingering multiplayer dialogs so complete screen is unobstructed
+        showTurnDialog = false
+        vindPassDialogVisible = false
+        pendingTurnDialog = false
+        wordToInput = null
 
-            val pts = if (isDailyPuzzle) 20 else pointsForDifficulty(activeDifficulty)
-            val netPts = (pts - hintsUsedThisPuzzle).coerceAtLeast(0)
+        val dailyKey = activeDailyKey
+        val isDaily  = dailyKey != null
+        val hints    = hintsUsedThisPuzzle
+        val reward   = Economy.completionPoints(activeDifficulty, isDaily)
+        val net      = Economy.netPoints(activeDifficulty, isDaily, hints)
+        // The Daily pays out once per UTC day.
+        val dailyAlreadyPaid = dailyKey != null && saveManager.isDailyCompleted(playerName, dailyKey)
+        val award    = if (dailyAlreadyPaid) 0 else Economy.lifetimeAwardOnWin(activeDifficulty, isDaily)
+        // Online, each device credits only its own player; the opponent is credited on their phone.
+        val creditP2 = !isOnlineGame && player2Name.isNotBlank() && player2Name != playerName
+        // Credit each word to its real source category (combined puzzles). Daily words
+        // never enter per-category history, so playing a Daily can't reshape future puzzles.
+        val wordsByCategory: Map<String, List<String>> = if (isDaily) emptyMap() else
+            placedWords.groupBy(
+                { w -> w.category.ifBlank {
+                    if (combinedCategories.isEmpty()) activeCategory
+                    else allEntries.firstOrNull { it.answer == w.word && it.category in combinedCategories }?.category
+                        ?: activeCategory
+                } },
+                { it.word }
+            )
+        fun creditWords(name: String) = wordsByCategory.forEach { (cat, ws) -> saveManager.addUsedWords(name, cat, ws) }
 
-            when (activeGameMode) {
-                GameMode.SINGLE, GameMode.DAILY -> {
-                    saveManager.addScore(playerName, netPts)
-                    saveManager.addCompleted(playerName)
-                    saveManager.addUsedWords(playerName, activeCategory, placedWords.map { it.word })
-                    saveManager.clearPuzzle(playerName, activeCategory, activeDifficulty)
-                    saveManager.clearElapsed(playerName, activeCategory, activeDifficulty)
-                    // Save stat record
-                    val diffLabel = if (isDailyPuzzle) "DAILY" else activeDifficulty.name
-                    saveManager.saveStat(playerName, StatRecord(
-                        activeCategory, diffLabel, activeGameMode.name,
-                        hintsUsedThisPuzzle, elapsedSeconds, netPts))
-                }
-                GameMode.TEAM -> {
-                    // Both players get full points. Guard against same-name double-credit
-                    // (player typed their own name as Player 2, or two profiles share a name).
-                    val sameName = player2Name.isNotBlank() && player2Name == playerName
-                    saveManager.addScore(playerName, netPts)
-                    saveManager.addCompleted(playerName)
-                    if (player2Name.isNotBlank() && !sameName) {
-                        saveManager.addScore(player2Name, netPts)
-                        saveManager.addCompleted(player2Name)
-                        saveManager.addUsedWords(player2Name, activeCategory, placedWords.map { it.word })
-                    }
-                    saveManager.addUsedWords(playerName, activeCategory, placedWords.map { it.word })
-                    saveManager.clearPuzzle(playerName, activeCategory, activeDifficulty)
-                    saveManager.clearElapsed(playerName, activeCategory, activeDifficulty)
-                    // Each player's stat shows their own hint count
-                    saveManager.saveStat(playerName, StatRecord(
-                        activeCategory, activeDifficulty.name, "TEAM",
-                        teamP1Hints, elapsedSeconds, netPts, player2Name))
-                    if (player2Name.isNotBlank() && !sameName) {
-                        saveManager.saveStat(player2Name, StatRecord(
-                            activeCategory, activeDifficulty.name, "TEAM",
-                            0, elapsedSeconds, netPts, playerName))   // hint tracking per-player TBD
-                    }
-                }
-                GameMode.VINDICTIVE -> {
-                    // Vindictive scoring is accumulated during play. On completion,
-                    // bank the per-player score as their contribution to lifetime score
-                    // (clamped at zero), credit a completed-puzzle to both, and write a
-                    // stat record for each side with the head-to-head outcome.
-                    val p1Award = vindP1Score.coerceAtLeast(0)
-                    val p2Award = vindP2Score.coerceAtLeast(0)
-                    val sameName = player2Name.isNotBlank() && player2Name == playerName
-                    saveManager.addScore(playerName, p1Award)
-                    saveManager.addCompleted(playerName)
-                    saveManager.addUsedWords(playerName, activeCategory, placedWords.map { it.word })
-                    if (player2Name.isNotBlank() && !sameName) {
-                        saveManager.addScore(player2Name, p2Award)
-                        saveManager.addCompleted(player2Name)
-                        saveManager.addUsedWords(player2Name, activeCategory, placedWords.map { it.word })
-                    }
-                    saveManager.clearPuzzle(playerName, activeCategory, activeDifficulty)
-                    saveManager.clearElapsed(playerName, activeCategory, activeDifficulty)
-                    // Ties count as a win for both players so the StatsScreen doesn't
-                    // unfairly mark a tie as DEMOLISHED.
-                    val p1Won = vindP1Score >= vindP2Score
-                    val p2Won = vindP2Score >= vindP1Score
-                    saveManager.saveStat(playerName, StatRecord(
-                        activeCategory, activeDifficulty.name, "VINDICTIVE",
-                        hintsUsedThisPuzzle, elapsedSeconds, vindP1Score,
-                        player2Name, vindP2Score, p1Won))
-                    if (player2Name.isNotBlank() && !sameName) {
-                        saveManager.saveStat(player2Name, StatRecord(
-                            activeCategory, activeDifficulty.name, "VINDICTIVE",
-                            0, elapsedSeconds, vindP2Score,
-                            playerName, vindP1Score, p2Won))
-                    }
+        saveManager.clearPuzzle(playerName, currentSlot())
+        val me    = myIndex()
+        val team  = teamSnapshot()
+        val vind  = vindSnapshot()
+
+        when (activeGameMode) {
+            GameMode.SINGLE, GameMode.DAILY -> {
+                saveManager.addScore(playerName, award)
+                saveManager.addCompleted(playerName)
+                creditWords(playerName)
+                if (dailyKey != null) saveManager.markDailyCompleted(playerName, dailyKey)
+                saveManager.saveStat(playerName, StatRecord(
+                    if (isDaily) DailyPuzzle.CATEGORY else activeCategory,
+                    if (isDaily) "DAILY" else activeDifficulty.name,
+                    if (isDaily) GameMode.DAILY.name else GameMode.SINGLE.name,
+                    hints, elapsedSeconds, net))
+            }
+            GameMode.TEAM -> {
+                // Both players earn the full reward.
+                saveManager.addScore(playerName, award)
+                saveManager.addCompleted(playerName)
+                creditWords(playerName)
+                val myHints    = if (isOnlineGame) hints else team.p1Hints
+                saveManager.saveStat(playerName, StatRecord(
+                    activeCategory, activeDifficulty.name, GameMode.TEAM.name,
+                    myHints, elapsedSeconds, net, player2Name))
+                if (creditP2) {
+                    saveManager.addScore(player2Name, award)
+                    saveManager.addCompleted(player2Name)
+                    creditWords(player2Name)
+                    saveManager.saveStat(player2Name, StatRecord(
+                        activeCategory, activeDifficulty.name, GameMode.TEAM.name,
+                        team.p2Hints, elapsedSeconds, net, playerName))
                 }
             }
-            currentScore = saveManager.getScore(playerName)
-            currentCompleted = saveManager.getCompleted(playerName)
+            GameMode.VINDICTIVE -> {
+                // Match scores are banked (floored at 0). Ties count as a win for both.
+                val myScore    = if (me == 0) vind.p1Score else vind.p2Score
+                val otherScore = if (me == 0) vind.p2Score else vind.p1Score
+                saveManager.addScore(playerName, Economy.vindictiveBank(myScore))
+                saveManager.addCompleted(playerName)
+                creditWords(playerName)
+                saveManager.saveStat(playerName, StatRecord(
+                    activeCategory, activeDifficulty.name, GameMode.VINDICTIVE.name,
+                    hints, elapsedSeconds, myScore, player2Name, otherScore, myScore >= otherScore))
+                if (creditP2) {
+                    saveManager.addScore(player2Name, Economy.vindictiveBank(otherScore))
+                    saveManager.addCompleted(player2Name)
+                    creditWords(player2Name)
+                    saveManager.saveStat(player2Name, StatRecord(
+                        activeCategory, activeDifficulty.name, GameMode.VINDICTIVE.name,
+                        0, elapsedSeconds, otherScore, playerName, myScore, otherScore >= myScore))
+                }
+            }
         }
+        currentScore = saveManager.getScore(playerName)
+        currentCompleted = saveManager.getCompleted(playerName)
+        homeRefresh++
+        lastResult = PuzzleResult(
+            mode = activeGameMode, isDaily = isDaily, reward = reward, hints = hints, net = net,
+            awarded = if (activeGameMode == GameMode.VINDICTIVE) null else award,
+            dailyAlreadyPaid = dailyAlreadyPaid, seconds = elapsedSeconds,
+            team = team, vind = vind, myIndex = me
+        )
+        // Celebrate first; the results card follows once the confetti has had a moment.
+        showConfetti = true
+        if (soundEnabled) SoundPlayer.playCelebration()
+        delay(1100L)
+        showResults = true
     }
 
     // Start/stop ambient music based on enabled state and volume
@@ -1239,16 +1646,22 @@ fun CrosswordApp() {
         else AmbientMusicPlayer.stop()
     }
 
-    // Stop music when app is backgrounded; release only on activity destroy.
-    // The previous `onDispose { release() }` fired on every config change, which
-    // killed audio on rotation / theme change despite contradicting the
-    // documented "pauses on background" behavior.
+    // Lifecycle: pause music and the puzzle clock when backgrounded, autosave the
+    // puzzle so a process kill in the background loses nothing, and release the
+    // player only on destroy (not on config changes).
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_PAUSE   -> AmbientMusicPlayer.stop()
-                Lifecycle.Event.ON_RESUME  -> if (musicEnabled) AmbientMusicPlayer.start(musicVolume)
+                Lifecycle.Event.ON_PAUSE   -> {
+                    appResumed = false
+                    AmbientMusicPlayer.stop()
+                    saveCurrentPuzzle()
+                }
+                Lifecycle.Event.ON_RESUME  -> {
+                    appResumed = true
+                    if (musicEnabled) AmbientMusicPlayer.start(musicVolume)
+                }
                 Lifecycle.Event.ON_DESTROY -> AmbientMusicPlayer.release()
                 else -> {}
             }
@@ -1257,9 +1670,11 @@ fun CrosswordApp() {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Timer — ticks every second while puzzle is active
-    LaunchedEffect(timerRunning) {
-        while (timerRunning) {
+    // Timer — ticks only while a puzzle is actually being played: not in the
+    // background, not while the Settings sheet is covering the grid.
+    val timerActive = timerRunning && appResumed && !showSettings && appMode == AppMode.DASHBOARD
+    LaunchedEffect(timerActive) {
+        while (timerActive) {
             delay(1000L)
             elapsedSeconds++
         }
@@ -1295,24 +1710,26 @@ fun CrosswordApp() {
             // Show pending turn dialog AFTER flash clears so it doesn't cover the taunt
             if (pendingTurnDialog) {
                 pendingTurnDialog = false
-                showTurnDialog = true
+                if (!isOnlineGame) showTurnDialog = true
             }
         }
     }
 
-    // Confetti — auto-clear after 3 seconds
+    // Confetti — auto-clear after 4 seconds
     LaunchedEffect(showConfetti) {
         if (showConfetti) {
-            delay(3000L)
+            delay(4000L)
             showConfetti = false
         }
     }
 
-    // Daily prompt — shown once per login session on the first visit to the category screen
+    // Daily prompt — once per login session on the first visit home, and only
+    // if today's Daily hasn't been solved yet.
     LaunchedEffect(appMode) {
-        if (appMode == AppMode.CATEGORY_SELECT && !dailyPromptShown) {
+        if (appMode == AppMode.CATEGORY_SELECT && !dailyPromptShown && playerName.isNotBlank()) {
             dailyPromptShown = true
-            showDailyPrompt  = true
+            val today = DailyPuzzle.dateKey(System.currentTimeMillis())
+            if (!saveManager.isDailyCompleted(playerName, today)) showDailyPrompt = true
         }
     }
 
@@ -1331,7 +1748,8 @@ fun CrosswordApp() {
         }
     }
 
-    // Green cell highlight — auto-fade after 2 seconds (momentary indicator only)
+    // Green cell highlight — auto-fade after 2 seconds (momentary indicator only).
+    // The hint target (selectedHintWord) is NOT cleared with it.
     LaunchedEffect(highlightedWord) {
         if (highlightedWord != null) {
             delay(2000L)
@@ -1340,75 +1758,88 @@ fun CrosswordApp() {
     }
 
     // ── Firebase sync listener — active only during online games ─────────────
-    // Fires whenever any field in the game document changes on either device.
+    // Owned by this effect: it is registered for exactly (code) and removed in
+    // `finally` when the key changes or the game ends — no leaked listeners.
     LaunchedEffect(onlineCode, isOnlineGame) {
-        val prev = onlineListener
-        if (prev != null && onlineCode.isNotEmpty()) {
-            FirebaseGameManager.stopListening(onlineCode, prev)
-            onlineListener = null
-        }
         if (!isOnlineGame || onlineCode.isEmpty()) return@LaunchedEffect
-
-        val listener = FirebaseGameManager.listen(onlineCode) { snap ->
+        val code = onlineCode
+        val listener = FirebaseGameManager.listen(code, onUpdate = { snap ->
+            if (!isOnlineGame || onlineCode != code) return@listen
             val status  = snap.child("status").getValue(String::class.java) ?: return@listen
             val guestNm = snap.child("guestName").getValue(String::class.java) ?: ""
 
-            // HOST: guest just joined — signal isGenerating so the existing LaunchedEffect starts the puzzle
+            if (status == FirebaseGameManager.STATUS_ABANDONED && !puzzleSolved) {
+                val who = player2Name.ifBlank { if (onlineRole == OnlineRole.HOST) "Your opponent" else "The host" }
+                onlineNotice = "$who left the game."
+                return@listen
+            }
+
+            // HOST: guest just joined — generate and publish the puzzle.
             if (onlineRole == OnlineRole.HOST && appMode == AppMode.ONLINE_LOBBY && guestNm.isNotEmpty()) {
                 player2Name  = guestNm
                 onlineStatus = "$guestNm joined! Starting puzzle…"
-                isGenerating = true   // triggers the LaunchedEffect(isGenerating) which calls generateCrossword()
+                isGenerating = true
                 appMode      = AppMode.DASHBOARD
             }
 
             // GUEST: puzzle arrived — populate local state and jump into DASHBOARD
-            if (onlineRole == OnlineRole.GUEST && status == "playing") {
-                val rawPuzzle = snap.child("puzzle").getValue(String::class.java) ?: ""
-                val parsed    = FirebaseGameManager.parsePuzzle(rawPuzzle)
-                if (parsed.isNotEmpty() && appMode == AppMode.ONLINE_LOBBY) {
-                    placedWords    = parsed
-                    gridCells      = buildGridCells(parsed)
-                    userInputs     = emptyMap()
-                    elapsedSeconds = 0L
-                    timerRunning   = true
-                    isGenerating   = false
-                    puzzleSolved   = false
-                    appMode        = AppMode.DASHBOARD
+            if (onlineRole == OnlineRole.GUEST && status == FirebaseGameManager.STATUS_PLAYING &&
+                appMode == AppMode.ONLINE_LOBBY) {
+                val parsed = FirebaseGameManager.parsePuzzle(snap.child("puzzle").getValue(String::class.java) ?: "")
+                if (parsed.isNotEmpty()) {
+                    activeCategory     = snap.child("category").getValue(String::class.java)?.ifBlank { null } ?: activeCategory
+                    placedWords        = parsed
+                    gridCells          = buildGridCells(parsed)
+                    userInputs         = emptyMap()
+                    revealedCells      = emptySet()
+                    elapsedSeconds     = 0L
+                    hintsUsedThisPuzzle = 0
+                    currentStreak      = 0
+                    selectedHintWord   = null
+                    highlightedWord    = null
+                    activeDailyKey     = null
+                    isDailyPuzzle      = false
+                    resetOverlays()
+                    timerRunning       = true
+                    isGenerating       = false
+                    puzzleSolved       = false
+                    appMode            = AppMode.DASHBOARD
                 }
             }
 
-            // Sync remote inputs (letters filled in by the other player)
-            val rawInputs = snap.child("inputs").children.associate { child ->
-                val parts = child.key?.split("_") ?: return@associate Pair(0,0) to ' '
-                val x = parts.getOrNull(0)?.toIntOrNull() ?: 0
-                val y = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                Pair(x, y) to (child.getValue(String::class.java)?.firstOrNull() ?: ' ')
-            }.filter { it.value != ' ' }
+            // Letters from the other device. Only correct letters are accepted; they
+            // override a wrong in-progress local letter but never erase anything.
+            val rawInputs = snap.child("inputs").children.mapNotNull { child ->
+                val parts = child.key?.split("_") ?: return@mapNotNull null
+                val x  = parts.getOrNull(0)?.toIntOrNull() ?: return@mapNotNull null
+                val y  = parts.getOrNull(1)?.toIntOrNull() ?: return@mapNotNull null
+                val ch = child.getValue(String::class.java)?.firstOrNull() ?: return@mapNotNull null
+                Pair(x, y) to ch
+            }.toMap()
             if (rawInputs != remoteInputs) {
                 remoteInputs = rawInputs
-                userInputs   = userInputs + rawInputs   // merge; local wins on same key
+                userInputs   = mergeRemoteInputs(userInputs, rawInputs, solutionOf(placedWords))
             }
 
-            // Sync turn and scores (team + vindictive both use hostScore/guestScore)
+            // Sync turn and scores (team + vindictive both use hostScore/guestScore).
+            // Each device reads only the OTHER side's score — its own side is authoritative locally.
             val remoteTurn       = snap.child("turn").getValue(Long::class.java)?.toInt()
             val remoteHostScore  = snap.child("hostScore").getValue(Long::class.java)?.toInt()
             val remoteGuestScore = snap.child("guestScore").getValue(Long::class.java)?.toInt()
             if (remoteTurn != null) teamCurrentPlayer = remoteTurn
-            // HOST reads guest score; GUEST reads host score — avoids echo overwriting local writes
             if (remoteHostScore  != null && onlineRole == OnlineRole.GUEST) { teamP1Score = remoteHostScore;  vindP1Score = remoteHostScore }
             if (remoteGuestScore != null && onlineRole == OnlineRole.HOST)  { teamP2Score = remoteGuestScore; vindP2Score = remoteGuestScore }
 
             // Sync vindictive state
-            val remoteVindPhase   = snap.child("vindPhase").getValue(String::class.java)
-            val remoteVindPlayer  = snap.child("vindCurrentPlayer").getValue(Long::class.java)?.toInt()
-            val remoteVindWordIdx = snap.child("vindAssignedWordIdx").getValue(Long::class.java)?.toInt() ?: -1
+            val remoteVindPhase     = snap.child("vindPhase").getValue(String::class.java)
+            val remoteVindPlayer    = snap.child("vindCurrentPlayer").getValue(Long::class.java)?.toInt()
+            val remoteVindWordIdx   = snap.child("vindAssignedWordIdx").getValue(Long::class.java)?.toInt() ?: -1
             val remoteVindCountdown = snap.child("vindCountdown").getValue(Long::class.java)?.toInt()
             if (remoteVindPhase != null)  runCatching { vindPhase = VindicativePhase.valueOf(remoteVindPhase) }
             if (remoteVindPlayer != null) vindCurrentPlayer = remoteVindPlayer
-            vindAssignedWord = if (remoteVindWordIdx >= 0 && remoteVindWordIdx < placedWords.size)
-                placedWords[remoteVindWordIdx] else null
-            // Only update timer from Firebase if THIS device is NOT the one running it
-            if (remoteVindCountdown != null && vindPhase != VindicativePhase.OPPONENT_WAIT) {
+            vindAssignedWord = placedWords.getOrNull(remoteVindWordIdx)
+            // The answerer's device owns the countdown; the other device only mirrors it.
+            if (remoteVindCountdown != null && !VindictiveRules.ownsTimer(vindSnapshot(), true, myIndex())) {
                 vindOpponentCountdown = remoteVindCountdown
             }
 
@@ -1422,140 +1853,111 @@ fun CrosswordApp() {
             remoteIsAnswering   = if (onlineRole == OnlineRole.HOST) p1answering else p0answering
             remoteAnsweringName = player2Name   // player2Name = other player's name on every device
 
-            // Sync solved
+            // The other device finished the grid. Fill in the solution locally so this
+            // device runs its own completion (and credits its own player) — previously
+            // it jumped straight to "solved" and never paid out.
             val remoteSolved = snap.child("solved").getValue(Boolean::class.java) ?: false
-            if (remoteSolved && !puzzleSolved) puzzleSolved = true
-        }
+            if (remoteSolved && !puzzleSolved && placedWords.isNotEmpty()) {
+                userInputs = userInputs + solutionOf(placedWords)
+            }
+        }, onError = { msg -> if (isOnlineGame) onlineNotice = msg })
         onlineListener = listener
-    }
-
-    // HOST: after puzzle is generated, write it to Firebase so the guest gets it
-    LaunchedEffect(placedWords, isOnlineGame, onlineRole) {
-        if (isOnlineGame && onlineRole == OnlineRole.HOST && placedWords.isNotEmpty() && !isGenerating) {
-            FirebaseGameManager.writePuzzle(onlineCode, placedWords)
+        try {
+            awaitCancellation()
+        } finally {
+            FirebaseGameManager.stopListening(code, listener)
         }
     }
 
+    // A host who backs out of the setup dialogs before reaching the lobby leaves an
+    // orphaned "waiting" game behind — end it so nothing later is treated as online.
+    val inOnlineSetup = showVindTimerDialog || showVindCategoryDialog || showMultiCategoryDialog ||
+        showCombineDiffDialog || difficultyPickCategory != null || showOnlineJoin
+    LaunchedEffect(isOnlineGame, appMode, inOnlineSetup) {
+        if (isOnlineGame && appMode == AppMode.CATEGORY_SELECT && !inOnlineSetup) cleanupOnlineSession()
+    }
+
+    // ── PUZZLE GENERATION ─────────────────────────────────────────────────────
     LaunchedEffect(isGenerating) {
-        if (isGenerating) {
-            // Daily puzzle: use the pre-shuffled date-seeded pool (all categories).
-            // Normal puzzle: filter allEntries by the active category.
-            val pool = when {
-                isDailyPuzzle                  -> dailyEntries
-                combinedCategories.isNotEmpty() -> allEntries.filter { it.category in combinedCategories }
-                else                            -> allEntries.filter { it.category == activeCategory }
+        if (!isGenerating) return@LaunchedEffect
+        val dailyKey = activeDailyKey
+        val combined = combinedCategories
+        val category = activeCategory
+        val target   = activeDifficulty.wordCount
+        // Used words: the Daily ignores history entirely (deterministic for everyone);
+        // combined puzzles consult each real category's history.
+        val used: Set<String> = when {
+            dailyKey != null      -> emptySet()
+            combined.isNotEmpty() -> combined.flatMap { saveManager.getUsedWords(playerName, it) }.toSet()
+            else                  -> saveManager.getUsedWords(playerName, category)
+        }
+        val entries = allEntries
+        val generated = withContext(Dispatchers.Default) {
+            when {
+                dailyKey != null      -> DailyPuzzle.generate(entries, dailyKey)
+                combined.isNotEmpty() -> generateCrossword(entries.filter { it.category in combined }, target, used)
+                else                  -> generateCrossword(entries.filter { it.category == category }, target, used)
             }
-            val usedWords = saveManager.getUsedWords(playerName, if (isDailyPuzzle) "Daily" else activeCategory)
+        }
 
-            val generated = withContext(Dispatchers.Default) {
-                generateCrossword(pool, if (isDailyPuzzle) 20 else activeDifficulty.wordCount, usedWords)
-            }
-
-            placedWords = generated
-            gridCells = buildGridCells(placedWords)
-            userInputs = emptyMap()
-            elapsedSeconds = 0L
-            hintsUsedThisPuzzle = 0
-            teamP1Hints = 0
-            selectedHintWord = null
-            vindP1Score = 0; vindP2Score = 0
-            teamP1Score = 0; teamP2Score = 0
-            teamCurrentPlayer = 0
-            vindPhase = VindicativePhase.PICK_OWN
-            // vindCurrentPlayer is set by the player setup dialog — don't overwrite it here
-            vindAssignedWord = null
-            highlightedWord = null
-            selectedHintWord = null
-            currentStreak = 0
-            timerRunning = true
-            // Pick a random background image from the pool.
-            // Fall back to a random colour if the pool is empty.
-            currentBgImageName = if (bgImagePool.isNotEmpty())
-                bgImagePool[Random.nextInt(bgImagePool.size)]
-            else BG_IMAGE_NONE
-            currentBgColor = Color(
-                Random.nextFloat().coerceIn(0.4f, 0.7f),
-                Random.nextFloat().coerceIn(0.4f, 0.7f),
-                Random.nextFloat().coerceIn(0.4f, 0.7f),
-                1f
-            )
-            puzzleSolved = false
+        if (generated.isEmpty()) {
+            // Never drop the player into an empty, unsolvable grid.
             isGenerating = false
+            timerRunning = false
+            cleanupOnlineSession()
+            if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
+            activeDailyKey = null
+            isDailyPuzzle  = false
+            appMode = AppMode.CATEGORY_SELECT
+            dailyInfoMessage = "Couldn't build a puzzle from that selection. Try another category."
+            return@LaunchedEffect
         }
-    }
 
-    // Releases all online-game state when leaving DASHBOARD via any path.
-    // Without this the Firebase listener leaks, the next puzzle keeps writing
-    // to the previous game's room, and the opponent's "X is answering" flag
-    // can stick true forever. Idempotent — safe to call when not online.
-    fun cleanupOnlineSession() {
-        if (isOnlineGame && onlineCode.isNotEmpty()) {
-            // Clear our answering flag so the opponent doesn't see stale state.
-            val field = if (onlineRole == OnlineRole.HOST) "p0answering" else "p1answering"
-            runCatching {
-                FirebaseGameManager.writeState(onlineCode, mapOf(field to false))
-            }
+        placedWords = generated
+        gridCells = buildGridCells(placedWords)
+        userInputs = emptyMap()
+        revealedCells = emptySet()
+        elapsedSeconds = 0L
+        hintsUsedThisPuzzle = 0
+        teamP1Hints = 0
+        teamP2Hints = 0
+        selectedHintWord = null
+        vindP1Score = 0; vindP2Score = 0
+        teamP1Score = 0; teamP2Score = 0
+        teamCurrentPlayer = teamFirstPlayer
+        vindPhase = VindicativePhase.PICK_OWN
+        // vindCurrentPlayer is set by the player setup dialog — don't overwrite it here
+        vindAssignedWord = null
+        highlightedWord = null
+        currentStreak = 0
+        tauntIndex.intValue = 0
+        lastResult = null
+        showResults = false
+        timerRunning = true
+        // Pick a random background image from the pool.
+        // Fall back to a random colour if the pool is empty.
+        currentBgImageName = if (bgImagePool.isNotEmpty())
+            bgImagePool[Random.nextInt(bgImagePool.size)]
+        else BG_IMAGE_NONE
+        currentBgColor = Color(
+            Random.nextFloat().coerceIn(0.4f, 0.7f),
+            Random.nextFloat().coerceIn(0.4f, 0.7f),
+            Random.nextFloat().coerceIn(0.4f, 0.7f),
+            1f
+        )
+        puzzleSolved = false
+        isGenerating = false
+        // Online host publishes the fresh puzzle (and opening turn) exactly once, here —
+        // not from an effect that could fire with a previous game's words.
+        if (isOnlineGame && onlineRole == OnlineRole.HOST && onlineCode.isNotEmpty()) {
+            FirebaseGameManager.writePuzzle(onlineCode, generated)
+            FirebaseGameManager.writeState(onlineCode, mapOf(
+                "turn" to teamCurrentPlayer,
+                "vindCurrentPlayer" to vindCurrentPlayer,
+                "vindPhase" to VindicativePhase.PICK_OWN.name,
+                "vindAssignedWordIdx" to -1
+            ))
         }
-        onlineListener?.let { listener ->
-            if (onlineCode.isNotEmpty()) FirebaseGameManager.stopListening(onlineCode, listener)
-        }
-        onlineListener = null
-        if (onlineRole == OnlineRole.HOST && onlineCode.isNotEmpty()) {
-            runCatching { FirebaseGameManager.closeGame(onlineCode) }
-        }
-        isOnlineGame = false
-        onlineRole   = null
-        onlineCode   = ""
-        remoteIsAnswering   = false
-        remoteAnsweringName = ""
-    }
-
-    fun launchPuzzle(category: String, difficulty: Difficulty,
-                     resume: Boolean = false, daily: Boolean = false,
-                     combined: List<String> = emptyList()) {
-        activeCategory     = category
-        activeDifficulty   = difficulty
-        isDailyPuzzle      = daily
-        combinedCategories = combined
-        appMode            = AppMode.DASHBOARD
-        puzzleSolved     = false
-        // Ensure player 2 profile exists
-        if (activeGameMode != GameMode.SINGLE && player2Name.isNotBlank()) {
-            saveManager.ensurePlayer(player2Name)
-        }
-        if (resume) {
-            val saved = saveManager.loadPuzzle(playerName, category, difficulty)
-            if (saved != null) {
-                placedWords        = saved.words
-                gridCells          = buildGridCells(saved.words)
-                userInputs         = saved.inputs
-                currentBgColor     = Color(saved.bgArgb)
-                currentBgImageName = saved.bgImageName
-                elapsedSeconds     = saveManager.loadElapsed(playerName, category, difficulty)
-                isGenerating       = false
-                timerRunning       = true
-                return
-            }
-        }
-        isGenerating = true
-    }
-
-    fun launchDailyPuzzle() {
-        // Use UTC so two players in different timezones see the same daily
-        // puzzle. Local-zone Calendar.getInstance() drifted the seed by up
-        // to 26h between users in UTC-12 vs UTC+14.
-        val cal  = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
-        val seed = cal.get(Calendar.YEAR) * 10000L +
-                cal.get(Calendar.MONTH) * 100L +
-                cal.get(Calendar.DAY_OF_MONTH)
-        // Shuffle ALL entries with date seed into a separate list — never mutates allEntries
-        dailyEntries     = allEntries.shuffled(Random(seed))
-        activeCategory   = "Daily"
-        activeDifficulty = Difficulty.EXPERT
-        isDailyPuzzle    = true
-        appMode          = AppMode.DASHBOARD
-        puzzleSolved     = false
-        isGenerating     = true
     }
 
     // Online name helpers — player index 0 = HOST, index 1 = GUEST on every device.
@@ -1582,11 +1984,8 @@ fun CrosswordApp() {
 
     // ── SYSTEM BACK HANDLING ────────────────────────────────────────────────────
     // Routes Android's back gesture to the same destinations as in-app back arrows.
-    // LOGIN: let the system handle (exit app).
-    // Back at LOGIN: let system handle (exit). Back at CATEGORY_SELECT
-    // (the home hub): also let system handle so back closes the app like a
-    // regular Android home — silently logging the user out on a stray gesture
-    // was bad UX. The user can still log out via the Logout button.
+    // Back at LOGIN or CATEGORY_SELECT (the home hub) is left to the system so it
+    // closes the app like a regular Android home — the user logs out explicitly.
     BackHandler(enabled = appMode != AppMode.LOGIN && appMode != AppMode.CATEGORY_SELECT) {
         vibrateLight(context)
         when (appMode) {
@@ -1595,35 +1994,12 @@ fun CrosswordApp() {
                 dailyPromptShown = false
                 appMode = AppMode.LOGIN
             }
-            AppMode.CATEGORY_SELECT -> { /* unreachable — handler disabled */ }
             AppMode.ONLINE_LOBBY -> {
                 cleanupOnlineSession()
                 appMode = AppMode.CATEGORY_SELECT
             }
-            AppMode.DASHBOARD -> {
-                if (!puzzleSolved && !isGenerating && placedWords.isNotEmpty()) {
-                    saveManager.saveElapsed(playerName, activeCategory, activeDifficulty, elapsedSeconds)
-                    saveManager.savePuzzle(
-                        playerName, activeCategory, activeDifficulty,
-                        placedWords, userInputs,
-                        android.graphics.Color.argb(
-                            (currentBgColor.alpha * 255).toInt(),
-                            (currentBgColor.red   * 255).toInt(),
-                            (currentBgColor.green * 255).toInt(),
-                            (currentBgColor.blue  * 255).toInt()
-                        ),
-                        bgImageName = currentBgImageName
-                    )
-                }
-                cleanupOnlineSession()
-                if (activeGameMode != GameMode.SINGLE) player2Name = ""
-                puzzleSolved = false; showConfetti = false; showTurnDialog = false
-                vindPassDialogVisible = false; pendingTurnDialog = false; wordToInput = null
-                showWrongFlash = false; streakMilestone = null
-                timerRunning = false
-                appMode = AppMode.CATEGORY_SELECT
-            }
-            AppMode.LOGIN -> { /* never reached */ }
+            AppMode.DASHBOARD -> goHome()
+            AppMode.CATEGORY_SELECT, AppMode.LOGIN -> { /* unreachable — handler disabled */ }
         }
     }
 
@@ -1718,9 +2094,11 @@ fun CrosswordApp() {
 
                     Button(
                         onClick = {
+                            // Trim so "Kevin " and "Kevin" are the same profile.
+                            playerName = normalizeName(playerName)
                             if (playerName.isNotBlank()) {
                                 vibrateLight(context)
-                                SoundPlayer.playClick()
+                                if (soundEnabled) SoundPlayer.playClick()
                                 saveManager.ensurePlayer(playerName)
                                 saveManager.setLastUser(playerName)
                                 currentScore = saveManager.getScore(playerName)
@@ -1848,9 +2226,7 @@ fun CrosswordApp() {
                 saveManager      = saveManager,
                 allCategoryNames = categories.toSet(),
                 onPlay           = { appMode = AppMode.CATEGORY_SELECT },
-                onResume         = { cat, diff ->
-                    launchPuzzle(cat, diff, resume = true)
-                },
+                onResume         = { slot -> resumeSlot(slot) },
                 onBack           = {
                     viewingProfile = ""
                     dailyPromptShown = false
@@ -1863,13 +2239,16 @@ fun CrosswordApp() {
             // Cache derived prefs reads so they don't fire on every recompose
             // (timer tick, score update, etc.). The keys recompute these only
             // when the player changes or completes a puzzle.
-            val cachedUsedWordCounts = remember(playerName, currentCompleted, categories) {
+            val cachedUsedWordCounts = remember(playerName, currentCompleted, categories, homeRefresh) {
                 categories.associateWith { cat ->
                     saveManager.getUsedWords(playerName, cat).size
                 }
             }
-            val cachedInProgress = remember(playerName, currentCompleted) {
+            val cachedInProgress = remember(playerName, currentCompleted, homeRefresh) {
                 saveManager.getInProgressPuzzles(playerName)
+            }
+            val cachedDailyDone = remember(playerName, currentCompleted, homeRefresh) {
+                saveManager.isDailyCompleted(playerName, DailyPuzzle.dateKey(System.currentTimeMillis()))
             }
             CategoryScreen(
                 categories        = categories,
@@ -1897,7 +2276,8 @@ fun CrosswordApp() {
                 allEntries        = allEntries,
                 usedWordCounts    = cachedUsedWordCounts,
                 inProgressList    = cachedInProgress,
-                onResume          = { cat, diff -> launchPuzzle(cat, diff, resume = true) },
+                onResume          = { slot -> resumeSlot(slot) },
+                dailyDoneToday    = cachedDailyDone,
                 onStartPlay       = {
                     when (activeGameMode) {
                         GameMode.SINGLE -> {
@@ -1945,7 +2325,11 @@ fun CrosswordApp() {
                     activeCategory = ""
                     combinedCategories = emptyList()
                     isDailyPuzzle = false
-                    dailyEntries = emptyList()
+                    activeDailyKey = null
+                    revealedCells = emptySet()
+                    showResults = false
+                    lastResult = null
+                    if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
                     elapsedSeconds = 0L
                     timerRunning = false
                     hintsUsedThisPuzzle = 0
@@ -2101,36 +2485,8 @@ fun CrosswordApp() {
                         },
                         navigationIcon = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = {
-                                    timerRunning = false
-                                    if (!puzzleSolved && !isGenerating && placedWords.isNotEmpty()) {
-                                        saveManager.saveElapsed(playerName, activeCategory, activeDifficulty, elapsedSeconds)
-                                        saveManager.savePuzzle(
-                                            playerName, activeCategory, activeDifficulty,
-                                            placedWords, userInputs,
-                                            android.graphics.Color.argb(
-                                                (currentBgColor.alpha * 255).toInt(),
-                                                (currentBgColor.red   * 255).toInt(),
-                                                (currentBgColor.green * 255).toInt(),
-                                                (currentBgColor.blue  * 255).toInt()
-                                            ),
-                                            bgImageName = currentBgImageName
-                                        )
-                                    }
-                                    // Clear all overlays and multiplayer state on back navigation
-                                    cleanupOnlineSession()
-                                    if (activeGameMode != GameMode.SINGLE) player2Name = ""
-                                    puzzleSolved = false
-                                    showConfetti = false
-                                    showTurnDialog = false
-                                    vindPassDialogVisible = false
-                                    pendingTurnDialog = false
-                                    wordToInput = null
-                                    showWrongFlash = false
-                                    streakMilestone = null
-                                    appMode = AppMode.CATEGORY_SELECT
-                                }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = safeAccent)
+                                IconButton(onClick = { goHome() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Save and go back", tint = safeAccent)
                                 }
                                 Text("Puzzles: $currentCompleted", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = safeAccent)
                             }
@@ -2226,12 +2582,17 @@ fun CrosswordApp() {
                     }
 
                     // ── Hint button ───────────────────────────────────────────────
+                    // Target = the clue last tapped in the list. Reveals the first wrong/empty
+                    // letter of that word, costs Economy.HINT_COST lifetime points (charged once,
+                    // right now), and is synced to the other device in online games.
                     if (!puzzleSolved && !isGenerating) {
-                        val hintEnabled = selectedHintWord != null && currentScore > 0
+                        val hintWord    = selectedHintWord?.takeIf { !isWordSolved(it, userInputs) }
+                        val canAfford   = currentScore >= Economy.HINT_COST
+                        val hintEnabled = hintWord != null && canAfford
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(44.dp)
+                                .heightIn(min = 48.dp)
                                 .padding(horizontal = 12.dp, vertical = 4.dp)
                                 .shadow(if (hintEnabled) 4.dp else 0.dp, RoundedCornerShape(12.dp))
                                 .clip(RoundedCornerShape(12.dp))
@@ -2239,31 +2600,24 @@ fun CrosswordApp() {
                                     if (hintEnabled) appBtnGradient
                                     else Brush.verticalGradient(listOf(Color.Gray.copy(alpha = 0.22f), Color.Gray.copy(alpha = 0.22f)))
                                 )
-                                .clickable(enabled = hintEnabled) {
-                                    val word = selectedHintWord
-                                    if (word != null && currentScore > 0) {
-                                        vibrateLight(context)
-                                        if (soundEnabled) SoundPlayer.playClick()
-                                        val unfilledCells = word.word.indices.mapNotNull { i ->
-                                            val pos = if (word.isHorizontal)
-                                                Pair(word.startX + i, word.startY)
-                                            else
-                                                Pair(word.startX, word.startY + i)
-                                            val correctChar = word.word[i]
-                                            if (userInputs[pos] == correctChar) null else Pair(pos, correctChar)
-                                        }
-                                        if (unfilledCells.isNotEmpty()) {
-                                            val (hintPos, hintChar) = unfilledCells.random()
-                                            val newMap = userInputs.toMutableMap()
-                                            newMap[hintPos] = hintChar
-                                            userInputs = newMap
-                                            currentScore = (currentScore - 1).coerceAtLeast(0)
-                                            saveManager.addScore(playerName, -1)
-                                            hintsUsedThisPuzzle++
-                                            if (activeGameMode == GameMode.TEAM) teamP1Hints++
-                                        }
-                                        if (unfilledCells.size <= 1) selectedHintWord = null
+                                .clickable(enabled = hintEnabled, onClickLabel = "Reveal a letter") {
+                                    val word = hintWord ?: return@clickable
+                                    val (pos, ch) = pickHintCell(word, userInputs) ?: return@clickable
+                                    vibrateLight(context)
+                                    if (soundEnabled) SoundPlayer.playClick()
+                                    userInputs    = userInputs + (pos to ch)
+                                    revealedCells = revealedCells + pos
+                                    currentScore  = (currentScore - Economy.HINT_COST).coerceAtLeast(0)
+                                    saveManager.addScore(playerName, -Economy.HINT_COST)
+                                    hintsUsedThisPuzzle++
+                                    if (activeGameMode == GameMode.TEAM) {
+                                        // Online, the hint belongs to this device's player; locally to whoever has the turn.
+                                        val t = teamSnapshot()
+                                        applyTeam(TeamRules.onHint(if (isOnlineGame) t.copy(turn = myIndex()) else t)
+                                            .copy(turn = t.turn))
                                     }
+                                    if (isOnlineGame) FirebaseGameManager.writeInput(onlineCode, pos.first, pos.second, ch)
+                                    if (isWordSolved(word, userInputs)) selectedHintWord = null
                                 },
                             contentAlignment = Alignment.Center
                         ) {
@@ -2272,13 +2626,17 @@ fun CrosswordApp() {
                                     .background(Color.White.copy(alpha = 0.25f))
                                     .align(Alignment.TopCenter))
                             }
+                            val dirLabel = if (hintWord?.isHorizontal == true) "Across" else "Down"
                             Text(
-                                if (hintEnabled) "💡  Hint  (${currentScore} pts available)"
-                                else if (selectedHintWord == null) "💡  Tap a clue first, then use Hint"
-                                else "💡  No points available",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (hintEnabled) Color.White else Color.Gray
+                                when {
+                                    hintEnabled       -> "💡  Reveal a letter in ${hintWord!!.number} $dirLabel  (−${Economy.HINT_COST} pt · $currentScore available)"
+                                    hintWord == null  -> "💡  Tap a clue below to choose a hint"
+                                    else              -> "💡  Hints cost ${Economy.HINT_COST} pt — earn points by solving puzzles"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (hintEnabled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
                     }
@@ -2290,34 +2648,30 @@ fun CrosswordApp() {
                         val isWaiting    = vindPhase == VindicativePhase.OPPONENT_WAIT
                         val bannerBg     = if (isWaiting) Color(0xFFB71C1C) else MaterialTheme.colorScheme.tertiaryContainer
                         val bannerFg     = if (isWaiting) Color.White else MaterialTheme.colorScheme.onTertiaryContainer
-                        val vPhaseText   = when (vindPhase) {
-                            VindicativePhase.PICK_OWN    -> "$vCurrentName — First turn! Double-tap a clue to pick it for yourself."
-                            VindicativePhase.ASSIGN_CLUE -> "$vCurrentName — Double-tap a clue to assign to $vOtherName 👆"
-                            VindicativePhase.OPPONENT_WAIT -> (
-                                    if (showTurnDialog)
-                                        "$vCurrentName — Your clue is waiting… hit I'm Ready when you have the phone!"
-                                    else if (vindOpponentCountdown > 0)
-                                        "$vCurrentName — ${vindAssignedWord?.clue ?: "?"} — Tap to answer! (${vindOpponentCountdown}s)"
-                                    else
-                                        "$vCurrentName — Time's up! Tap here to answer or pass."
-                                    )
+                        // Online, the other device watches instead of acting.
+                        val iAct         = VindictiveRules.canAct(vindSnapshot(), isOnlineGame, myIndex())
+                        val vPhaseText   = when {
+                            !iAct -> when (vindPhase) {
+                                VindicativePhase.PICK_OWN      -> "$vCurrentName is picking a clue to answer…"
+                                VindicativePhase.ASSIGN_CLUE   -> "$vCurrentName is choosing a clue for you 😈"
+                                VindicativePhase.OPPONENT_WAIT ->
+                                    if (vindOpponentCountdown > 0) "$vCurrentName is answering your clue… (${vindOpponentCountdown}s)"
+                                    else "Time's up — $vCurrentName is deciding whether to answer or pass…"
+                            }
+                            vindPhase == VindicativePhase.PICK_OWN    -> "$vCurrentName — First turn! Double-tap a clue to pick it for yourself."
+                            vindPhase == VindicativePhase.ASSIGN_CLUE -> "$vCurrentName — Double-tap a clue to assign to $vOtherName 👆"
+                            showTurnDialog -> "$vCurrentName — Your clue is waiting… hit I'm Ready when you have the phone!"
+                            vindOpponentCountdown > 0 ->
+                                "$vCurrentName — ${vindAssignedWord?.clue ?: "?"} — Tap to answer! (${vindOpponentCountdown}s)"
+                            else -> "$vCurrentName — Time's up! Answer or pass."
                         }
                         Column(
                             modifier = Modifier.fillMaxWidth()
                                 .background(bannerBg)
-                                .then(if (isWaiting && vindAssignedWord != null)
-                                    Modifier.pointerInput(vindAssignedWord) {
-                                        detectTapGestures(
-                                            onTap = {
-                                                // Single tap also opens answer for convenience
-                                                wordToInput = vindAssignedWord
-                                                inputText = ""
-                                            },
-                                            onDoubleTap = {
-                                                wordToInput = vindAssignedWord
-                                                inputText = ""
-                                            }
-                                        )
+                                .then(if (isWaiting && vindAssignedWord != null && iAct)
+                                    Modifier.clickable(onClickLabel = "Answer your clue") {
+                                        vindPassDialogVisible = false
+                                        wordToInput = vindAssignedWord   // keeps anything already typed
                                     }
                                 else Modifier)
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -2329,7 +2683,7 @@ fun CrosswordApp() {
                                 Text("$onlineP0Name: ${vindP1Score}pts", fontSize = 11.sp, color = bannerFg)
                                 Text("$onlineP1Name: ${vindP2Score}pts", fontSize = 11.sp, color = bannerFg)
                             }
-                            if (isWaiting && vindAssignedWord != null) {
+                            if (isWaiting && vindAssignedWord != null && iAct) {
                                 Text("👆 Tap this bar to answer",
                                     fontSize = 11.sp, color = bannerFg.copy(alpha = 0.8f),
                                     modifier = Modifier.padding(top = 2.dp))
@@ -2344,7 +2698,9 @@ fun CrosswordApp() {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("🤝 ${tCurrentName}'s turn", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                            val myTurn = !isOnlineGame || teamCurrentPlayer == myIndex()
+                            Text(if (myTurn) "🤝 ${tCurrentName}'s turn" else "⏳ Waiting for $tCurrentName…",
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer)
                             Text("$onlineP0Name  +  $onlineP1Name",
                                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
@@ -2368,27 +2724,38 @@ fun CrosswordApp() {
                                 words           = visibleWords,
                                 userInputs      = userInputs,
                                 highlightedWord = highlightedWord,
+                                selectedWord    = selectedHintWord,
                                 onSingleTap     = { word ->
                                     if (!isGenerating) {
-                                        centreOnWord  = word
-                                        highlightedWord = word
+                                        centreOnWord     = word
+                                        highlightedWord  = word
+                                        selectedHintWord = word
                                     }
                                 },
                                 onDoubleTap     = { word ->
-                                    if (!puzzleSolved && !isGenerating) {
-                                        // During OPPONENT_WAIT: only allow double-tap on the assigned clue (early answer)
-                                        if (activeGameMode == GameMode.VINDICTIVE &&
-                                            vindPhase == VindicativePhase.OPPONENT_WAIT &&
-                                            word != vindAssignedWord) return@FullHintsList
-                                        // If tapping assigned clue early: cancel the timer popup
-                                        if (activeGameMode == GameMode.VINDICTIVE &&
-                                            vindPhase == VindicativePhase.OPPONENT_WAIT) {
-                                            vindPassDialogVisible = false
+                                    if (puzzleSolved || isGenerating || isWordSolved(word, userInputs)) return@FullHintsList
+                                    // Online: only the player whose turn it is may answer / pick / assign.
+                                    if (isOnlineGame) {
+                                        val mine = when (activeGameMode) {
+                                            GameMode.VINDICTIVE -> VindictiveRules.canAct(vindSnapshot(), true, myIndex())
+                                            GameMode.TEAM       -> teamCurrentPlayer == myIndex()
+                                            else                -> true
                                         }
-                                        wordToInput     = word
-                                        highlightedWord = word
-                                        inputText       = ""
+                                        if (!mine) return@FullHintsList
                                     }
+                                    // During OPPONENT_WAIT: only the assigned clue can be answered
+                                    if (activeGameMode == GameMode.VINDICTIVE &&
+                                        vindPhase == VindicativePhase.OPPONENT_WAIT &&
+                                        word != vindAssignedWord) return@FullHintsList
+                                    // Assigning a clue doesn't open the answer box.
+                                    if (activeGameMode == GameMode.VINDICTIVE && vindPhase == VindicativePhase.ASSIGN_CLUE) {
+                                        assignClue(word)
+                                        return@FullHintsList
+                                    }
+                                    wordToInput      = word
+                                    highlightedWord  = word
+                                    selectedHintWord = word
+                                    inputText        = ""
                                 }
                             )
                         }   // end FullHintsList Box
@@ -2455,7 +2822,7 @@ fun CrosswordApp() {
                                 if (activeGameMode == GameMode.VINDICTIVE) {
                                     Spacer(Modifier.height(10.dp))
                                     Text(
-                                        vindictiveTaunt(tauntIndex.intValue, playerName, player2Name),
+                                        vindictiveTaunt(tauntIndex.intValue, nameOf(wrongAnswererIndex), nameOf(1 - wrongAnswererIndex)),
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = Color.White.copy(alpha = 0.95f),
@@ -2544,153 +2911,27 @@ fun CrosswordApp() {
                     Text("${word.number} ${if (word.isHorizontal) "Across" else "Down"}: ${word.clue}", fontWeight = FontWeight.Bold)
                     OutlinedTextField(
                         value = inputText,
-                        onValueChange = { inputText = it.uppercase().take(word.word.length) },
+                        onValueChange = { v -> inputText = v.uppercase().filter { it in 'A'..'Z' }.take(word.word.length) },
                         label = { Text("(${word.word.length} Letters)") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Characters,
+                            autoCorrectEnabled = false,
+                            keyboardType = KeyboardType.Password,   // suppresses suggestions/autocorrect on most IMEs
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(onDone = {
+                            if (inputText.length == word.word.length) submitAnswer(word, inputText)
+                        }),
+                        visualTransformation = VisualTransformation.None,
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     )
                 }
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                    val isCorrect = inputText.length == word.word.length &&
-                            inputText == word.word
-
-                    if (activeGameMode == GameMode.VINDICTIVE) {
-                        // ── Vindictive submit ──────────────────────────────────
-                        if (vindPhase == VindicativePhase.PICK_OWN) {
-                            // Player answered their own chosen clue
-                            if (isCorrect) {
-                                val newMap = userInputs.toMutableMap()
-                                for (i in inputText.indices) {
-                                    val c = if (word.isHorizontal) Pair(word.startX + i, word.startY)
-                                    else Pair(word.startX, word.startY + i)
-                                    newMap[c] = inputText[i]
-                                    if (isOnlineGame) FirebaseGameManager.writeInput(onlineCode, c.first, c.second, inputText[i])
-                                }
-                                userInputs = newMap
-                                if (vindCurrentPlayer == 0) vindP1Score++ else vindP2Score++
-                                if (isOnlineGame) {
-                                    // Only write our own side. Writing both would let
-                                    // a stale local copy of the opposite side clobber
-                                    // a near-simultaneous remote update.
-                                    val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
-                                    val myVal = if (onlineRole == OnlineRole.HOST) vindP1Score else vindP2Score
-                                    FirebaseGameManager.writeState(onlineCode, mapOf(
-                                        myKey to myVal,
-                                        "vindPhase" to VindicativePhase.ASSIGN_CLUE.name,
-                                        "vindCurrentPlayer" to vindCurrentPlayer
-                                    ))
-                                }
-                                if (soundEnabled) SoundPlayer.playCorrect()
-                                cellsToAnimate = word.word.indices.map { idx ->
-                                    if (word.isHorizontal) Pair(word.startX + idx, word.startY)
-                                    else Pair(word.startX, word.startY + idx) }
-                            } else {
-                                if (vindCurrentPlayer == 0) vindP1Score -= 1 else vindP2Score -= 1
-                                if (soundEnabled) SoundPlayer.playWrong()
-                                showWrongFlash = true
-                                tauntIndex.intValue++
-                                vibrateWrong(context)
-                                pendingTurnDialog = false  // PICK_OWN wrong: no handoff needed, just continue
-                            }
-                            // Same player now picks clue for opponent
-                            vindPhase = VindicativePhase.ASSIGN_CLUE
-                        } else if (vindPhase == VindicativePhase.OPPONENT_WAIT) {
-                            // Player answered the assigned clue (triggered via pass/answer dialog)
-                            if (isCorrect) {
-                                val newMap = userInputs.toMutableMap()
-                                for (i in inputText.indices) {
-                                    val c = if (word.isHorizontal) Pair(word.startX + i, word.startY)
-                                    else Pair(word.startX, word.startY + i)
-                                    newMap[c] = inputText[i]
-                                    if (isOnlineGame) FirebaseGameManager.writeInput(onlineCode, c.first, c.second, inputText[i])
-                                }
-                                userInputs = newMap
-                                if (vindCurrentPlayer == 0) vindP1Score++ else vindP2Score++
-                                if (soundEnabled) SoundPlayer.playCorrect()
-                                cellsToAnimate = word.word.indices.map { idx ->
-                                    if (word.isHorizontal) Pair(word.startX + idx, word.startY)
-                                    else Pair(word.startX, word.startY + idx) }
-                                val myName = if (vindCurrentPlayer == 0) playerName else player2Name
-                                turnDialogMessage = "✅ Correct! +1 pt for $myName\n$myName now picks a clue for the other player!\n$playerName: ${vindP1Score}pts  |  $player2Name: ${vindP2Score}pts"
-                            } else {
-                                if (vindCurrentPlayer == 0) vindP1Score -= 2 else vindP2Score -= 2
-                                if (soundEnabled) SoundPlayer.playWrong()
-                                showWrongFlash = true
-                                tauntIndex.intValue++
-                                vibrateWrong(context)
-                                val myName = if (vindCurrentPlayer == 0) playerName else player2Name
-                                turnDialogMessage = "❌ Wrong! -2 pts for $myName\n$myName now picks a clue for the other player!\n$playerName: ${vindP1Score}pts  |  $player2Name: ${vindP2Score}pts"
-                                pendingTurnDialog = true  // show AFTER wrong flash clears
-                            }
-                            vindAssignedWord = null
-                            vindPhase = VindicativePhase.ASSIGN_CLUE
-                            if (isOnlineGame) {
-                                val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
-                                val myVal = if (onlineRole == OnlineRole.HOST) vindP1Score else vindP2Score
-                                FirebaseGameManager.writeState(onlineCode, mapOf(
-                                    "vindPhase"           to VindicativePhase.ASSIGN_CLUE.name,
-                                    "vindAssignedWordIdx" to -1,
-                                    "vindCurrentPlayer"  to vindCurrentPlayer,
-                                    myKey                 to myVal
-                                ))
-                            } else {
-                                if (!showWrongFlash) showTurnDialog = true
-                            }
-                        }
-                    } else {
-                        // ── Normal / Team submit ───────────────────────────────
-                        if (isCorrect) {
-                            val newMap = userInputs.toMutableMap()
-                            for (i in inputText.indices) {
-                                val coords = if (word.isHorizontal) Pair(word.startX + i, word.startY)
-                                else Pair(word.startX, word.startY + i)
-                                newMap[coords] = inputText[i]
-                                // Sync each filled cell to Firebase
-                                if (isOnlineGame) FirebaseGameManager.writeInput(onlineCode, coords.first, coords.second, inputText[i])
-                            }
-                            userInputs = newMap
-                            if (soundEnabled) SoundPlayer.playCorrect()
-                            vibrateCorrect(context)
-                            cellsToAnimate = word.word.indices.map { idx ->
-                                if (word.isHorizontal) Pair(word.startX + idx, word.startY)
-                                else Pair(word.startX, word.startY + idx) }
-                            // Track team scores and switch turns
-                            if (activeGameMode == GameMode.TEAM) {
-                                if (teamCurrentPlayer == 0) teamP1Score++ else teamP2Score++
-                                teamCurrentPlayer = 1 - teamCurrentPlayer
-                                val nextTeamName = if (teamCurrentPlayer == 0) onlineP0Name else onlineP1Name
-                                turnDialogMessage = "✋ Pass to $nextTeamName\n$onlineP0Name: ${teamP1Score} right  |  $onlineP1Name: ${teamP2Score} right"
-                                showTurnDialog = !isOnlineGame   // online: no pass-the-phone dialog
-                                // Sync turn + own-side score to Firebase. Each device
-                                // owns its own score field — writing both would let
-                                // a stale local copy clobber the opponent's update.
-                                if (isOnlineGame) {
-                                    val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
-                                    val myVal = if (onlineRole == OnlineRole.HOST) teamP1Score else teamP2Score
-                                    FirebaseGameManager.writeState(onlineCode, mapOf(
-                                        "turn" to teamCurrentPlayer,
-                                        myKey  to myVal
-                                    ))
-                                }
-                            }
-                            currentStreak++
-                            val milestone = checkStreakMilestone(currentStreak)
-                            if (milestone != null) {
-                                streakMilestone = milestone
-                                if (soundEnabled) SoundPlayer.playClap()
-                            }
-                        } else {
-                            if (soundEnabled) SoundPlayer.playWrong()
-                            vibrateWrong(context)
-                            currentStreak = 0
-                        }
-                    }
-                    wordToInput     = null
-                    highlightedWord = null
-                },
+                    onClick = { submitAnswer(word, inputText) },
+                    enabled  = inputText.length == word.word.length,
                     shape    = RoundedCornerShape(12.dp),
                     colors   = ButtonDefaults.buttonColors(containerColor = appBtnColor, contentColor = Color.White),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp),
@@ -2728,17 +2969,21 @@ fun CrosswordApp() {
                     enabled = onlineJoinInput.length == 6,
                     onClick = {
                         vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
-                        FirebaseGameManager.signInAnonymously {
+                        val code = onlineJoinInput
+                        FirebaseGameManager.signInAnonymously { ok, err ->
+                            if (!ok) { onlineJoinError = err ?: "Couldn't connect."; return@signInAnonymously }
                             FirebaseGameManager.joinGame(
-                                onlineJoinInput, playerName,
+                                code, playerName,
                                 onSuccess = { mode, category, difficulty, hostName ->
                                     activeGameMode    = runCatching { GameMode.valueOf(mode) }.getOrDefault(GameMode.TEAM)
                                     activeCategory    = category
                                     activeDifficulty  = runCatching { Difficulty.valueOf(difficulty) }.getOrDefault(Difficulty.MEDIUM)
+                                    combinedCategories = emptyList()
+                                    activeDailyKey    = null
                                     player2Name       = hostName
                                     isOnlineGame      = true
                                     onlineRole        = OnlineRole.GUEST
-                                    onlineCode        = onlineJoinInput
+                                    onlineCode        = code
                                     onlineStatus      = "Waiting for $hostName to start the puzzle…"
                                     showOnlineJoin    = false
                                     onlineJoinInput   = ""
@@ -2989,39 +3234,16 @@ fun CrosswordApp() {
 
                 HorizontalDivider()
 
-                // Save & Quit
+                // Save & Quit (online: leave — a two-device game can't be resumed)
                 Button(
                     onClick = {
                         showSettings = false
-                        if (!puzzleSolved && !isGenerating && placedWords.isNotEmpty()) {
-                            saveManager.savePuzzle(
-                                playerName, activeCategory, activeDifficulty,
-                                placedWords, userInputs,
-                                android.graphics.Color.argb(
-                                    (currentBgColor.alpha * 255).toInt(),
-                                    (currentBgColor.red   * 255).toInt(),
-                                    (currentBgColor.green * 255).toInt(),
-                                    (currentBgColor.blue  * 255).toInt()
-                                ),
-                                bgImageName = currentBgImageName
-                            )
-                        }
-                        cleanupOnlineSession()
-                        if (activeGameMode != GameMode.SINGLE) player2Name = ""
-                        puzzleSolved = false
-                        showConfetti = false
-                        showTurnDialog = false
-                        vindPassDialogVisible = false
-                        pendingTurnDialog = false
-                        wordToInput = null
-                        showWrongFlash = false
-                        streakMilestone = null
-                        appMode = AppMode.CATEGORY_SELECT
+                        goHome()
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("💾  Save & Quit to Menu", fontSize = 16.sp)
+                    Text(if (isOnlineGame) "🚪  Leave Online Game" else "💾  Save & Quit to Menu", fontSize = 16.sp)
                 }
 
                 OutlinedButton(
@@ -3097,13 +3319,15 @@ fun CrosswordApp() {
     }
 
     // ── VINDICTIVE PASS / ANSWER DIALOG ─────────────────────────────────────────────
+    // Offered on the answering player's device when their timer runs out.
     if (vindPassDialogVisible && appMode == AppMode.DASHBOARD &&
-        activeGameMode == GameMode.VINDICTIVE && !puzzleSolved) {
-        val opName = if (vindCurrentPlayer == 0) playerName else player2Name
+        activeGameMode == GameMode.VINDICTIVE && !puzzleSolved &&
+        vindPhase == VindicativePhase.OPPONENT_WAIT && vindAssignedWord != null) {
+        val opName = nameOf(vindCurrentPlayer)
         AlertDialog(
             onDismissRequest = { /* can't dismiss — must choose */ },
             title = {
-                Text("$opName — Your Clue!", fontWeight = FontWeight.Bold,
+                Text("⏰ Time's up, $opName!", fontWeight = FontWeight.Bold,
                     fontSize = 18.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth())
             },
@@ -3119,7 +3343,7 @@ fun CrosswordApp() {
                     Text("${vindAssignedWord?.word?.length ?: 0} letters",
                         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(4.dp))
-                    Text("Time's up! Answer for +1 pt, or pass for -1 pt",
+                    Text("Answer it: +${Economy.VIND_ASSIGNED_CORRECT} if right, ${Economy.VIND_ASSIGNED_WRONG} if wrong.\nOr pass: ${Economy.VIND_PASS}.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center, fontWeight = FontWeight.Medium)
                 }
             },
@@ -3127,32 +3351,13 @@ fun CrosswordApp() {
                 GradientBtn("Answer It  ▶", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                     vindPassDialogVisible = false
-                    wordToInput = vindAssignedWord
-                    inputText = ""
+                    wordToInput = vindAssignedWord     // keeps whatever was already typed
                 }, modifier = Modifier.fillMaxWidth())
             },
             dismissButton = {
-                GradientBtn("Pass  (-1 pt)", redGradient, onClick = {
+                GradientBtn("Pass  (${Economy.VIND_PASS} pt)", redGradient, onClick = {
                     vibrateLight(context)
-                    if (vindCurrentPlayer == 0) vindP1Score-- else vindP2Score--
-                    vindPassDialogVisible = false
-                    vindAssignedWord = null
-                    vindPhase = VindicativePhase.ASSIGN_CLUE
-                    pendingTurnDialog = false
-                    if (isOnlineGame) {
-                        val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
-                        val myVal = if (onlineRole == OnlineRole.HOST) vindP1Score else vindP2Score
-                        FirebaseGameManager.writeState(onlineCode, mapOf(
-                            "vindPhase"           to VindicativePhase.ASSIGN_CLUE.name,
-                            "vindAssignedWordIdx" to -1,
-                            "vindCurrentPlayer"  to vindCurrentPlayer,
-                            myKey                 to myVal
-                        ))
-                    } else {
-                        val opponentName = if (vindCurrentPlayer == 0) playerName else player2Name
-                        turnDialogMessage = "⏭ $opponentName passed! -1 pt\n$opponentName now picks a clue for the other player!\n$playerName: ${vindP1Score}pts  |  $player2Name: ${vindP2Score}pts"
-                        showTurnDialog = true
-                    }
+                    passAssigned()
                 }, modifier = Modifier.fillMaxWidth())
             }
         )
@@ -3379,7 +3584,7 @@ fun CrosswordApp() {
     if (showTurnDialog && appMode == AppMode.DASHBOARD) {
         AlertDialog(
             onDismissRequest = { showTurnDialog = false },
-            title = { Text("Pass the Phone!", fontWeight = FontWeight.Bold, fontSize = 20.sp,
+            title = { Text(turnDialogTitle, fontWeight = FontWeight.Bold, fontSize = 20.sp,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
             text = {
                 Column(
@@ -3389,11 +3594,11 @@ fun CrosswordApp() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    turnDialogMessage.split("\n").forEach { line ->
+                    turnDialogMessage.split("\n").forEachIndexed { idx, line ->
                         Text(line, fontSize = if (line.contains("|")) 14.sp else 18.sp,
-                            fontWeight = if (line.contains("✋")) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight = if (idx == 0) FontWeight.Bold else FontWeight.Normal,
                             textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth(),
-                            color = if (line.contains("|")) Color.Gray else Color.Unspecified)
+                            color = if (line.contains("|")) MaterialTheme.colorScheme.onSurfaceVariant else Color.Unspecified)
                     }
                 }
             },
@@ -3432,17 +3637,23 @@ fun CrosswordApp() {
                         GradientBtn("🌐 Host Game", appBtnGradient, modifier = Modifier.weight(1f),
                             onClick = {
                                 vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
-                                val code = FirebaseGameManager.generateCode()
-                                isOnlineGame = true
-                                onlineRole   = OnlineRole.HOST
-                                onlineCode   = code
-                                onlineStatus = ""
                                 showPlayer2SetupDialog = false
-                                FirebaseGameManager.signInAnonymously {
-                                    FirebaseGameManager.createGame(code, playerName, activeGameMode, "", activeDifficulty)
+                                val hostMode = activeGameMode
+                                val hostDiff = activeDifficulty
+                                FirebaseGameManager.signInAnonymously { ok, err ->
+                                    if (!ok) { onlineNotice = err; return@signInAnonymously }
+                                    FirebaseGameManager.createGame(playerName, hostMode, hostDiff) { code, error ->
+                                        if (code == null) { onlineNotice = error; return@createGame }
+                                        isOnlineGame      = true
+                                        onlineRole        = OnlineRole.HOST
+                                        onlineCode        = code
+                                        onlineStatus      = ""
+                                        vindCurrentPlayer = 0      // host opens
+                                        teamFirstPlayer   = 0
+                                        if (hostMode == GameMode.VINDICTIVE) showVindTimerDialog = true
+                                        else showVindCategoryDialog = true
+                                    }
                                 }
-                                if (activeGameMode == GameMode.VINDICTIVE) showVindTimerDialog = true
-                                else showVindCategoryDialog = true
                             })
                         GradientBtn("🌐 Join Game", appBtnGradient, modifier = Modifier.weight(1f),
                             onClick = {
@@ -3493,6 +3704,7 @@ fun CrosswordApp() {
                             vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                             player2Name = p2NameInput.trim()
                             vindCurrentPlayer = whoIsP1
+                            teamFirstPlayer   = whoIsP1
                             saveManager.ensurePlayer(player2Name)
                             showPlayer2SetupDialog = false
                             if (activeGameMode == GameMode.VINDICTIVE) showVindTimerDialog = true
@@ -3810,9 +4022,12 @@ fun CrosswordApp() {
                     modifier = Modifier.verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val catSavedKeys = saveManager.getSavedKeys(playerName)
+                    // Saves are per mode: a Team game never shows up as a solo "Resume".
+                    val slotMode = if (activeGameMode == GameMode.DAILY) GameMode.SINGLE else activeGameMode
+                    val savedIds = remember(playerName, homeRefresh) { saveManager.getSavedSlotIds(playerName) }
                     Difficulty.entries.forEach { diff ->
-                        val hasSave = catSavedKeys.contains("${cat}__${diff.name}")
+                        val slot    = SaveSlot(slotMode, cat, diff)
+                        val hasSave = !isOnlineGame && slot.id in savedIds
                         val tagline = when (diff) {
                             Difficulty.EASY   -> "Quick warm-up"
                             Difficulty.MEDIUM -> "A pleasant solve"
@@ -3840,12 +4055,14 @@ fun CrosswordApp() {
                                         FirebaseGameManager.writeState(onlineCode, mapOf("category" to cat, "difficulty" to diff.name))
                                         difficultyPickCategory = null
                                         appMode = AppMode.ONLINE_LOBBY
-                                    } else if (activeGameMode != GameMode.SINGLE && player2Name.isBlank()) {
+                                    } else if (activeGameMode != GameMode.SINGLE && activeGameMode != GameMode.DAILY &&
+                                               player2Name.isBlank()) {
+                                        difficultyPickCategory = null
                                         showPlayer2SetupDialog = true
                                     } else {
                                         difficultyPickCategory = null
-                                        if (hasSave) resumePrompt = Pair(cat, diff)
-                                        else launchPuzzle(cat, diff, resume = false)
+                                        if (hasSave) resumePrompt = slot
+                                        else launchPuzzle(cat, diff)
                                     }
                                 },
                             contentAlignment = Alignment.Center
@@ -3879,23 +4096,25 @@ fun CrosswordApp() {
     }
 
     // ── RESUME / NEW PUZZLE DIALOG ────────────────────────────────────────────
-    resumePrompt?.let { (cat, diff) ->
+    resumePrompt?.let { slot ->
         AlertDialog(
             onDismissRequest = { resumePrompt = null },
             title = { Text("Resume Puzzle?", fontWeight = FontWeight.Bold) },
-            text  = { Text("You have an unfinished ${diff.label} puzzle in $cat. Resume where you left off, or start a new one?") },
+            text  = { Text("You have an unfinished ${slotTitle(slot)} puzzle. Resume where you left off, or start a new one?") },
             confirmButton = {
                 GradientBtn("▶ Resume", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
-                    resumePrompt = null; launchPuzzle(cat, diff, resume = true)
+                    resumePrompt = null
+                    if (!resumeSlot(slot)) launchPuzzle(slot.category, slot.difficulty)
                 }, modifier = Modifier.fillMaxWidth())
             },
             dismissButton = {
                 GradientBtn("New Puzzle", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                     resumePrompt = null
-                    saveManager.clearPuzzle(playerName, cat, diff)
-                    launchPuzzle(cat, diff, resume = false)
+                    saveManager.clearPuzzle(playerName, slot)
+                    homeRefresh++
+                    launchPuzzle(slot.category, slot.difficulty)
                 }, modifier = Modifier.fillMaxWidth())
             }
         )
@@ -3954,134 +4173,151 @@ fun CrosswordApp() {
         }
     }
 
-    // ── VINDICTIVE ASSIGN INTERCEPT ───────────────────────────────────────────
-    // Intercept double-tap during ASSIGN_CLUE — store as assigned word, switch to opponent
-    LaunchedEffect(wordToInput) {
-        if (activeGameMode == GameMode.VINDICTIVE &&
-            vindPhase == VindicativePhase.ASSIGN_CLUE &&
-            wordToInput != null) {
-            vindAssignedWord   = wordToInput
-            wordToInput        = null
-            vindCurrentPlayer  = 1 - vindCurrentPlayer    // switch to opponent
-            vindPassDialogVisible = false
-            vindOpponentCountdown = vindTimerSeconds
-            vindPhase = VindicativePhase.OPPONENT_WAIT
-            if (isOnlineGame) {
-                // Sync assignment to the other device — no turn dialog needed online
-                val wordIdx = placedWords.indexOf(vindAssignedWord)
-                FirebaseGameManager.writeState(onlineCode, mapOf(
-                    "vindPhase"          to VindicativePhase.OPPONENT_WAIT.name,
-                    "vindAssignedWordIdx" to wordIdx,
-                    "vindCurrentPlayer"  to vindCurrentPlayer,
-                    "vindCountdown"      to vindTimerSeconds
-                ))
-            } else {
-                val opponentName = if (vindCurrentPlayer == 0) playerName else player2Name
-                turnDialogMessage = "✋ Pass to $opponentName!\nYou have a clue waiting — see below."
-                showTurnDialog = true
-            }
+    // ── VINDICTIVE ANSWER COUNTDOWN ──────────────────────────────────────────
+    // Starts once the answerer has the phone ("I'm Ready" dismissed). Runs only on
+    // the device that owns the timer (VindictiveRules.ownsTimer): offline the one
+    // phone, online the answerer's phone — which mirrors it to the other device.
+    // Typing keeps the clock running; when it hits zero the documented
+    // Answer It / Pass choice appears.
+    LaunchedEffect(vindPhase, showTurnDialog, vindAssignedWord) {
+        if (activeGameMode != GameMode.VINDICTIVE || appMode != AppMode.DASHBOARD || puzzleSolved) return@LaunchedEffect
+        if (showTurnDialog || vindAssignedWord == null) return@LaunchedEffect
+        if (!VindictiveRules.ownsTimer(vindSnapshot(), isOnlineGame, myIndex())) return@LaunchedEffect
+        vindPassDialogVisible = false
+        for (i in vindTimerSeconds downTo 1) {
+            vindOpponentCountdown = i
+            if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("vindCountdown" to i))
+            delay(1000L)
+            if (vindPhase != VindicativePhase.OPPONENT_WAIT || puzzleSolved) return@LaunchedEffect
         }
+        onVindTimeout()
     }
 
-    // 5-second countdown then show pass/answer dialog for opponent
-    // 30-second countdown — cancels if player answers early (wordToInput set)
-    // Countdown only starts AFTER the "I'm Ready" handoff dialog is dismissed
-    // Re-keyed only on vindPhase / showTurnDialog. Including vindCurrentPlayer
-    // in the key list caused the remote-sync echo (the listener writes the
-    // exact same player index back to local state) to cancel and restart the
-    // countdown at full duration, giving the answerer a fresh timer on every
-    // Firebase tick.
-    LaunchedEffect(vindPhase, showTurnDialog) {
-        if (activeGameMode == GameMode.VINDICTIVE &&
-            vindPhase == VindicativePhase.OPPONENT_WAIT &&
-            appMode == AppMode.DASHBOARD && !puzzleSolved &&
-            !showTurnDialog) {  // wait until player hit I'm Ready
-            // Online: only the answerer's device runs the timer. Otherwise both
-            // devices counted down simultaneously and the time-up wrong-answer
-            // logic fired twice (-4 instead of -2 to the answerer's score).
-            if (isOnlineGame) {
-                val myPlayerIndex = if (onlineRole == OnlineRole.HOST) 0 else 1
-                if (vindCurrentPlayer != myPlayerIndex) return@LaunchedEffect
+    // ── RESULTS CARD ─────────────────────────────────────────────────────────
+    val result = lastResult
+    if (puzzleSolved && showResults && result != null && appMode == AppMode.DASHBOARD) {
+        val timeLabel = "%d:%02d".format(result.seconds / 60, result.seconds % 60)
+        val p0 = onlineP0Name.ifBlank { "Player 1" }
+        val p1 = onlineP1Name.ifBlank { "Player 2" }
+        val title = when (result.mode) {
+            GameMode.VINDICTIVE -> when (VindictiveRules.winner(result.vind)) {
+                0    -> "🏆 $p0 wins!"
+                1    -> "🏆 $p1 wins!"
+                else -> "🤝 Dead heat!"
             }
-            vindPassDialogVisible = false
-            vindOpponentCountdown = vindTimerSeconds
-            for (i in vindTimerSeconds downTo 1) {
-                if (vindPhase != VindicativePhase.OPPONENT_WAIT || showTurnDialog) return@LaunchedEffect
-                vindOpponentCountdown = i
-                if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("vindCountdown" to i))
-                delay(1000L)
-            }
-            if (vindPhase == VindicativePhase.OPPONENT_WAIT && !puzzleSolved && !showTurnDialog && wordToInput == null) {
-                vindOpponentCountdown = 0
-                // Time's up = automatic wrong answer: -2 pts, move to assign-clue phase
-                if (vindCurrentPlayer == 0) vindP1Score -= 2 else vindP2Score -= 2
-                if (soundEnabled) SoundPlayer.playWrong()
-                vibrateWrong(context)
-                showWrongFlash = true
-                vindAssignedWord = null
-                vindPhase = VindicativePhase.ASSIGN_CLUE
-                if (isOnlineGame) {
-                    val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
-                    val myVal = if (onlineRole == OnlineRole.HOST) vindP1Score else vindP2Score
-                    FirebaseGameManager.writeState(onlineCode, mapOf(
-                        "vindPhase"           to VindicativePhase.ASSIGN_CLUE.name,
-                        "vindAssignedWordIdx" to -1,
-                        "vindCurrentPlayer"   to vindCurrentPlayer,
-                        myKey                 to myVal,
-                        "vindCountdown"       to 0
-                    ))
-                }
-            }
+            GameMode.TEAM -> "Team Victory! 🤝"
+            else          -> if (result.isDaily) "Daily Puzzle Solved! 📅" else "Puzzle Complete! 🎉"
         }
-    }
-
-    if (puzzleSolved) {
-        val winPts    = if (isDailyPuzzle) 20 else pointsForDifficulty(activeDifficulty)
-        val winNet    = (winPts - hintsUsedThisPuzzle).coerceAtLeast(0)
-        val winMins   = elapsedSeconds / 60
-        val winSecs   = elapsedSeconds % 60
-        val timeLabel = "%d:%02d".format(winMins, winSecs)
-        val hintLabel = if (hintsUsedThisPuzzle == 0) "no hints" else "$hintsUsedThisPuzzle hint(s) used (−${hintsUsedThisPuzzle}pts)"
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("Puzzle Complete! 🎉", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold) },
+            title = { Text(title, style = MaterialTheme.typography.headlineMedium) },
             text  = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Nice work, $playerName!", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(4.dp))
-                    Text("+$winNet point(s) earned", fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
-                    Text(hintLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Time: $timeLabel", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    @Composable
+                    fun Line(label: String, value: String, strong: Boolean = false) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(label, style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(value, style = if (strong) MaterialTheme.typography.titleMedium
+                                                else MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (strong) FontWeight.Bold else FontWeight.Medium,
+                                color = if (strong) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                    when (result.mode) {
+                        GameMode.VINDICTIVE -> {
+                            Line(p0, "${result.vind.p1Score} pts", strong = VindictiveRules.winner(result.vind) == 0)
+                            Line(p1, "${result.vind.p2Score} pts", strong = VindictiveRules.winner(result.vind) == 1)
+                            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            val mine = if (result.myIndex == 0) result.vind.p1Score else result.vind.p2Score
+                            Line("Banked to your score", "+${Economy.vindictiveBank(mine)}")
+                        }
+                        else -> {
+                            if (result.mode == GameMode.TEAM) {
+                                Line("$p0 solved", "${result.team.p1Correct} words")
+                                Line("$p1 solved", "${result.team.p2Correct} words")
+                                TeamRules.mvp(result.team)?.let { mvp ->
+                                    Text("⭐ MVP: ${if (mvp == 0) p0 else p1}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.tertiary)
+                                }
+                                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                            }
+                            Line("Completion reward", "+${result.reward}")
+                            if (result.hints > 0) Line("Hints (charged when used)", "−${result.hints}")
+                            Line("Net for this puzzle", "+${result.net}", strong = true)
+                            if (result.dailyAlreadyPaid)
+                                Text("Today's Daily was already counted — no extra points this time.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (result.hints == 0)
+                                Text("✨ Solved without hints", style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.tertiary)
+                        }
+                    }
+                    Line("Time", timeLabel)
                 }
             },
             confirmButton = {
-                GradientBtn("Next Puzzle", appBtnGradient, onClick = {
+                val primaryLabel = when {
+                    isOnlineGame   -> "Done"
+                    result.isDaily -> "Play a Category"
+                    else           -> "Next Puzzle"
+                }
+                GradientBtn(primaryLabel, appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
-                    showTurnDialog = false; vindPassDialogVisible = false
-                    pendingTurnDialog = false; wordToInput = null; showConfetti = false
-                    launchPuzzle(activeCategory, activeDifficulty)
+                    when {
+                        isOnlineGame   -> goHome()
+                        // The Daily is one puzzle per day — "next" means pick a category.
+                        result.isDaily -> { goHome(); showVindCategoryDialog = true }
+                        // Same category (or the same combined set), same difficulty, same mode.
+                        else -> launchPuzzle(activeCategory, activeDifficulty, combined = combinedCategories)
+                    }
                 }, modifier = Modifier.fillMaxWidth())
             },
             dismissButton = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    GradientBtn("Change Category", appBtnGradient, onClick = {
+                    if (!isOnlineGame && !result.isDaily) {
+                        GradientBtn("Change Category", appBtnGradient, onClick = {
+                            vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
+                            goHome()
+                            showVindCategoryDialog = true
+                        }, modifier = Modifier.fillMaxWidth())
+                    }
+                    GradientBtn("Home", appBtnGradient, onClick = {
                         vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
-                        cleanupOnlineSession()
-                        puzzleSolved = false; showConfetti = false; showTurnDialog = false
-                        vindPassDialogVisible = false; pendingTurnDialog = false; wordToInput = null
-                        appMode = AppMode.CATEGORY_SELECT
-                    }, modifier = Modifier.fillMaxWidth())
-                    GradientBtn("Main Menu", appBtnGradient, onClick = {
-                        vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
-                        cleanupOnlineSession()
-                        saveManager.setLastUser(""); playerName = ""
-                        puzzleSolved = false; showConfetti = false; showTurnDialog = false
-                        vindPassDialogVisible = false; pendingTurnDialog = false; wordToInput = null
-                        showWrongFlash = false; streakMilestone = null
-                        vindPhase = VindicativePhase.PICK_OWN; dailyPromptShown = false
-                        appMode = AppMode.LOGIN
+                        goHome()
                     }, modifier = Modifier.fillMaxWidth())
                 }
+            }
+        )
+    }
+
+    // ── BLOCKING NOTICES ─────────────────────────────────────────────────────
+    onlineNotice?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("🌐 Online play", fontWeight = FontWeight.Bold) },
+            text  = { Text(msg) },
+            confirmButton = {
+                GradientBtn("OK", appBtnGradient, onClick = {
+                    onlineNotice = null
+                    timerRunning = false
+                    cleanupOnlineSession()
+                    resetOverlays()
+                    puzzleSolved = false
+                    appMode = AppMode.CATEGORY_SELECT
+                }, modifier = Modifier.fillMaxWidth())
+            }
+        )
+    }
+    dailyInfoMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { dailyInfoMessage = null },
+            title = { Text("📅 Daily Puzzle", fontWeight = FontWeight.Bold) },
+            text  = { Text(msg) },
+            confirmButton = {
+                GradientBtn("OK", appBtnGradient, onClick = { dailyInfoMessage = null }, modifier = Modifier.fillMaxWidth())
             }
         )
     }
@@ -4109,6 +4345,10 @@ fun PuzzleScreenReference(
     var offsetX       by remember { mutableFloatStateOf(0f) }
     var offsetY       by remember { mutableFloatStateOf(0f) }
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
+    // Grid footprint in px at scale 1, and the zoom that fits it on screen —
+    // published from BoxWithConstraints so the gesture handler can clamp.
+    var gridPx        by remember { mutableStateOf(IntSize.Zero) }
+    var minScale      by remember { mutableFloatStateOf(0.5f) }
 
     val latestInputs by rememberUpdatedState(userInputs)
     val latestWords  by rememberUpdatedState(placedWords)
@@ -4154,9 +4394,12 @@ fun PuzzleScreenReference(
             .onSizeChanged { containerSize = it }   // captures real pixel dimensions for parallax clamping
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
-                    scale    = (scale * zoom).coerceIn(0.1f, 4f)
-                    offsetX += pan.x
-                    offsetY += pan.y
+                    scale = (scale * zoom).coerceIn(minScale, 4f)
+                    // Keep at least part of the grid on screen.
+                    val maxX = (gridPx.width  * scale + containerSize.width)  / 2f - 48f
+                    val maxY = (gridPx.height * scale + containerSize.height) / 2f - 48f
+                    offsetX = (offsetX + pan.x).coerceIn(-maxX.coerceAtLeast(0f), maxX.coerceAtLeast(0f))
+                    offsetY = (offsetY + pan.y).coerceIn(-maxY.coerceAtLeast(0f), maxY.coerceAtLeast(0f))
                 }
             }
     ) {
@@ -4204,28 +4447,32 @@ fun PuzzleScreenReference(
             // Centre the grid on a word's start cell when single-tapped in the clue list.
             // Reset pan/zoom to the fitted view whenever screen dimensions change
             // (rotation, multi-window resize, foldable state change).
-            LaunchedEffect(maxWidth, maxHeight) {
-                scale   = 1f
-                offsetX = 0f
-                offsetY = 0f
+            // Big grids (Genius) can't fit at the 18dp minimum cell size: let the player
+            // zoom out to see the whole board, and start somewhere readable.
+            val fitScale = if (cells.isEmpty()) 1f else
+                minOf(maxWidth.value / (gridW * cellSize), maxHeight.value / (gridH * cellSize), 1f)
+            LaunchedEffect(maxWidth, maxHeight, gridW, gridH) {
+                minScale = (fitScale * 0.9f).coerceAtMost(1f)
+                gridPx   = IntSize((gridW * cellSize * screenDensity).toInt(), (gridH * cellSize * screenDensity).toInt())
+                scale    = maxOf(fitScale, 0.75f).coerceAtMost(1f)
+                offsetX  = 0f
+                offsetY  = 0f
             }
 
             LaunchedEffect(centreOnWord) {
                 val w   = centreOnWord ?: return@LaunchedEffect
                 if (cells.isEmpty()) return@LaunchedEffect
-                // Reset zoom to 1x first — centering at an arbitrary zoom level
-                // looks wrong because the cell size is unexpected.
-                scale = 1f
-                // graphicsLayer translationX/Y are in PIXELS, so convert cellSize dp→px.
-                // With scale=1 the formula simplifies: no scale multiplier needed.
+                // Keep the player's zoom (never below a readable level) and bring the
+                // MIDDLE of the word to the centre of the view.
+                scale = scale.coerceAtLeast(minOf(1f, maxOf(minScale, 0.75f)))
                 val csPx    = cellSizeState.value * densityState.value
-                val wordPx  = (w.startX - minX + 0.5f) * csPx   // px from grid left edge
-                val wordPy  = (w.startY - minY + 0.5f) * csPx   // px from grid top edge
+                val half    = (w.word.length - 1) / 2f
+                val midX    = w.startX - minX + 0.5f + (if (w.isHorizontal) half else 0f)
+                val midY    = w.startY - minY + 0.5f + (if (w.isHorizontal) 0f else half)
                 val gridWpx = gridW * csPx
                 val gridHpx = gridH * csPx
-                // Shift the grid so the tapped cell's centre lands at the container centre.
-                offsetX = -(wordPx - gridWpx / 2f)
-                offsetY = -(wordPy - gridHpx / 2f)
+                offsetX = -(midX * csPx - gridWpx / 2f) * scale
+                offsetY = -(midY * csPx - gridHpx / 2f) * scale
                 onCentred()
             }
 
@@ -4277,13 +4524,16 @@ fun PuzzleScreenReference(
 
                     Box(
                         modifier = Modifier
-                            .size((gridW * cellSize).dp, (gridH * cellSize).dp)
-                            .graphicsLayer(
-                                scaleX       = scale,
-                                scaleY       = scale,
-                                translationX = offsetX,
+                            // requiredSize: a grid wider than the screen must NOT be squeezed to
+                            // the incoming constraints, or drawing and tap maths disagree.
+                            .requiredSize((gridW * cellSize).dp, (gridH * cellSize).dp)
+                            // Lambda form: pan/zoom only re-draws, never recomposes the grid.
+                            .graphicsLayer {
+                                scaleX       = scale
+                                scaleY       = scale
+                                translationX = offsetX
                                 translationY = offsetY
-                            )
+                            }
                     ) {
                         cells.forEach { cell ->
                             val cellPos      = Pair(cell.x, cell.y)
@@ -4402,8 +4652,9 @@ fun CategoryScreen(
     player2Name:      String,
     allEntries:       List<RawEntry>,
     usedWordCounts:    Map<String, Int>,
-    inProgressList:    List<Pair<String, Difficulty>>,
-    onResume:          (String, Difficulty) -> Unit,
+    inProgressList:    List<SaveSlot>,
+    onResume:          (SaveSlot) -> Unit,
+    dailyDoneToday:    Boolean = false,
     onStartPlay:       () -> Unit,
     onDailyPuzzle:          () -> Unit,
     onChangeUser:           () -> Unit,
@@ -4517,7 +4768,6 @@ fun CategoryScreen(
             // ── CONTINUE LAST PUZZLE (if any in-progress save) ─────────────
             val lastInProgress = inProgressList.firstOrNull()
             if (lastInProgress != null) {
-                val (cat, diff) = lastInProgress
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -4527,7 +4777,7 @@ fun CategoryScreen(
                         .clickable {
                             vibrateLight(context)
                             if (soundEnabled) SoundPlayer.playClick()
-                            onResume(cat, diff)
+                            onResume(lastInProgress)
                         }
                         .padding(horizontal = 14.dp, vertical = 12.dp)
                 ) {
@@ -4538,7 +4788,7 @@ fun CategoryScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "▶  Continue $cat — ${diff.label}",
+                                "▶  Continue ${slotTitle(lastInProgress)}",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -4568,7 +4818,10 @@ fun CategoryScreen(
                         .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
                         .clip(RoundedCornerShape(12.dp))
                         .background(dailyGradient)
-                        .clickable { vibrateLight(context); if (soundEnabled) SoundPlayer.playClick(); onDailyPuzzle() }
+                        .graphicsLayer { alpha = if (dailyDoneToday) 0.72f else 1f }
+                        .clickable(onClickLabel = if (dailyDoneToday) "Daily puzzle already solved" else "Play today's daily puzzle") {
+                            vibrateLight(context); if (soundEnabled) SoundPlayer.playClick(); onDailyPuzzle()
+                        }
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     BevelHighlight(alpha = 0.35f)
@@ -4577,13 +4830,15 @@ fun CategoryScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("📅", fontSize = 18.sp, modifier = Modifier.padding(end = 8.dp))
+                            Text(if (dailyDoneToday) "✅" else "📅", fontSize = 18.sp, modifier = Modifier.padding(end = 8.dp))
                             Text("DAILY PUZZLE", fontSize = 14.sp,
                                 color = Color.Black, fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 1.sp)
                         }
-                        Text("All categories • 20 words • 20 pts", fontSize = 11.sp,
-                            color = Color.Black.copy(alpha = 0.65f))
+                        Text(
+                            if (dailyDoneToday) "Solved today — a new one arrives at midnight UTC"
+                            else "All categories • ${DailyPuzzle.WORD_COUNT} words • ${Economy.DAILY_POINTS} pts • same for everyone",
+                            fontSize = 11.sp, color = Color.Black.copy(alpha = 0.72f))
                     }
                 }
             }
@@ -4897,6 +5152,7 @@ fun FullHintsList(
     words:           List<PlacedWord>,
     userInputs:      Map<Pair<Int, Int>, Char>,
     highlightedWord: PlacedWord?,
+    selectedWord:    PlacedWord? = null,
     onSingleTap:     (PlacedWord) -> Unit,
     onDoubleTap:     (PlacedWord) -> Unit
 ) {
@@ -4951,11 +5207,11 @@ fun FullHintsList(
         }
         if (acrossUnsolved.isNotEmpty()) {
             item { SectionHeader("ACROSS", Color(0xFF5C6BC0)) }
-            items(acrossUnsolved) { ClueItem(it, userInputs, highlightedWord, onSingleTap, onDoubleTap) }
+            items(acrossUnsolved) { ClueItem(it, userInputs, highlightedWord == it || selectedWord == it, onSingleTap, onDoubleTap) }
         }
         if (downUnsolved.isNotEmpty()) {
             item { SectionHeader("DOWN", Color(0xFF00838F)) }
-            items(downUnsolved) { ClueItem(it, userInputs, highlightedWord, onSingleTap, onDoubleTap) }
+            items(downUnsolved) { ClueItem(it, userInputs, highlightedWord == it || selectedWord == it, onSingleTap, onDoubleTap) }
         }
         // Solved section — compact
         if (solvedCount > 0) {
@@ -4967,31 +5223,22 @@ fun FullHintsList(
                         fontSize = 13.sp, color = Color.White, letterSpacing = 1.5.sp)
                 }
             }
-            items(acrossSolved) { ClueItem(it, userInputs, highlightedWord, onSingleTap, onDoubleTap) }
-            items(downSolved)   { ClueItem(it, userInputs, highlightedWord, onSingleTap, onDoubleTap) }
+            items(acrossSolved) { ClueItem(it, userInputs, highlightedWord == it || selectedWord == it, onSingleTap, onDoubleTap) }
+            items(downSolved)   { ClueItem(it, userInputs, highlightedWord == it || selectedWord == it, onSingleTap, onDoubleTap) }
         }
         item { Spacer(Modifier.height(8.dp)) }
     }
 }
 
-// Returns true when every cell of this word is correctly filled by the player.
-fun isWordSolved(word: PlacedWord, userInputs: Map<Pair<Int, Int>, Char>): Boolean =
-    word.word.indices.all { i ->
-        val pos = if (word.isHorizontal) Pair(word.startX + i, word.startY)
-        else                   Pair(word.startX,      word.startY + i)
-        userInputs[pos] == word.word[i]
-    }
-
 @Composable
 fun ClueItem(
     word:            PlacedWord,
     userInputs:      Map<Pair<Int, Int>, Char>,
-    highlightedWord: PlacedWord?,
+    isHighlight:     Boolean,
     onSingleTap:     (PlacedWord) -> Unit,
     onDoubleTap:     (PlacedWord) -> Unit
 ) {
     val solved      = isWordSolved(word, userInputs)
-    val isHighlight = word == highlightedWord
     val solvedGreen = Color(0xFF2E7D32)
 
     Column(
@@ -5055,348 +5302,6 @@ fun ClueItem(
     }
 }
 
-// ============================================================
-// GENERATOR — BFS EXPANSION + CONSTRAINT INDEX
-// Architecture from: VGV "How we developed a scalable, incredibly fast crossword generator"
-//
-// Key improvements over the old random-restart greedy loop:
-//   1. Constraint index (len → pos → char → words): O(1) word lookup vs O(pool × wordLen)
-//   2. Grid maps (char + direction): O(wordLen) validation vs O(placed × wordLen)
-//   3. BFS expansion from seed: systematic, no wasted random restarts
-//   4. Candidate queue with visited set: each cell tried once as a crossing point
-// ============================================================
-
-// ── CONSTRAINT INDEX ─────────────────────────────────────────────────────────
-// Maps length → positionInWord → character → matching entries.
-// Example: wordIndex[5][2]['R'] = all 5-letter words with 'R' at position 2.
-// Built once from the full pool; shared across all 50 BFS attempts.
-fun buildWordIndex(items: List<RawEntry>): HashMap<Int, HashMap<Int, HashMap<Char, MutableList<RawEntry>>>> {
-    val index = HashMap<Int, HashMap<Int, HashMap<Char, MutableList<RawEntry>>>>()
-    for (entry in items) {
-        val len = entry.answer.length
-        for (pos in entry.answer.indices) {
-            index
-                .getOrPut(len) { HashMap() }
-                .getOrPut(pos) { HashMap() }
-                .getOrPut(entry.answer[pos]) { mutableListOf() }
-                .add(entry)
-        }
-    }
-    return index
-}
-
-// ── GRID MAPS ────────────────────────────────────────────────────────────────
-// gridChar: cell → character already placed there
-// gridDir:  cell → direction of the word that placed it
-//           true  = horizontal word only
-//           false = vertical word only
-//           null  = intersection (one H word + one V word share this cell)
-fun addToGrid(
-    word:     PlacedWord,
-    gridChar: HashMap<Pair<Int,Int>, Char>,
-    gridDir:  HashMap<Pair<Int,Int>, Boolean?>
-) {
-    val h = word.isHorizontal
-    for (i in word.word.indices) {
-        val pos = if (h) Pair(word.startX + i, word.startY)
-        else   Pair(word.startX,      word.startY + i)
-        gridChar[pos] = word.word[i]
-        gridDir[pos]  = when {
-            !gridDir.containsKey(pos) -> h      // first word to claim this cell
-            gridDir[pos] != h         -> null    // opposite direction = intersection
-            else                      -> h       // same dir (shouldn't occur in valid board)
-        }
-    }
-}
-
-// ── FAST VALIDATION ───────────────────────────────────────────────────────────
-// O(wordLen) via grid maps instead of O(placed × wordLen).
-// Three rules enforced:
-//   1. End-caps before/after the word must be empty.
-//   2. Occupied cells in the path must be valid perpendicular intersections
-//      (wrong char = conflict; same-direction or already-intersection = co-linear).
-//   3. Empty cells must have no perpendicular neighbors (prevents parallel word adjacency).
-fun isValidFast(
-    word:     String,  sx: Int, sy: Int, h: Boolean,
-    gridChar: HashMap<Pair<Int,Int>, Char>,
-    gridDir:  HashMap<Pair<Int,Int>, Boolean?>
-): Boolean {
-    val dx = if (h) 1 else 0
-    val dy = if (h) 0 else 1
-
-    // Rule 1 — end-caps
-    if (gridChar.containsKey(Pair(sx - dx, sy - dy))) return false
-    if (gridChar.containsKey(Pair(sx + word.length * dx, sy + word.length * dy))) return false
-
-    var intersections = 0
-    for (i in word.indices) {
-        val pos          = Pair(sx + i * dx, sy + i * dy)
-        val existingChar = gridChar[pos]
-
-        if (existingChar != null) {
-            // Rule 2 — occupied cell must be a valid perpendicular intersection
-            if (existingChar != word[i]) return false
-            val dir = gridDir[pos]
-            if (dir == null || dir == h) return false   // already an intersection, or co-linear
-            intersections++
-        } else {
-            // Rule 3 — empty cell must not be adjacent to a parallel word
-            if (gridChar.containsKey(Pair(sx + i * dx - dy, sy + i * dy - dx))) return false
-            if (gridChar.containsKey(Pair(sx + i * dx + dy, sy + i * dy + dx))) return false
-        }
-    }
-    return intersections > 0   // word must connect to the existing board
-}
-
-// ── CANDIDATE QUEUE ───────────────────────────────────────────────────────────
-// Every letter of a newly placed word is a potential crossing point.
-// Enqueue all positions in the perpendicular direction; visited set prevents re-tries.
-fun enqueueFromWord(
-    word:    PlacedWord,
-    queue:   ArrayDeque<Triple<Int,Int,Boolean>>,
-    visited: HashSet<Triple<Int,Int,Boolean>>
-) {
-    val hNew = !word.isHorizontal
-    for (i in word.word.indices) {
-        val cx   = if (word.isHorizontal) word.startX + i else word.startX
-        val cy   = if (word.isHorizontal) word.startY     else word.startY + i
-        val cand = Triple(cx, cy, hNew)
-        if (visited.add(cand)) queue.add(cand)
-    }
-}
-
-// ── WORD FINDER ───────────────────────────────────────────────────────────────
-// For a BFS candidate cell (cx, cy) and direction hNew:
-//   1. Try each possible offset of (cx,cy) within the new word (posInWord 0..14).
-//   2. Walk forward from the word start, collecting constraints (known chars from
-//      existing intersections) and the maximum valid word length.
-//   3. Query wordIndex[len][posInWord][crossChar] for matching entries.
-//   4. Filter by all collected constraints, validate with isValidFast, then score.
-fun findBestPlacement(
-    cx:        Int, cy:    Int, hNew:     Boolean, crossChar: Char,
-    inPool:    LinkedHashSet<String>,
-    wordIndex: HashMap<Int, HashMap<Int, HashMap<Char, MutableList<RawEntry>>>>,
-    gridChar:  HashMap<Pair<Int,Int>, Char>,
-    gridDir:   HashMap<Pair<Int,Int>, Boolean?>,
-    usedWords: Set<String>
-): PlacedWord? {
-    val dx = if (hNew) 1 else 0
-    val dy = if (hNew) 0 else 1
-
-    var bestWord:  PlacedWord? = null
-    var bestScore              = Int.MIN_VALUE
-
-    // Bumped from 0..14 → 0..29 so words >15 chars can cross past their first
-    // 15 letters, and answers up to ~30 chars (longest in test.csv is 28) can
-    // still be considered as crossing words.
-    for (posInWord in 0..29) {
-        val sx = cx - posInWord * dx
-        val sy = cy - posInWord * dy
-
-        // Before-cap must be empty — can't start here if previous cell is occupied
-        if (gridChar.containsKey(Pair(sx - dx, sy - dy))) continue
-
-        // Forward pass: collect constraints and determine max valid length
-        val knownChars = mutableMapOf(posInWord to crossChar)
-        var maxLen = 0
-
-        // Bumped from 0..19 → 0..34 so 28-char answers can fit. Cost is one
-        // extra constant-time grid lookup per cell — negligible.
-        for (ext in 0..34) {
-            val wx    = sx + ext * dx
-            val wy    = sy + ext * dy
-            val wPos  = Pair(wx, wy)
-            val wChar = gridChar[wPos]
-            val wDir  = gridDir[wPos]
-
-            when {
-                wChar != null -> {
-                    if (wDir == hNew) break         // co-linear cell — can't extend
-                    knownChars[ext] = wChar          // perpendicular intersection — collect constraint
-                }
-                else -> {
-                    // Empty cell — reject if a parallel word runs alongside
-                    if (gridChar.containsKey(Pair(wx - dy, wy - dx))) break
-                    if (gridChar.containsKey(Pair(wx + dy, wy + dx))) break
-                }
-            }
-
-            // After-cap free? Then a word ending here (length ext+1) is a valid candidate.
-            if (!gridChar.containsKey(Pair(wx + dx, wy + dy))) maxLen = ext + 1
-        }
-
-        if (maxLen < 2 || posInWord >= maxLen) continue
-
-        // Query constraint index — prefer longer words (better grid coverage)
-        for (len in maxLen downTo maxOf(posInWord + 1, 2)) {
-            val candidates = wordIndex[len]?.get(posInWord)?.get(crossChar) ?: continue
-            for (entry in candidates) {
-                if (!inPool.contains(entry.answer)) continue
-                // All collected constraints must match
-                val allMatch = knownChars.all { (p, c) -> p < len && entry.answer[p] == c }
-                if (!allMatch) continue
-                // Final O(wordLen) validation
-                if (!isValidFast(entry.answer, sx, sy, hNew, gridChar, gridDir)) continue
-
-                val isInner     = posInWord > 0 && posInWord < len - 1
-                val bridgeBonus = when {
-                    knownChars.size >= 3 -> 900_000
-                    knownChars.size == 2 -> 400_000
-                    else                 -> 0
-                }
-                val score = (if (isInner) 30_000 else -15_000) +
-                        bridgeBonus + len * 500 -
-                        (if (usedWords.contains(entry.answer)) 30_000 else 0)
-
-                if (score > bestScore) {
-                    bestScore = score
-                    bestWord  = PlacedWord(entry.answer, entry.clue, sx, sy, hNew)
-                }
-            }
-        }
-    }
-
-    return if (bestScore > -20_000) bestWord else null
-}
-
-// ── MAIN GENERATOR ────────────────────────────────────────────────────────────
-fun generateCrossword(items: List<RawEntry>, target: Int, usedWords: Set<String>): List<PlacedWord> {
-    val unusedItems   = items.filter { !usedWords.contains(it.answer) }
-    val usedItems     = items.filter {  usedWords.contains(it.answer) }
-    val uniqueItems   = (unusedItems + usedItems).distinctBy { it.answer }
-
-    val wordIndex     = buildWordIndex(uniqueItems)
-    val entryByAnswer = uniqueItems.associateBy { it.answer }
-
-    var bestResult = emptyList<PlacedWord>()
-    var maxScore   = Long.MIN_VALUE
-
-    repeat(50) { iteration ->
-        val inPool = LinkedHashSet<String>().apply {
-            unusedItems.shuffled().forEach { add(it.answer) }
-            usedItems.shuffled().forEach   { add(it.answer) }
-        }
-
-        val gridChar = HashMap<Pair<Int,Int>, Char>(512)
-        val gridDir  = HashMap<Pair<Int,Int>, Boolean?>(512)
-        val placed   = mutableListOf<PlacedWord>()
-
-        // Seed: place one long word to anchor the BFS expansion
-        val anchorH  = (iteration % 2 == 0)
-        val topWords = inPool.take(20).mapNotNull { entryByAnswer[it] }
-            .sortedByDescending { it.answer.length }.take(5)
-        if (topWords.isEmpty()) return@repeat
-        val anchor   = topWords[Random.nextInt(topWords.size)]
-        val seed     = PlacedWord(anchor.answer, anchor.clue, 0, 0, anchorH)
-        placed.add(seed)
-        inPool.remove(anchor.answer)
-        addToGrid(seed, gridChar, gridDir)
-
-        // BFS: expand from every letter of every placed word
-        val visited = HashSet<Triple<Int,Int,Boolean>>(512)
-        val queue   = ArrayDeque<Triple<Int,Int,Boolean>>()
-        enqueueFromWord(seed, queue, visited)
-
-        while (queue.isNotEmpty() && placed.size < target) {
-            val (cx, cy, hNew) = queue.removeFirst()
-            val crossChar = gridChar[Pair(cx, cy)] ?: continue
-
-            val newWord = findBestPlacement(
-                cx, cy, hNew, crossChar,
-                inPool, wordIndex, gridChar, gridDir, usedWords
-            ) ?: continue
-
-            placed.add(newWord)
-            inPool.remove(newWord.word)
-            addToGrid(newWord, gridChar, gridDir)
-            enqueueFromWord(newWord, queue, visited)
-        }
-
-        if (placed.size > 1) {   // BFS + isValidFast guarantees connectivity
-            val finalArea          = calculateArea(placed)
-            // Intersections counted directly from gridDir — O(cells) not O(placed×len)
-            val finalIntersections = gridDir.values.count { it == null }
-            val targetPenalty      = if (placed.size < target) (target - placed.size) * 1_000_000L else 0L
-
-            val boardScore = (placed.size * 500_000L) +
-                    (finalIntersections * 150_000L) -
-                    (finalArea / 3L) -
-                    targetPenalty
-
-            if (boardScore > maxScore) {
-                maxScore   = boardScore
-                bestResult = placed.toList()
-            }
-
-            if (bestResult.size >= target && finalIntersections >= target - 2) return@repeat
-        }
-    }
-
-    if (bestResult.isEmpty()) return emptyList()
-
-    val minX       = bestResult.minOf { it.startX }
-    val minY       = bestResult.minOf { it.startY }
-    val normalized = bestResult.map { it.copy(startX = it.startX - minX, startY = it.startY - minY) }
-    val sorted     = normalized.sortedWith(compareBy({ it.startY }, { it.startX }))
-    val numMap     = mutableMapOf<Pair<Int, Int>, Int>(); var n = 1
-    return sorted.map { w -> w.copy(number = numMap.getOrPut(Pair(w.startX, w.startY)) { n++ }) }
-}
-
-// ── SHARED HELPERS ────────────────────────────────────────────────────────────
-
-
-
-fun getCellsForWord(w: PlacedWord): Set<Pair<Int, Int>> {
-    val set = mutableSetOf<Pair<Int, Int>>()
-    for (i in w.word.indices) {
-        val cx = if (w.isHorizontal) w.startX + i else w.startX
-        val cy = if (w.isHorizontal) w.startY     else w.startY + i
-        set.add(Pair(cx, cy))
-    }
-    return set
-}
-
-
-
-fun calculateArea(words: List<PlacedWord>): Long {
-    if (words.isEmpty()) return 0
-    val minX = words.minOf { it.startX }
-    val maxX = words.maxOf { if (it.isHorizontal) it.startX + it.word.length else it.startX }
-    val minY = words.minOf { it.startY }
-    val maxY = words.maxOf { if (it.isHorizontal) it.startY else it.startY + it.word.length }
-    return (maxX - minX).toLong() * (maxY - minY).toLong()
-}
-fun buildGridCells(words: List<PlacedWord>): List<GridCell> {
-    val map = mutableMapOf<Pair<Int, Int>, GridCell>()
-    words.forEach { w ->
-        for (i in w.word.indices) {
-            val pos      = if (w.isHorizontal) Pair(w.startX + i, w.startY) else Pair(w.startX, w.startY + i)
-            val existing = map[pos]
-            val newNumber = when {
-                i != 0       -> existing?.number          // interior cell: never assign a start number
-                existing?.number == null -> w.number      // first word to claim this cell as its start
-                else -> minOf(existing.number, w.number)  // two words start here: keep the lower number
-            }
-            map[pos] = GridCell(pos.first, pos.second, w.word[i], newNumber)
-        }
-    }
-    return map.values.toList()
-}
-
-fun loadCsv(context: Context, file: String): List<RawEntry> {
-    val list = mutableListOf<RawEntry>()
-    try {
-        context.assets.open(file).bufferedReader().useLines { lines ->
-            lines.drop(1).forEach { line ->
-                val parts = line.split(",", limit = 3)
-                if (parts.size == 3) list.add(
-                    RawEntry(parts[0].uppercase().trim(), parts[1].trim(), parts[2].uppercase().trim())
-                )
-            }
-        }
-    } catch (e: Exception) { e.printStackTrace() }
-    return list
-}
 
 
 // ============================================================
@@ -5996,7 +5901,7 @@ fun StatsScreen(
     saveManager:      SaveManager,
     allCategoryNames: Set<String>,
     onPlay:           () -> Unit,          // go to category select
-    onResume:         (String, Difficulty) -> Unit,  // resume a specific in-progress puzzle
+    onResume:         (SaveSlot) -> Unit,  // resume a specific in-progress puzzle
     onBack:           () -> Unit
 ) {
     val stats      = remember(playerName) { saveManager.getAllStats(playerName) }
@@ -6045,14 +5950,14 @@ fun StatsScreen(
                         color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(6.dp))
                 }
-                items(inProgress) { (cat, diff) ->
+                items(inProgress) { slot ->
                     Card(
                         modifier  = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         colors    = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                         ),
                         elevation = CardDefaults.cardElevation(2.dp),
-                        onClick   = { onResume(cat, diff) }
+                        onClick   = { onResume(slot) }
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -6060,7 +5965,7 @@ fun StatsScreen(
                             verticalAlignment     = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("$cat — ${diff.label}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(slotTitle(slot), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text("Tap to resume", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             Text("▶", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
