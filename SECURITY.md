@@ -1,86 +1,56 @@
 # SECURITY.md
 
-## Firebase API key exposure
+## Threat model
 
-The file `app/google-services.json` was committed to this repo at the
-initial commit and contains the live Firebase project's web API key plus
-project number. Anyone with read access to the repo (or to the public
-GitHub clone) can extract these values.
+The app is offline-first. The only networked feature is two-device
+**online Team and Vindictive play** over Firebase Realtime Database, with
+anonymous Firebase Auth. There are no accounts, no payments and no personal
+data beyond the display names players type in.
 
-Combined with the current Firebase Realtime Database security model
-(anonymous auth allowed, default open rules), this means **any person
-with the repo URL can sign in anonymously and read/write any node under
-`games/`** in the Realtime Database. They can:
+## The Firebase API key
 
-- Enumerate active game codes
-- Inject puzzle data into games in progress
-- Manipulate scores and turn state on live games
-- Create arbitrary game nodes that consume database storage
+`app/google-services.json` contains the project's Android API key. Firebase
+Android keys are **identifiers, not secrets**: they ship inside every APK and
+anyone can extract them. What keeps the data safe is:
 
-### Mitigation steps (must be done manually)
+1. **Realtime Database security rules**, in `firebase/database.rules.json`.
+   These are deployed from the console; see `docs/EXTERNAL_ACTIONS.md` §1.
+2. **API key restrictions** to the app's package and signing SHA-1
+   (§3 of the same file).
+3. Optionally, **App Check** (§4).
 
-1. **Rotate the API key.** Open Firebase Console for the project →
-   Project settings → General → "Web API Key" → restrict / regenerate.
-   While you're there, also add SHA-1 fingerprint restrictions to the
-   Android app entry so the key is bound to your debug keystore.
+Until the rules in §1 are deployed, assume any signed-in client can read and
+write any game node.
 
-2. **Tighten Realtime Database rules.** In the Firebase Console →
-   Realtime Database → Rules. Replace whatever's there with something
-   like:
+## Online play: what the client enforces
 
-   ```json
-   {
-     "rules": {
-       "games": {
-         "$code": {
-           ".read":  "auth != null",
-           ".write": "auth != null"
-         }
-       }
-     }
-   }
-   ```
+- The game code is claimed with a transaction, so a new game can't overwrite
+  a live one.
+- The guest seat is claimed with a transaction, so two phones can't both take
+  it.
+- Each game records `hostUid`, `guestUid` and `createdAt`, so the rules can
+  bind writes to the two seated players and expire lobbies after 15 minutes.
+- `onDisconnect()` marks a game `abandoned` when a player's connection drops,
+  and the other player is told.
+- Each device writes only its own score field. Letters received from the other
+  device are accepted only if they are the correct solution letter, so a
+  tampered remote client can't plant wrong letters or erase yours.
 
-   This still allows any anonymous-authed user to read/write game
-   nodes, but at least requires authentication. For a tighter model,
-   constrain writes by `hostName`/`guestName` matching the auth uid.
+## Game codes
 
-3. **Stop committing `google-services.json`.** This file is now in
-   `.gitignore`, but the existing tracked copy still updates if anyone
-   `git add`s a new version. To fully remove from version control:
+Codes are 6 characters from a 32-symbol alphabet (no 0/O/1/I): 32⁶ ≈ 1.07
+billion codes. With the rules deployed:
+- Guessing a code only exposes a game that is **still waiting** in its lobby.
+  It shows the host's display name and mode, never the puzzle once play
+  starts.
+- Lobbies expire after 15 minutes.
+- At a sustained 100 guesses per second, finding one of 10 open lobbies would
+  take about 12 days, far longer than any lobby exists.
+- The worst outcome of a successful guess is joining a stranger's lobby.
 
-   ```sh
-   git rm --cached app/google-services.json
-   git commit -m "Stop tracking Firebase config"
-   ```
+Longer codes would cost usability (typing them in) for little gain at this
+scale.
 
-   For CI to keep building after that, add a GitHub Actions secret
-   named `GOOGLE_SERVICES_JSON` containing the file's contents and add
-   a workflow step:
+## Reporting
 
-   ```yaml
-   - name: Restore google-services.json
-     run: |
-       echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
-     env:
-       GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-   ```
-
-   Do step 3 *after* step 1 — otherwise you're committing the
-   untracked but already-leaked key.
-
-4. **Note:** rewriting git history (`git filter-repo` / BFG) to scrub
-   the old key from past commits does not actually un-leak it — anyone
-   with a clone or a GitHub mirror still has the key. **Treat the
-   current key as compromised regardless** and rotate.
-
-## Other notes
-
-- The 6-letter game codes are not collision-resistant for high-traffic
-  use (32^6 ≈ 1B codes, but `createGame` uses `setValue` and would
-  silently overwrite a colliding active game). At single-user scale
-  this is fine.
-- Closed/abandoned games are never deleted from the DB — storage grows
-  unbounded over time. Add a Firebase Cloud Function on a schedule to
-  prune nodes with `status == "complete"` older than 24h if this ever
-  matters.
+This is a personal project. Report problems to the repository owner.

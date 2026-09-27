@@ -37,7 +37,7 @@ branch had been merged or opened as a pull request.
 | Commit | Change | Present on polish? | Disposition |
 |---|---|---|---|
 | `f7c9368` | Central `endOnlineGame()` cleanup | Yes — `cleanupOnlineSession()` wired into 8 exit paths | Skipped (overlap) |
-| `906717e` | Local inputs win over remote on merge (`rawInputs + userInputs`) | **No** — polish still has `userInputs + rawInputs` | **Ported** |
+| `906717e` | Local inputs win over remote on merge (`rawInputs + userInputs`) | **No** — polish still had `userInputs + rawInputs` | **Superseded** by `core.mergeRemoteInputs`: remote letters are accepted only if they are the correct solution letter, override a wrong local letter, and never erase anything. A blanket "local wins" would keep a player's wrong in-progress letter over the partner's solved word once letter-by-letter input exists. |
 | `001dfb1` | Load CSV on `Dispatchers.IO` | **No** | **Ported** |
 | `9621bcb` | Defer anonymous Firebase sign-in to Host/Join | **No** | **Ported** (plus failure reporting) |
 | `f9d2584` | Pause/resume music on lifecycle | Yes — polish also releases on `ON_DESTROY` | Skipped (overlap) |
@@ -48,5 +48,7 @@ branch had been merged or opened as a pull request.
 | `0960350` | CLAUDE.md refresh | Superseded by the rewrite at the end of this pass | Skipped |
 
 Ported fixes were re-implemented on top of the polish code (not cherry-picked,
-since the surrounding code differs) and each is covered by the regression
-tests listed in the pull request.
+since the surrounding code differs): `001dfb1` (CSV off the main thread, now with
+validation), `9621bcb` (deferred sign-in, now with failure reporting) and
+`1fe7d32` (combined words credited to their real categories, now via the
+`category` carried on each placed word).

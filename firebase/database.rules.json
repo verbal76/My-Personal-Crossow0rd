@@ -1,0 +1,38 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "games": {
+      "$code": {
+        ".read": "auth != null && data.exists() && (data.child('hostUid').val() === auth.uid || data.child('guestUid').val() === auth.uid || data.child('status').val() === 'waiting')",
+        ".write": "auth != null && ((!data.exists() && newData.child('hostUid').val() === auth.uid) || (data.exists() && data.child('hostUid').val() === auth.uid) || (data.exists() && data.child('guestUid').val() === auth.uid) || (data.exists() && data.child('status').val() === 'waiting' && data.child('guestUid').val() === '' && data.child('createdAt').val() > now - 900000 && newData.child('guestUid').val() === auth.uid))",
+        ".validate": "newData.hasChildren(['hostUid', 'status', 'mode'])",
+        "hostUid":   { ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || data.val() === newData.val())" },
+        "guestUid":  { ".validate": "newData.isString() && (!data.exists() || data.val() === '' || data.val() === newData.val())" },
+        "hostName":  { ".validate": "newData.isString() && newData.val().length <= 24" },
+        "guestName": { ".validate": "newData.isString() && newData.val().length <= 24" },
+        "status":    { ".validate": "newData.isString() && newData.val().matches(/^(waiting|playing|complete|abandoned)$/)" },
+        "mode":      { ".validate": "newData.isString() && newData.val().matches(/^(TEAM|VINDICTIVE)$/)" },
+        "difficulty":{ ".validate": "newData.isString() && newData.val().matches(/^(EASY|MEDIUM|HARD|EXPERT|GENIUS)$/)" },
+        "category":  { ".validate": "newData.isString() && newData.val().length <= 64" },
+        "createdAt": { ".validate": "(!data.exists() && newData.val() === now) || data.val() === newData.val()" },
+        "puzzle":    { ".validate": "newData.isString() && newData.val().length <= 20000" },
+        "inputs": {
+          "$cell": { ".validate": "$cell.matches(/^-?[0-9]{1,3}_-?[0-9]{1,3}$/) && newData.isString() && newData.val().matches(/^[A-Z]$/)" }
+        },
+        "turn":                { ".validate": "newData.isNumber() && (newData.val() === 0 || newData.val() === 1)" },
+        "vindCurrentPlayer":   { ".validate": "newData.isNumber() && (newData.val() === 0 || newData.val() === 1)" },
+        "hostScore":           { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 1000" },
+        "guestScore":          { ".validate": "newData.isNumber() && newData.val() >= -1000 && newData.val() <= 1000" },
+        "vindPhase":           { ".validate": "newData.isString() && newData.val().matches(/^(PICK_OWN|ASSIGN_CLUE|OPPONENT_WAIT)$/)" },
+        "vindAssignedWordIdx": { ".validate": "newData.isNumber() && newData.val() >= -1 && newData.val() < 100" },
+        "vindCountdown":       { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 60" },
+        "timerSeconds":        { ".validate": "newData.isNumber() && newData.val() >= 5 && newData.val() <= 120" },
+        "p0answering":         { ".validate": "newData.isBoolean()" },
+        "p1answering":         { ".validate": "newData.isBoolean()" },
+        "solved":              { ".validate": "newData.isBoolean()" },
+        "$other":              { ".validate": false }
+      }
+    }
+  }
+}

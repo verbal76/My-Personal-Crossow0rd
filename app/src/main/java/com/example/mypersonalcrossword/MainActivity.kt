@@ -920,6 +920,10 @@ object FirebaseGameManager {
             }
             override fun onComplete(error: DatabaseError?, committed: Boolean, snap: DataSnapshot?) {
                 when {
+                    // With the shipped security rules, unknown / expired / full games are
+                    // refused by the server rather than seen as empty.
+                    error != null && error.code == DatabaseError.PERMISSION_DENIED ->
+                        onError("That game isn't available — check the code, or ask the host for a new one.")
                     error != null -> onError("Connection error. Try again.")
                     !committed || snap == null -> onError(reason)
                     snap.child("guestUid").getValue(String::class.java) != uid ||
@@ -1193,6 +1197,7 @@ fun CrosswordApp() {
     var waveFx              by remember { mutableStateOf<GridFx?>(null) }   // solved-word wave
     var shakeFx             by remember { mutableStateOf<GridFx?>(null) }   // wrong-word shake
     var showClueList        by remember { mutableStateOf(false) }
+    var remoteToast         by remember { mutableStateOf<String?>(null) }   // online: what the opponent just did
     var wrongAnswererIndex  by remember { mutableIntStateOf(0) }
 
     // derivedStateOf means this only recomputes when gridCells or userInputs
@@ -1834,6 +1839,8 @@ fun CrosswordApp() {
         }
     }
 
+    LaunchedEffect(remoteToast) { if (remoteToast != null) { delay(2600L); remoteToast = null } }
+
     // Streak milestone — auto-clear after 2 seconds
     LaunchedEffect(streakMilestone) {
         if (streakMilestone != null) {
@@ -1958,6 +1965,17 @@ fun CrosswordApp() {
             val remoteHostScore  = snap.child("hostScore").getValue(Long::class.java)?.toInt()
             val remoteGuestScore = snap.child("guestScore").getValue(Long::class.java)?.toInt()
             if (remoteTurn != null) teamCurrentPlayer = remoteTurn
+            // Tell this player what the other one just did (their score moved).
+            val remoteScore = if (onlineRole == OnlineRole.GUEST) remoteHostScore else remoteGuestScore
+            val prevRemote  = when {
+                activeGameMode == GameMode.VINDICTIVE -> if (onlineRole == OnlineRole.GUEST) vindP1Score else vindP2Score
+                else                                  -> if (onlineRole == OnlineRole.GUEST) teamP1Score else teamP2Score
+            }
+            if (remoteScore != null && remoteScore != prevRemote && appMode == AppMode.DASHBOARD && placedWords.isNotEmpty()) {
+                val d = remoteScore - prevRemote
+                val who = player2Name.ifBlank { "Your opponent" }
+                remoteToast = if (d > 0) "✅ $who got one!" else "❌ $who lost ${-d} pt${if (d == -1) "" else "s"}"
+            }
             if (remoteHostScore  != null && onlineRole == OnlineRole.GUEST) { teamP1Score = remoteHostScore;  vindP1Score = remoteHostScore }
             if (remoteGuestScore != null && onlineRole == OnlineRole.HOST)  { teamP2Score = remoteGuestScore; vindP2Score = remoteGuestScore }
 
@@ -2949,6 +2967,22 @@ fun CrosswordApp() {
                         modifier = Modifier.padding(top = 12.dp)
                     ) {
                         Text("✗  Not quite — try again", style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp))
+                    }
+                }
+
+                // What the online opponent just did.
+                AnimatedVisibility(
+                    visible = remoteToast != null && isOnlineGame,
+                    enter = fadeIn() + slideInVertically { -it }, exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 64.dp)
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.inverseSurface,
+                        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                        shape = RoundedCornerShape(20.dp), shadowElevation = 6.dp
+                    ) {
+                        Text(remoteToast ?: "", style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp))
                     }
                 }
