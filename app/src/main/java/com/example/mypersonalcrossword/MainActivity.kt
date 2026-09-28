@@ -949,6 +949,12 @@ object FirebaseGameManager {
 
     fun parsePuzzle(raw: String): List<PlacedWord> = SessionCodec.decodeWords(raw)
 
+    /** All letters of a word in one update, so the other device receives them together. */
+    fun writeInputs(code: String, letters: Map<Pair<Int, Int>, Char>) {
+        if (letters.isEmpty()) return
+        gameRef(code).child("inputs").updateChildren(letters.entries.associate { (c, ch) -> "${c.first}_${c.second}" to ch.toString() })
+    }
+
     fun writeInput(code: String, x: Int, y: Int, char: Char) {
         gameRef(code).child("inputs").child("${x}_${y}").setValue(char.toString())
     }
@@ -1074,9 +1080,9 @@ fun CrosswordApp() {
     var isGenerating by rememberSaveable { mutableStateOf(false) }
 
     // ── Online multiplayer state ───────────────────────────────────────────────
-    var isOnlineGame     by remember { mutableStateOf(false) }
-    var onlineRole       by remember { mutableStateOf<OnlineRole?>(null) }
-    var onlineCode       by remember { mutableStateOf("") }
+    var isOnlineGame     by vm::isOnline
+    var onlineRole       by vm::onlineRole
+    var onlineCode       by vm::onlineCode
     var onlineJoinInput  by remember { mutableStateOf("") }
     var onlineJoinError  by remember { mutableStateOf("") }
     var onlineStatus     by remember { mutableStateOf("") }  // shown on lobby screen
@@ -1234,6 +1240,7 @@ fun CrosswordApp() {
     /** Snapshot of the puzzle in progress, or null when there is nothing resumable. */
     fun currentSession(): PuzzleSession? {
         if (placedWords.isEmpty() || isGenerating || puzzleSolved || isOnlineGame) return null
+        if (placedWords.all { isWordSolved(it, userInputs) }) return null   // finished grids are never "in progress"
         val isDaily = activeDailyKey != null
         return PuzzleSession(
             mode           = if (isDaily) GameMode.DAILY else activeGameMode,
@@ -1391,6 +1398,14 @@ fun CrosswordApp() {
         saveCurrentPuzzle()
         cleanupOnlineSession()
         resetOverlays()
+        // Unload the puzzle (it's saved above if unfinished). Leaving a solved grid
+        // loaded let a later recreation re-run completion and pay out twice.
+        placedWords   = emptyList()
+        gridCells     = emptyList()
+        userInputs    = emptyMap()
+        revealedCells = emptySet()
+        selection     = null
+        lastResult    = null
         puzzleSolved = false
         if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
         activeDailyKey = null
@@ -1406,10 +1421,20 @@ fun CrosswordApp() {
         if (isOnlineGame && onlineRole == OnlineRole.GUEST) (if (idx == 0) player2Name else playerName)
         else (if (idx == 0) playerName else player2Name)
 
-    fun commitWord(word: PlacedWord) {
+    fun publishWord(word: PlacedWord) {
+        if (!isOnlineGame) return
+        FirebaseGameManager.writeInputs(onlineCode, word.cells().mapIndexed { i, c -> c to word.word[i] }.toMap())
+    }
+
+    /**
+     * Writes a solved word into the grid. [publish] = false defers the online write
+     * so an attempt's score/turn update reaches the other device BEFORE the letters
+     * that might complete the puzzle there (otherwise it could finish with stale scores).
+     */
+    fun commitWord(word: PlacedWord, publish: Boolean = true) {
         val cells = word.cells()
         userInputs = userInputs + cells.mapIndexed { i, c -> c to word.word[i] }
-        if (isOnlineGame) cells.forEachIndexed { i, c -> FirebaseGameManager.writeInput(onlineCode, c.first, c.second, word.word[i]) }
+        if (publish) publishWord(word)
         waveFx = GridFx(cells, System.nanoTime())
     }
 
@@ -1470,11 +1495,12 @@ fun CrosswordApp() {
                     VindicativePhase.OPPONENT_WAIT -> VindictiveRules.onAssignedAnswer(before, correct)
                     VindicativePhase.ASSIGN_CLUE   -> return   // typing is blocked while assigning
                 }
-                if (correct) { commitWord(word); onCorrectFeedback() } else onWrongFeedback(actor, word)
+                if (correct) { commitWord(word, publish = false); onCorrectFeedback() } else onWrongFeedback(actor, word)
                 // The turn changes hands: no half-typed letters carry over.
                 userInputs = InputEngine.clearUnlocked(userInputs, board.lockedCells(userInputs, revealedCells))
                 applyVind(after)
                 syncVind(mapOf("vindCountdown" to 0))
+                if (correct) publishWord(word)
                 // Same player keeps the phone to pick a clue for the other — say so, don't say "pass".
                 if (!isOnlineGame && before.phase == VindicativePhase.OPPONENT_WAIT) {
                     val who  = nameOf(actor)
@@ -1488,7 +1514,7 @@ fun CrosswordApp() {
             }
             GameMode.TEAM -> {
                 val before = teamSnapshot()
-                if (correct) { commitWord(word); onCorrectFeedback() }
+                if (correct) { commitWord(word, publish = false); onCorrectFeedback() }
                 else {
                     onWrongFeedback(before.turn, word)
                     userInputs = InputEngine.clearWord(word, userInputs, board.lockedCells(userInputs, revealedCells))
@@ -1499,6 +1525,7 @@ fun CrosswordApp() {
                     val myKey = if (onlineRole == OnlineRole.HOST) "hostScore" else "guestScore"
                     val myVal = if (onlineRole == OnlineRole.HOST) after.p1Correct else after.p2Correct
                     FirebaseGameManager.writeState(onlineCode, mapOf("turn" to after.turn, myKey to myVal))
+                    if (correct) publishWord(word)
                 } else {
                     turnDialogTitle   = "Pass the Phone!"
                     turnDialogMessage = (if (correct) "✅ Nice one, ${nameOf(before.turn)}!" else "❌ Not quite, ${nameOf(before.turn)}.") +
@@ -1684,7 +1711,15 @@ fun CrosswordApp() {
                     puzzleSolved = false
                     placedWords = emptyList(); gridCells = emptyList()
                     appMode = AppMode.CATEGORY_SELECT
-                } else if (!isGenerating) timerRunning = true
+                } else if (!isGenerating) {
+                    timerRunning = true
+                    if (!isOnlineGame && activeGameMode == GameMode.VINDICTIVE &&
+                        vindPhase == VindicativePhase.OPPONENT_WAIT && vindAssignedWord != null) {
+                        turnDialogTitle   = "Pass the Phone!"
+                        turnDialogMessage = "✋ ${nameOf(vindCurrentPlayer)} — your clue is waiting!"
+                        showTurnDialog    = true
+                    }
+                }
             }
         } else {
             appMode = AppMode.LOGIN
@@ -1693,7 +1728,7 @@ fun CrosswordApp() {
 
     // ── COMPLETION ────────────────────────────────────────────────────────────
     LaunchedEffect(isWinner) {
-        if (!isWinner || puzzleSolved || isGenerating) return@LaunchedEffect
+        if (!isWinner || puzzleSolved || isGenerating || appMode != AppMode.DASHBOARD) return@LaunchedEffect
         puzzleSolved = true
         timerRunning = false
         if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("solved" to true))
@@ -1932,6 +1967,10 @@ fun CrosswordApp() {
                     userInputs         = emptyMap()
                     revealedCells      = emptySet()
                     selection          = InputEngine.initialSelection(Board(parsed), emptyMap(), emptySet())
+                    teamP1Score = 0; teamP2Score = 0; teamP1Hints = 0; teamP2Hints = 0
+                    vindP1Score = 0; vindP2Score = 0; vindAssignedWord = null
+                    tauntIndex.intValue = 0
+                    lastResult = null
                     elapsedSeconds     = 0L
                     hintsUsedThisPuzzle = 0
                     currentStreak      = 0
@@ -2868,7 +2907,7 @@ fun CrosswordApp() {
                                     }
                                     if (isOnlineGame) FirebaseGameManager.writeInput(onlineCode, pos.first, pos.second, ch)
                                     // A reveal can complete words — judge them like a typed letter.
-                                    val filled = board.wordsAt(pos).filter { isWordFilled(it, userInputs) && !isWordFilled(it, before) }
+                                    val filled = board.wordsAt(pos).filter { isWordFilled(it, userInputs) && !(isWordFilled(it, before) && before[pos] == ch) }
                                     judgeFilled(filled.sortedBy { if (it == word) 0 else 1 }, word)
                                 },
                                 enabled  = hintEnabled,
@@ -4313,6 +4352,8 @@ fun CrosswordApp() {
             if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("vindCountdown" to i))
             if (i <= 5 && soundEnabled) SoundPlayer.playTick()
             delay(1000L)
+            // The answer clock pauses with the app (backgrounded, Settings open).
+            while (!appResumed || showSettings) delay(200L)
             if (vindPhase != VindicativePhase.OPPONENT_WAIT || puzzleSolved) return@LaunchedEffect
         }
         onVindTimeout()
@@ -4324,8 +4365,6 @@ fun CrosswordApp() {
             if (board.activeWord(selection) != w) selection = InputEngine.selectWord(w, userInputs, lockedCells)
         }
     }
-    // Online sessions can't be resumed, so the ViewModel doesn't persist them.
-    LaunchedEffect(isOnlineGame) { vm.isOnline = isOnlineGame }
 
     // ── RESULTS CARD ─────────────────────────────────────────────────────────
     val result = lastResult
@@ -4436,11 +4475,7 @@ fun CrosswordApp() {
             confirmButton = {
                 GradientBtn("OK", appBtnGradient, onClick = {
                     onlineNotice = null
-                    timerRunning = false
-                    cleanupOnlineSession()
-                    resetOverlays()
-                    puzzleSolved = false
-                    appMode = AppMode.CATEGORY_SELECT
+                    goHome()   // ends the session and unloads the grid (online games aren't saved)
                 }, modifier = Modifier.fillMaxWidth())
             }
         )

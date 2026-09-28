@@ -60,8 +60,11 @@ class PuzzleViewModel(private val handle: SavedStateHandle) : ViewModel() {
     var vindAssignedWord   by mutableStateOf<PlacedWord?>(null)
     var vindTimerSeconds   by mutableIntStateOf(30)
 
-    /** Set by the UI while an online game is active — such sessions are not persisted. */
+    // ── Online session — kept here so an Activity recreation (theme, font size,
+    // locale…) doesn't silently drop the game; never persisted to SavedStateHandle.
     var isOnline           by mutableStateOf(false)
+    var onlineRole         by mutableStateOf<OnlineRole?>(null)
+    var onlineCode         by mutableStateOf("")
 
     init {
         handle.get<String>(KEY_SESSION)?.let(SessionCodec::decode)?.let { s ->

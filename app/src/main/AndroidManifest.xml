@@ -15,7 +15,7 @@
         android:theme="@style/Theme.MyPersonalCrossword">
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
             android:screenOrientation="portrait"
             android:resizeableActivity="false"
             android:exported="true"

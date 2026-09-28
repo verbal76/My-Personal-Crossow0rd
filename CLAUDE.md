@@ -45,7 +45,8 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 - `DASHBOARD`: the puzzle itself.
 
 ### State ownership
-- **`PuzzleViewModel`** holds the puzzle: words, grid cells, letters, hint reveals, selection, timer, mode, category/combined/difficulty, Daily date key, Player 2, Team and Vindictive state, and background. It serialises a `PuzzleSession` into `SavedStateHandle` (debounced), so rotation, theme change and process death restore the grid in place. Online games are not persisted (`vm.isOnline`).
+- **`PuzzleViewModel`** holds the puzzle: words, grid cells, letters, hint reveals, selection, timer, mode, category/combined/difficulty, Daily date key, Player 2, Team and Vindictive state, and background. It serialises a `PuzzleSession` into `SavedStateHandle` (debounced), so rotation, theme change and process death restore the grid in place. The online session (`isOnline`, `onlineRole`, `onlineCode`) also lives here so an Activity recreation doesn't drop a live game, but online games are never written to the handle. The manifest also handles `uiMode`, `fontScale`, `density` and `locale`, so most of those changes don't recreate the Activity at all.
+- `goHome()` unloads the puzzle after saving it. A solved grid must never stay loaded: completion would re-run and pay out again after a recreation.
 - `CrosswordApp` binds to it with `var placedWords by vm::placedWords`. Assigning to these locals writes the ViewModel.
 - UI-only state (dialogs, overlays, animations, online plumbing) is `remember`/`rememberSaveable` inside `CrosswordApp`.
 - **Scoring and turn rules never live in UI code.** Always call `TeamRules`, `VindictiveRules` and `Economy`.
