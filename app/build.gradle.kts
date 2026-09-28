@@ -1,3 +1,6 @@
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -21,7 +24,7 @@ val buildSourceSha: String = (System.getenv("BUILD_SOURCE_SHA")?.take(7)
     (if (!gitOutput("status", "--porcelain", "--untracked-files=no").isNullOrEmpty()) "-dirty" else "")
 // Monotonic build number: commits on this history. Needs a full (not shallow) checkout.
 val buildNumber: Int = gitOutput("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 1
-val buildTimeUtc: String = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString()
+val buildTimeUtc: String = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
 val buildOrigin: String = System.getenv("GITHUB_RUN_NUMBER")?.let { "GitHub Actions run #$it" } ?: "local build"
 
 android {
