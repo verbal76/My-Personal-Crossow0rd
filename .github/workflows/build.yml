@@ -12,9 +12,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # The branch head this build represents (PR runs check out a merge commit).
+      BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history: the build number is the commit count.
+          fetch-depth: 0
 
       # AGP 9 / Gradle 9 require JDK 17+ to run the build.
       - name: Set up JDK 17
@@ -35,11 +41,22 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug --no-daemon
 
+      - name: Name APK after its source commit
+        id: apk
+        run: |
+          SHORT=${BUILD_SOURCE_SHA::7}
+          NAME="MyPersonalCrossword-${SHORT}-debug.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "short=$SHORT" >> "$GITHUB_OUTPUT"
+          echo "APK: $NAME"
+          sha256sum "$NAME"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: app-debug-apk-${{ steps.apk.outputs.short }}
+          path: ${{ steps.apk.outputs.name }}
           if-no-files-found: error
           retention-days: 30
 

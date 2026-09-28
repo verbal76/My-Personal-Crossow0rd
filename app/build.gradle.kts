@@ -4,6 +4,26 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// ── Build identification ──────────────────────────────────────────────────────
+// Every APK carries the exact source revision it was built from, shown in-app
+// (Settings → About and the login screen). CI passes BUILD_SOURCE_SHA so pull-
+// request builds report the branch head rather than GitHub's temporary merge commit.
+fun gitOutput(vararg args: String): String? = runCatching {
+    providers.exec {
+        commandLine("git", *args)
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().ifEmpty { null }
+}.getOrNull()
+
+val buildSourceSha: String = (System.getenv("BUILD_SOURCE_SHA")?.take(7)
+    ?: gitOutput("rev-parse", "--short=7", "HEAD")
+    ?: "unknown") +
+    (if (!gitOutput("status", "--porcelain", "--untracked-files=no").isNullOrEmpty()) "-dirty" else "")
+// Monotonic build number: commits on this history. Needs a full (not shallow) checkout.
+val buildNumber: Int = gitOutput("rev-list", "--count", "HEAD")?.toIntOrNull() ?: 1
+val buildTimeUtc: String = java.time.Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString()
+val buildOrigin: String = System.getenv("GITHUB_RUN_NUMBER")?.let { "GitHub Actions run #$it" } ?: "local build"
+
 android {
     namespace = "com.hag.mypersonalcrossword"
     compileSdk {
@@ -16,8 +36,12 @@ android {
         applicationId = "com.hag.mypersonalcrossword"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
+        versionCode = buildNumber
         versionName = "1.0"
+
+        buildConfigField("String", "GIT_SHA", "\"$buildSourceSha\"")
+        buildConfigField("String", "BUILD_TIME_UTC", "\"$buildTimeUtc\"")
+        buildConfigField("String", "BUILD_ORIGIN", "\"$buildOrigin\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -49,6 +73,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

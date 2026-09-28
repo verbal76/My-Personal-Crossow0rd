@@ -204,6 +204,65 @@ fun slotTitle(slot: SaveSlot): String = when (slot.mode) {
     GameMode.SINGLE     -> "${prettyCategory(slot.category)} · ${slot.difficulty.label}"
 }
 
+// ── BUILD INFORMATION ───────────────────────────────────────────────────────────
+// Identifies exactly which build is installed (values injected by app/build.gradle.kts).
+object BuildInfo {
+    /** One line for footers: "v1.0 (42) · 0f78713 · debug". */
+    val short: String get() =
+        "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.GIT_SHA} · ${BuildConfig.BUILD_TYPE}"
+
+    fun details(context: Context): List<Pair<String, String>> {
+        val pkg = runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0)
+        }.getOrNull()
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'UTC'", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+        return listOfNotNull(
+            "Version"                 to BuildConfig.VERSION_NAME,
+            "Build number"            to "${BuildConfig.VERSION_CODE} (versionCode)",
+            "Source commit"           to BuildConfig.GIT_SHA,
+            "Build type"              to BuildConfig.BUILD_TYPE,
+            "Built"                   to BuildConfig.BUILD_TIME_UTC.replace('T', ' ').replace("Z", " UTC"),
+            "Built by"                to BuildConfig.BUILD_ORIGIN,
+            "Package"                 to BuildConfig.APPLICATION_ID,
+            pkg?.let { "Installed / updated" to "${fmt.format(java.util.Date(it.firstInstallTime))} / ${fmt.format(java.util.Date(it.lastUpdateTime))}" },
+            "Android"                 to "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+            "Updates"                 to "No over-the-air updates — new builds are installed as APKs"
+        )
+    }
+}
+
+@Composable
+fun BuildInfoDialog(onDismiss: () -> Unit) {
+    val context   = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val rows      = remember { BuildInfo.details(context) }
+    var copied    by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Build details", style = MaterialTheme.typography.headlineSmall) },
+        text  = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                rows.forEach { (label, value) ->
+                    Column(Modifier.semantics(mergeDescendants = true) {}) {
+                        Text(label, style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(value, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                clipboard.setText(AnnotatedString(rows.joinToString("\n") { "${it.first}: ${it.second}" }))
+                copied = true
+            }) { Text(if (copied) "Copied ✓" else "Copy") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
+}
+
 /** Reads and validates assets/test.csv. Rejected rows are logged, never turned into grid cells. */
 fun loadWordData(context: Context): WordData = try {
     context.assets.open("test.csv").bufferedReader().useLines { parseWordCsv(it) }.also { data ->
@@ -1203,7 +1262,8 @@ fun CrosswordApp() {
     var waveFx              by remember { mutableStateOf<GridFx?>(null) }   // solved-word wave
     var shakeFx             by remember { mutableStateOf<GridFx?>(null) }   // wrong-word shake
     var showClueList        by remember { mutableStateOf(false) }
-    var remoteToast         by remember { mutableStateOf<String?>(null) }   // online: what the opponent just did
+    var remoteToast         by remember { mutableStateOf<String?>(null) }
+    var showBuildInfo       by remember { mutableStateOf(false) }   // online: what the opponent just did
     var wrongAnswererIndex  by remember { mutableIntStateOf(0) }
 
     // derivedStateOf means this only recomputes when gridCells or userInputs
@@ -2322,6 +2382,15 @@ fun CrosswordApp() {
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f),
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(top = 2.dp)
+                    )
+                    Text(
+                        BuildInfo.short,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.45f),
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .clickable(onClickLabel = "Show build details") { showBuildInfo = true }
+                            .padding(4.dp)
                     )
 
                     // ── Saved profiles ─────────────────────────────────────────
@@ -3443,10 +3512,14 @@ fun CrosswordApp() {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                "Version 1.0",
+                                BuildInfo.short,
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
+                            TextButton(
+                                onClick = { showSettings = false; showBuildInfo = true },
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                            ) { Text("Build details") }
                         }
                     }
                     Spacer(Modifier.height(6.dp))
@@ -4465,6 +4538,8 @@ fun CrosswordApp() {
             }
         )
     }
+
+    if (showBuildInfo) BuildInfoDialog(onDismiss = { showBuildInfo = false })
 
     // ── BLOCKING NOTICES ─────────────────────────────────────────────────────
     onlineNotice?.let { msg ->
