@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Build configuration:** Gradle 9.3.1, AGP 9.1.1, Kotlin 2.2.10, compileSdk 36.1 / targetSdk 36, minSdk 24, Java 11 bytecode (build runs on JDK 17+), Compose BOM 2026.02.01, lifecycle-viewmodel-compose 2.8.7, Firebase BoM 34.12.0 (Auth, Realtime Database, Analytics).
 
-**CI** (`.github/workflows/build.yml`) runs on every push to `main` and `claude/**` and on PRs: unit tests → `assembleDebug` (APK uploaded as the `app-debug-apk` artifact) → `lintDebug`. The test and lint reports are uploaded as the `reports` artifact.
+**CI** (`.github/workflows/build.yml`) runs on every push to `main` and `claude/**` and on PRs: unit tests → `assembleDebug` (APK renamed `MyPersonalCrossword-<commit>-debug.apk`, uploaded as the `app-debug-apk-<commit>` artifact, SHA-256 printed in the log) → `lintDebug`. The build carries its commit, build number (commit count; needs the full-history checkout) and build time as `BuildConfig` fields, shown in Settings → About → Build details. The test and lint reports are uploaded as the `reports` artifact.
 
 **Cloud sessions:** Claude Code on the web may block `dl.google.com`, which serves the Android SDK, AGP and AndroidX. In that case the Android build only runs in CI. The pure-Kotlin `core` package and its tests can still be compiled locally with a plain JVM Kotlin Gradle project whose source sets point at `app/src/main/java/.../core` and `app/src/test/java/.../core`. Pass system property `crossword.assets=<repo>/app/src/main/assets` so the tests can find `test.csv`.
 
@@ -39,8 +39,9 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 **Single activity, Compose, no navigation library, no Room.** `CrosswordApp()` switches screens with `when (appMode)`:
 
 - `LOGIN`: pick or create a profile. Profile cards continue straight home; a separate icon opens Stats.
+- **Opening card:** on a cold start with a saved player, `OpeningCard` (the login screen's `TitleMark` on the login gradient) covers everything for at least `OPENING_CARD_MIN_MS` and until startup loading finishes (capped), then fades into home. The Daily prompt waits for it, because dialogs draw above it. It is the title screen older builds showed while the word list loaded on the main thread; keep it.
 - `STATS`: summary tiles (score, puzzles, Daily streak), in-progress saves, personal bests grouped by mode.
-- `CATEGORY_SELECT`: the home hub. Header, Continue card, Daily card, play-mode picker with START, and the category carousel.
+- `CATEGORY_SELECT`: the home hub. Header (with the Settings gear), Continue card, Daily card, play-mode picker with START, and the category carousel.
 - `ONLINE_LOBBY`: host shows the code; guest waits.
 - `DASHBOARD`: the puzzle itself.
 
@@ -121,6 +122,7 @@ Easy/Medium/Hard/Expert/Genius pay 1/2/4/8/20. The Daily pays 20, once per day. 
   - Titles come from `core/Backgrounds.kt`. **Add a curated title for new art**; `BackgroundsTest` fails otherwise.
   - Images are decoded downsampled and LRU-cached.
 - **Music:** `assets/Music/*.mp3`, discovered at runtime.
+- **Settings gear:** `res/drawable-nodpi/ic_settings_gear.png` (144×144, transparent), drawn by `SettingsGearButton` at 24 dp in a 48 dp touch target and never tinted. Use it for every Settings entry point (home header, puzzle top bar).
 
 ## Important constraints
 - Release builds are **not minified** (`isMinifyEnabled = false`). Asset loading and Firebase would need keep rules before enabling R8.

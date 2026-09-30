@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.BarChart
@@ -57,6 +56,8 @@ import androidx.core.content.edit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.awaitCancellation
 import android.os.Build
 import android.os.VibrationEffect
@@ -90,6 +91,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalConfiguration
 import kotlin.random.Random
 import kotlin.math.sin
@@ -1068,6 +1070,97 @@ fun BoxScope.BevelHighlight(alpha: Float = 0.25f) {
     )
 }
 
+// ── TITLE MARK & OPENING CARD ─────────────────────────────────────────────────
+
+// The game's title: crossword-grid logo, "Welcome to / My Personal Crossword" and
+// the tagline. Shared by the login screen and the opening card so they match.
+@Composable
+fun TitleMark() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Logo mark — simple crossword grid drawn with Canvas
+        Canvas(modifier = Modifier.size(72.dp).padding(bottom = 8.dp)) {
+            val cellSz = size.width / 5f
+            val cells = listOf(
+                // H-word: row 1 cols 0-4
+                0 to 0, 1 to 0, 2 to 0, 3 to 0, 4 to 0,
+                // V-word: col 2 rows 0-4
+                2 to 1, 2 to 2, 2 to 3, 2 to 4,
+                // H-word: row 2 cols 0-4
+                0 to 2, 1 to 2, 3 to 2, 4 to 2,
+                // H-word: row 4 cols 0-4
+                0 to 4, 1 to 4, 3 to 4, 4 to 4
+            )
+            cells.forEach { (cx, cy) ->
+                drawRoundRect(
+                    color  = Color(0xFF6650A4),
+                    topLeft = Offset(cx * cellSz + 1f, cy * cellSz + 1f),
+                    size   = GeoSize(cellSz - 2f, cellSz - 2f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f)
+                )
+            }
+        }
+        // Title
+        Text(
+            "Welcome to",
+            fontSize = 18.sp,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+            fontWeight = FontWeight.Normal
+        )
+        Text(
+            "My Personal Crossword",
+            fontSize = 26.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        Text(
+            "Your crossword, your way!",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
+            fontWeight = FontWeight.Normal
+        )
+    }
+}
+
+/** Minimum time the opening card stays up, so it reads as intentional rather than a flash. */
+const val OPENING_CARD_MIN_MS = 1200L
+/** Longest the opening card waits for startup loading after that minimum. */
+const val OPENING_CARD_MAX_WAIT_MS = 5000L
+
+// Opening card for returning players: the title screen on the login gradient,
+// shown while startup loading finishes. It swallows taps so nothing underneath
+// can be pressed before it fades.
+@Composable
+fun OpeningCard() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(listOf(
+                    MaterialTheme.colorScheme.primaryContainer,
+                    MaterialTheme.colorScheme.background
+                ))
+            )
+            .pointerInput(Unit) { detectTapGestures { } },
+        contentAlignment = Alignment.Center
+    ) {
+        TitleMark()
+    }
+}
+
+// The Settings gear: custom art, shown as drawn (never tinted), 24 dp inside
+// IconButton's 48 dp touch target.
+@Composable
+fun SettingsGearButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Image(
+            painter            = painterResource(R.drawable.ic_settings_gear),
+            contentDescription = "Settings",
+            modifier           = Modifier.size(24.dp)
+        )
+    }
+}
+
 // Animated trailing dots ("…") — used in loading states. Cycles 1→2→3 dots.
 @Composable
 fun rememberAnimatedDots(): String {
@@ -1118,6 +1211,13 @@ fun CrosswordApp() {
         stateSaver = listSaver(save = { listOf(it.name) }, restore = { AppMode.valueOf(it[0]) })
     ) { mutableStateOf(AppMode.LOGIN) }
     var playerName by rememberSaveable { mutableStateOf("") }
+    // Opening card: returning players see the title screen once per cold start
+    // while startup loading finishes (older builds showed it because the word
+    // list loaded on the main thread). A recreation mid-session skips it.
+    var showOpeningCard by rememberSaveable {
+        mutableStateOf(appMode == AppMode.LOGIN && saveManager.getLastUser().isNotBlank())
+    }
+    var startupDone by remember { mutableStateOf(false) }
 
     var currentScore by rememberSaveable { mutableIntStateOf(0) }
     var currentCompleted by rememberSaveable { mutableIntStateOf(0) }
@@ -1784,6 +1884,16 @@ fun CrosswordApp() {
         } else {
             appMode = AppMode.LOGIN
         }
+        startupDone = true
+    }
+
+    // Hold the opening card for its minimum time and until startup has finished
+    // (capped, so a failed load can never leave the player stuck on it).
+    LaunchedEffect(showOpeningCard) {
+        if (!showOpeningCard) return@LaunchedEffect
+        delay(OPENING_CARD_MIN_MS)
+        withTimeoutOrNull(OPENING_CARD_MAX_WAIT_MS) { snapshotFlow { startupDone }.first { it } }
+        showOpeningCard = false
     }
 
     // ── COMPLETION ────────────────────────────────────────────────────────────
@@ -1968,7 +2078,9 @@ fun CrosswordApp() {
 
     // Daily prompt — once per login session on the first visit home, and only
     // if today's Daily hasn't been solved yet.
-    LaunchedEffect(appMode) {
+    // It waits for the opening card: dialogs draw above it.
+    LaunchedEffect(appMode, showOpeningCard) {
+        if (showOpeningCard) return@LaunchedEffect
         if (appMode == AppMode.CATEGORY_SELECT && !dailyPromptShown && playerName.isNotBlank()) {
             dailyPromptShown = true
             val today = DailyPuzzle.dateKey(System.currentTimeMillis())
@@ -2279,49 +2391,8 @@ fun CrosswordApp() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    // Logo mark — simple crossword grid drawn with Canvas
-                    Canvas(modifier = Modifier.size(72.dp).padding(bottom = 8.dp)) {
-                        val cellSz = size.width / 5f
-                        val cells = listOf(
-                            // H-word: row 1 cols 0-4
-                            0 to 0, 1 to 0, 2 to 0, 3 to 0, 4 to 0,
-                            // V-word: col 2 rows 0-4
-                            2 to 1, 2 to 2, 2 to 3, 2 to 4,
-                            // H-word: row 2 cols 0-4
-                            0 to 2, 1 to 2, 3 to 2, 4 to 2,
-                            // H-word: row 4 cols 0-4
-                            0 to 4, 1 to 4, 3 to 4, 4 to 4
-                        )
-                        cells.forEach { (cx, cy) ->
-                            drawRoundRect(
-                                color  = Color(0xFF6650A4),
-                                topLeft = Offset(cx * cellSz + 1f, cy * cellSz + 1f),
-                                size   = GeoSize(cellSz - 2f, cellSz - 2f),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f)
-                            )
-                        }
-                    }
-                    // Title
-                    Text(
-                        "Welcome to",
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Normal
-                    )
-                    Text(
-                        "My Personal Crossword",
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                    Text(
-                        "Your crossword, your way!",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
-                        fontWeight = FontWeight.Normal,
-                        modifier = Modifier.padding(bottom = 36.dp)
-                    )
+                    TitleMark()
+                    Spacer(Modifier.height(36.dp))
 
                     // Name field
                     OutlinedTextField(
@@ -2626,6 +2697,7 @@ fun CrosswordApp() {
                     appMode = AppMode.LOGIN
                 },
                 onQuit                = { (context as? Activity)?.finish() },
+                onOpenSettings        = { showSettings = true },
                 onRequestPlayer2Setup = { showPlayer2SetupDialog = true },
                 musicEnabled          = musicEnabled,
                 soundEnabled          = soundEnabled,
@@ -2803,9 +2875,7 @@ fun CrosswordApp() {
                                 }
                             }
                             Text("Score: $currentScore", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = safeAccent)
-                            IconButton(onClick = { showSettings = true }) {
-                                Icon(Icons.Default.Settings, contentDescription = "Settings", tint = safeAccent)
-                            }
+                            SettingsGearButton(onClick = { showSettings = true })
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
                             // Stronger 14% wash so the bar is distinguishable
@@ -3463,22 +3533,30 @@ fun CrosswordApp() {
 
                 HorizontalDivider()
 
-                // Save & Quit (online: leave — a two-device game can't be resumed)
-                Button(
-                    onClick = {
-                        showSettings = false
-                        goHome()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                ) {
-                    Text(if (isOnlineGame) "🚪  Leave Online Game" else "💾  Save & Quit to Menu", fontSize = 16.sp)
-                }
+                if (appMode == AppMode.DASHBOARD) {
+                    // Save & Quit (online: leave — a two-device game can't be resumed)
+                    Button(
+                        onClick = {
+                            showSettings = false
+                            goHome()
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text(if (isOnlineGame) "🚪  Leave Online Game" else "💾  Save & Quit to Menu", fontSize = 16.sp)
+                    }
 
-                OutlinedButton(
-                    onClick = { showSettings = false },
-                    modifier = Modifier.fillMaxWidth().height(48.dp)
-                ) { Text("Resume Puzzle") }
+                    OutlinedButton(
+                        onClick = { showSettings = false },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) { Text("Resume Puzzle") }
+                } else {
+                    // Opened from home: nothing to save or resume.
+                    OutlinedButton(
+                        onClick = { showSettings = false },
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) { Text("Close") }
+                }
 
                 // How to play button
                 OutlinedButton(
@@ -4565,6 +4643,11 @@ fun CrosswordApp() {
             }
         )
     }
+
+    // Drawn last so it covers every screen; fades into home when it's done.
+    AnimatedVisibility(visible = showOpeningCard, enter = fadeIn(), exit = fadeOut(tween(400))) {
+        OpeningCard()
+    }
 }
 
 // ============================================================
@@ -4610,6 +4693,7 @@ fun CategoryScreen(
     onDailyPuzzle:          () -> Unit,
     onChangeUser:           () -> Unit,
     onQuit:                 () -> Unit,
+    onOpenSettings:         () -> Unit = {},
     onRequestPlayer2Setup:  () -> Unit = {},
     musicEnabled:           Boolean = true,
     soundEnabled:           Boolean = true,
@@ -4705,6 +4789,7 @@ fun CategoryScreen(
                         TextButton(onClick = onChangeUser) {
                             Text("Logout", fontSize = 14.sp, color = Color.White)
                         }
+                        SettingsGearButton(onClick = onOpenSettings)
                         IconButton(onClick = onQuit) {
                             Icon(
                                 imageVector        = Icons.Default.PowerSettingsNew,
