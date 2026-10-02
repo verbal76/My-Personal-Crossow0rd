@@ -45,8 +45,9 @@ passwords must never be committed.
   it.
 - Each game records `hostUid`, `guestUid` and `createdAt`, so the rules can
   bind writes to the two seated players and expire lobbies after 15 minutes.
-- `onDisconnect()` marks a game `abandoned` when a player's connection drops,
-  and the other player is told.
+- Each player's connection is tracked (`hostOnline`/`guestOnline`, set false
+  by the server when it drops). After 30 seconds offline the other phone ends
+  the game and the player is told.
 - Each device writes only its own score field. Letters received from the other
   device are accepted only if they are the correct solution letter, so a
   tampered remote client can't plant wrong letters or erase yours.

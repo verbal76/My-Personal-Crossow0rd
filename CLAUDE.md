@@ -111,7 +111,8 @@ Easy/Medium/Hard/Expert/Genius pay 1/2/4/8/20. The Daily pays 20, once per day. 
 
 ### Online play (`FirebaseGameManager`)
 - Anonymous sign-in happens only at Host/Join, and failures are reported. Creating a game and claiming the guest seat are **transactions**.
-- `onDisconnect()` marks a game `abandoned`, and the other player is notified. Normal ends call `closeGame`; leaving mid-game calls `abandonGame`.
+- **Presence:** `trackPresence` keeps `hostOnline`/`guestOnline` true while connected; the server sets it false on a drop, and the hook is re-armed on every reconnect. The other phone waits 30 s before ending the game (a brief Wi-Fi → mobile switch used to end it at once). A flag that is absent (older build) counts as connected. Normal ends call `closeGame`; leaving mid-game calls `abandonGame`.
+- Join codes are filtered/validated to the code alphabet (Firebase paths reject `. # $ [ ]`). Host/Join answers that arrive after a cancel are discarded. Failed writes are logged and shown (`onWriteRefused`).
 - The listener is owned by `LaunchedEffect(onlineCode, isOnlineGame)` and removed in `finally`.
 - The host publishes the puzzle exactly once, right after generating it.
 - Each device writes only its own score field.

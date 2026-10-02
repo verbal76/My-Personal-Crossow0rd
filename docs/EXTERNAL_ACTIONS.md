@@ -44,6 +44,10 @@ steal the guest seat, or fill the database. The app now stores `hostUid`,
   "Done". A guest that can't join means the rules are too strict.
 - On a third phone, try to join the same code after the guest has joined. It
   must say the game isn't available.
+- Mid-game, put one phone in airplane mode for about 5 seconds, then turn it
+  off. The other phone shows "lost connection — waiting" and the game carries
+  on. Leave it off for over 30 seconds: the other phone ends the game with a
+  notice. (This exercises the `hostOnline`/`guestOnline` presence fields.)
 
 ## 2. Make sure Anonymous sign-in is enabled — **required for online play**
 

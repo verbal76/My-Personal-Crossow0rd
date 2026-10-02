@@ -30,6 +30,8 @@
         "timerSeconds":        { ".validate": "newData.isNumber() && newData.val() >= 5 && newData.val() <= 120" },
         "p0answering":         { ".validate": "newData.isBoolean()" },
         "p1answering":         { ".validate": "newData.isBoolean()" },
+        "hostOnline":          { ".validate": "newData.isBoolean()" },
+        "guestOnline":         { ".validate": "newData.isBoolean()" },
         "solved":              { ".validate": "newData.isBoolean()" },
         "$other":              { ".validate": false }
       }

@@ -1020,10 +1020,7 @@ object FirebaseGameManager {
                     error != null      -> onResult(null, "Couldn't create the game (${error.message}).")
                     !committed && attempt < 4 -> createGame(hostName, mode, difficulty, attempt + 1, onResult)
                     !committed         -> onResult(null, "Couldn't create a game code. Try again.")
-                    else -> {
-                        gameRef(code).child("status").onDisconnect().setValue(STATUS_ABANDONED)
-                        onResult(code, null)
-                    }
+                    else -> onResult(code, null)   // presence (trackPresence) replaces abandon-on-disconnect
                 }
             }
         })
@@ -1067,7 +1064,6 @@ object FirebaseGameManager {
                         snap.child("guestName").getValue(String::class.java) != guestName ->
                         onError("Game not found. Check the code.")
                     else -> {
-                        gameRef(code).child("status").onDisconnect().setValue(STATUS_ABANDONED)
                         onSuccess(
                             snap.child("mode").getValue(String::class.java) ?: "TEAM",
                             snap.child("category").getValue(String::class.java) ?: "",
@@ -1119,6 +1115,34 @@ object FirebaseGameManager {
 
     fun stopListening(code: String, listener: ValueEventListener) {
         gameRef(code).removeEventListener(listener)
+    }
+
+    /**
+     * Keeps this player's "hostOnline"/"guestOnline" flag true while the device is
+     * connected; the server sets it false when the connection drops. The hook is
+     * re-armed on every reconnect. (A one-off "mark abandoned on disconnect" ended
+     * the game for both players on any brief drop, such as Wi-Fi to mobile data,
+     * and stopped working after the first reconnect.) Returns a stop function.
+     */
+    fun trackPresence(code: String, isHost: Boolean): () -> Unit {
+        val field = gameRef(code).child(if (isHost) "hostOnline" else "guestOnline")
+        val connected = FirebaseDatabase.getInstance(DB_URL).getReference(".info/connected")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snap: DataSnapshot) {
+                if (snap.getValue(Boolean::class.java) == true) {
+                    field.onDisconnect().setValue(false)
+                    field.setValue(true).reportFailure("presence", code)
+                }
+            }
+            override fun onCancelled(e: DatabaseError) {
+                android.util.Log.w("CrosswordFirebase", "Presence cancelled for game $code: ${e.message}")
+            }
+        }
+        connected.addValueEventListener(listener)
+        return {
+            connected.removeEventListener(listener)
+            field.onDisconnect().cancel()
+        }
     }
 
     /** Normal end: cancel the abandon-on-disconnect hook, then mark the game complete. */
@@ -1461,6 +1485,7 @@ fun CrosswordApp() {
     var shakeFx             by remember { mutableStateOf<GridFx?>(null) }   // wrong-word shake
     var showClueList        by remember { mutableStateOf(false) }
     var remoteToast         by remember { mutableStateOf<String?>(null) }
+    var opponentOffline     by remember { mutableStateOf(false) }   // their connection dropped (presence)
     var showBuildInfo       by remember { mutableStateOf(false) }   // online: what the opponent just did
     var wrongAnswererIndex  by remember { mutableIntStateOf(0) }
 
@@ -2273,6 +2298,12 @@ fun CrosswordApp() {
                 onlineNotice = "$who left the game."
                 return@listen
             }
+            // The other phone's connection. The server sets its flag false when it drops;
+            // older builds never write it, which counts as connected.
+            val otherOnline = snap.child(if (onlineRole == OnlineRole.HOST) "guestOnline" else "hostOnline")
+                .getValue(Boolean::class.java)
+            opponentOffline = otherOnline == false && guestNm.isNotEmpty() &&
+                status != FirebaseGameManager.STATUS_COMPLETE && !puzzleSolved
 
             // HOST: guest just joined — generate and publish the puzzle.
             if (onlineRole == OnlineRole.HOST && appMode == AppMode.ONLINE_LOBBY && guestNm.isNotEmpty()) {
@@ -2385,11 +2416,27 @@ fun CrosswordApp() {
         }, onError = { msg -> if (isOnlineGame) onlineNotice = msg })
         onlineListener = listener
         FirebaseGameManager.onWriteRefused = { msg -> if (isOnlineGame) remoteToast = msg }
+        val stopPresence = FirebaseGameManager.trackPresence(code, onlineRole == OnlineRole.HOST)
         try {
             awaitCancellation()
         } finally {
+            stopPresence()
+            opponentOffline = false
             FirebaseGameManager.onWriteRefused = null
             FirebaseGameManager.stopListening(code, listener)
+        }
+    }
+
+    // A dropped connection gets a grace period (phones switch networks, lose signal
+    // for a moment) before the game is called off; it used to end at once.
+    LaunchedEffect(opponentOffline, isOnlineGame) {
+        if (!opponentOffline || !isOnlineGame) return@LaunchedEffect
+        val who = player2Name.ifBlank { if (onlineRole == OnlineRole.HOST) "Your opponent" else "The host" }
+        remoteToast = "📶 $who lost connection — waiting for them…"
+        delay(30_000L)
+        if (opponentOffline && isOnlineGame && !puzzleSolved) {
+            FirebaseGameManager.abandonGame(onlineCode)
+            onlineNotice = "$who lost connection and couldn't get back. The game has ended."
         }
     }
 
