@@ -94,6 +94,16 @@ class RulesTest {
         assertEquals(Pair(Pair(1, 0), 'A'), pickHintCell(cat, mapOf(Pair(0, 0) to 'C')))
     }
 
+    @Test fun hintFixesAWrongLetterBeforeFillingAnEmptySquare() {
+        // C?X with the cursor on the empty A: revealing A would complete "CAX" wrongly.
+        val typo = mapOf(Pair(0, 0) to 'C', Pair(2, 0) to 'X')
+        assertEquals(Pair(Pair(2, 0), 'T'), pickHintCell(cat, typo, preferred = Pair(1, 0)))
+        // With several wrong letters the selected one wins.
+        val twoWrong = mapOf(Pair(0, 0) to 'Q', Pair(2, 0) to 'X')
+        assertEquals(Pair(Pair(2, 0), 'T'), pickHintCell(cat, twoWrong, preferred = Pair(2, 0)))
+        assertEquals(Pair(Pair(0, 0), 'C'), pickHintCell(cat, twoWrong, preferred = Pair(1, 0)))
+    }
+
     @Test fun noHintForASolvedWord() {
         assertNull(pickHintCell(cat, mapOf(Pair(0, 0) to 'C', Pair(1, 0) to 'A', Pair(2, 0) to 'T')))
     }

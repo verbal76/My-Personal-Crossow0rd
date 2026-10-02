@@ -117,9 +117,18 @@ fun CrosswordGrid(
         viewSize.height / 2f + o.y + ((c.second - minY + 0.5f) - gridH / 2f) * baseCell * s
     )
 
-    // New board / new size: start zoomed so letters are readable.
+    // New board: start zoomed so letters are readable. The view also resizes when the
+    // clue bar or a banner changes height; that keeps the player's zoom and only
+    // re-clamps the pan, instead of snapping the board back.
+    var fittedBoard by remember { mutableStateOf<Board?>(null) }
     LaunchedEffect(board, viewSize) {
         if (viewSize == IntSize.Zero) return@LaunchedEffect
+        if (fittedBoard === board) {
+            zoom = zoom.coerceIn(1f, maxScale)
+            panOff = clampOffset(panOff, zoom)
+            return@LaunchedEffect
+        }
+        fittedBoard = board
         zoom = if (baseCell < readablePx) min(readablePx / baseCell, maxScale) else 1f
         panOff = Offset.Zero
         selection?.let { sel ->
@@ -200,6 +209,9 @@ fun CrosswordGrid(
                 }
             }
             .pointerInput(board, baseCell) {
+                // Single taps only: a double-tap handler would delay every tap by the
+                // double-tap timeout and turn "tap again to switch direction" into a
+                // zoom. Pinch zooms.
                 detectTapGestures(
                     onTap = { p ->
                         val gx = ((p.x - size.width / 2f - panOff.x) / (baseCell * zoom) + gridW / 2f)
@@ -207,17 +219,6 @@ fun CrosswordGrid(
                         if (gx < 0 || gy < 0) return@detectTapGestures
                         val cell = Pair(minX + gx.toInt(), minY + gy.toInt())
                         if (board.contains(cell)) tapCell(cell)
-                    },
-                    onDoubleTap = { p ->
-                        // Toggle between the whole board and a readable close-up at the tap.
-                        if (zoom > 1.05f) { zoom = 1f; panOff = Offset.Zero }
-                        else {
-                            val target = max(2f, min(readablePx * 1.4f / baseCell, maxScale))
-                            val center = Offset(size.width / 2f, size.height / 2f)
-                            val gridPoint = (p - center - panOff) / zoom
-                            zoom = target
-                            panOff = clampOffset(-(gridPoint * target), target)
-                        }
                     }
                 )
             }

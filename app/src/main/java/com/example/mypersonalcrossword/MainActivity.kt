@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -139,6 +140,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
@@ -334,6 +337,13 @@ class SaveManager(context: Context) {
     fun addScore(name: String, delta: Int = 1) =
         prefs.edit { putInt("score_$name", getScore(name) + delta) }
 
+    // Boards this profile has been paid for (see core/Ledger.kt).
+    fun isPuzzlePaid(name: String, fingerprint: String): Boolean =
+        ledgerContains(prefs.getString("paid_$name", "") ?: "", fingerprint)
+    fun markPuzzlePaid(name: String, fingerprint: String) = prefs.edit {
+        putString("paid_$name", appendToLedger(prefs.getString("paid_$name", "") ?: "", fingerprint))
+    }
+
     fun getCompleted(name: String): Int = prefs.getInt("completed_$name", 0)
     fun addCompleted(name: String, delta: Int = 1) =
         prefs.edit { putInt("completed_$name", getCompleted(name) + delta) }
@@ -474,6 +484,7 @@ class SaveManager(context: Context) {
                         key == "saves_$name" ||
                         key == "statkeys_$name" ||
                         key == "dailydone_$name" ||
+                        key == "paid_$name" ||
                         key.startsWith("used_${name}_") ||
                         key.startsWith("puzzle_${name}_") ||
                         key.startsWith("psession_${name}_") ||
@@ -1237,6 +1248,10 @@ fun CrosswordApp() {
 
     var puzzleSolved by vm::puzzleSolved
     var isGenerating by rememberSaveable { mutableStateOf(false) }
+    // Identifies the current generation request. Leaving the puzzle or starting
+    // another one bumps it, so a board that finishes late is thrown away instead
+    // of being loaded (and autosaved) behind the player's back.
+    var generationId by rememberSaveable { mutableIntStateOf(0) }
 
     // ── Online multiplayer state ───────────────────────────────────────────────
     var isOnlineGame     by vm::isOnline
@@ -1272,7 +1287,9 @@ fun CrosswordApp() {
     var showTeamTutorial       by remember { mutableStateOf(false) }
     var showDailyPrompt        by remember { mutableStateOf(false) }
     var showDailyInstructions  by remember { mutableStateOf(false) }
-    var dailyPromptShown       by remember { mutableStateOf(false) }
+    // Saveable: a restore mid-puzzle must not re-offer the Daily on top of whatever
+    // dialog the player opens on the way home.
+    var dailyPromptShown       by rememberSaveable { mutableStateOf(false) }
     // Derived from the saveable Int every recompose — safe because currentCellColorArgb is State
     val currentCellColor = Color(currentCellColorArgb.toLong() and 0xFFFFFFFFL)
     // Word the player single-tapped — used to pan grid to its start cell
@@ -1467,6 +1484,8 @@ fun CrosswordApp() {
     }
 
     fun restoreSession(s: PuzzleSession) {
+        // Resuming a Daily from Continue must remember the home mode it replaces.
+        if (s.isDaily && activeGameMode != GameMode.DAILY) modeBeforeDaily = activeGameMode
         activeGameMode     = if (s.isDaily) GameMode.DAILY else s.mode
         activeCategory     = s.category
         activeDifficulty   = s.difficulty
@@ -1523,6 +1542,7 @@ fun CrosswordApp() {
         if (!isOnlineGame && activeGameMode != GameMode.SINGLE && player2Name.isNotBlank()) {
             saveManager.ensurePlayer(player2Name)
         }
+        generationId++
         isGenerating = true
     }
 
@@ -1549,12 +1569,15 @@ fun CrosswordApp() {
         resetOverlays()
         appMode            = AppMode.DASHBOARD
         puzzleSolved       = false
+        generationId++
         isGenerating       = true
     }
 
     /** Leave the puzzle screen for home, saving progress (solo/local modes) first. */
     fun goHome() {
         timerRunning = false
+        // Abandon any board still being generated for the screen we're leaving.
+        if (isGenerating) { isGenerating = false; generationId++ }
         saveCurrentPuzzle()
         cleanupOnlineSession()
         resetOverlays()
@@ -1567,6 +1590,10 @@ fun CrosswordApp() {
         selection     = null
         lastResult    = null
         puzzleSolved = false
+        // The saved session keeps the Vindictive phase; clearing it here stops an
+        // answer clock that was running on the puzzle screen.
+        vindPhase        = VindicativePhase.PICK_OWN
+        vindAssignedWord = null
         if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
         activeDailyKey = null
         isDailyPuzzle  = false
@@ -1710,6 +1737,15 @@ fun CrosswordApp() {
             if (activeGameMode == GameMode.SINGLE || activeGameMode == GameMode.DAILY) onCorrectFeedback()
         }
         if (active in filled) onAttempt(active, isWordSolved(active, userInputs))
+        // Solo: a crossing word completed with a wrong letter isn't an attempt (no
+        // penalty), but it must not stay full and silently "unfinished" — shake it.
+        if (activeGameMode == GameMode.SINGLE || activeGameMode == GameMode.DAILY) {
+            val wrongCrossing = filled.filter { it != active && !isWordSolved(it, userInputs) }
+            if (wrongCrossing.isNotEmpty()) {
+                val activeWrong = if (active in filled && !isWordSolved(active, userInputs)) active.cells() else emptyList()
+                shakeFx = GridFx((activeWrong + wrongCrossing.flatMap { it.cells() }).distinct(), System.nanoTime())
+            }
+        }
     }
 
     /** Why the keyboard is disabled right now; null when this player may type. */
@@ -1762,8 +1798,17 @@ fun CrosswordApp() {
             sel = forced?.let { InputEngine.selectWord(it, userInputs, lockedNow()) }
                 ?: InputEngine.initialSelection(board, userInputs, lockedNow()) ?: return
         }
-        val active = board.activeWord(sel) ?: return
-        if (isWordSolved(active, userInputs)) { moveToNextUnsolved(); return }
+        var active = board.activeWord(sel) ?: return
+        if (isWordSolved(active, userInputs)) {
+            // A solved word takes no letters. Carry the keystroke to the unsolved word
+            // crossing this square (or the next unsolved clue) instead of dropping it.
+            val here = sel ?: return
+            val crossing = board.wordsAt(here.cell).firstOrNull { it != active && !isWordSolved(it, userInputs) }
+            sel = if (crossing != null && forced == null) InputEngine.selectWord(crossing, userInputs, lockedNow())
+                  else { moveToNextUnsolved(); selection ?: return }
+            active = board.activeWord(sel) ?: return
+            if (isWordSolved(active, userInputs)) return
+        }
         val r = InputEngine.type(board, sel, userInputs, lockedNow(), ch)
         if (r.inputs == userInputs && r.selection == sel) return
         userInputs = r.inputs
@@ -1858,19 +1903,22 @@ fun CrosswordApp() {
             currentCellColorArgb = saveManager.getCellColorArgb(playerName)
             currentBtnColorArgb  = saveManager.getButtonColorArgb(playerName)
             musicVolume = saveManager.getMusicVolume()
-            // The Activity was recreated mid-puzzle (process death, theme change):
-            // the grid lives in memory, but it was autosaved on pause — resume it.
-            val needsRestore = appMode == AppMode.DASHBOARD && placedWords.isEmpty()
-            val restored = needsRestore &&
-                saveManager.getInProgressPuzzles(playerName).firstOrNull()?.let { resumeSlot(it) } == true
-            if (!restored && (appMode == AppMode.LOGIN || needsRestore)) appMode = AppMode.CATEGORY_SELECT
+            // Offline puzzles come back through the ViewModel's saved state. A puzzle
+            // or lobby screen restored without its grid was an online game, which
+            // can't be resumed without the other phone: go home and say so (it used
+            // to open whichever offline save was most recent instead).
+            val lostOnline = (appMode == AppMode.DASHBOARD && placedWords.isEmpty() && !isGenerating) ||
+                (appMode == AppMode.ONLINE_LOBBY && !isOnlineGame)
+            if (lostOnline) {
+                appMode = AppMode.CATEGORY_SELECT
+                if (vm.restoredFromOnline) onlineNotice = "The online game ended when the app was closed."
+            }
+            if (appMode == AppMode.LOGIN) appMode = AppMode.CATEGORY_SELECT
             // The ViewModel brought the grid back by itself (SavedStateHandle).
             if (appMode == AppMode.DASHBOARD && placedWords.isNotEmpty()) {
                 if (puzzleSolved && lastResult == null) {
-                    // Rewards were already paid before the process died; just go home.
-                    puzzleSolved = false
-                    placedWords = emptyList(); gridCells = emptyList()
-                    appMode = AppMode.CATEGORY_SELECT
+                    // Rewards were already paid before the process died; unload it fully.
+                    goHome()
                 } else if (!isGenerating) {
                     timerRunning = true
                     if (!isOnlineGame && activeGameMode == GameMode.VINDICTIVE &&
@@ -1933,8 +1981,13 @@ fun CrosswordApp() {
         val me    = myIndex()
         val team  = teamSnapshot()
         val vind  = vindSnapshot()
+        // A board pays out once. A restored copy of a finished puzzle (a saved state
+        // taken a frame before its payout) shows the result but credits nothing.
+        val fingerprint = puzzleFingerprint(placedWords)
+        val boardPaid   = saveManager.isPuzzlePaid(playerName, fingerprint)
+        if (!boardPaid) saveManager.markPuzzlePaid(playerName, fingerprint)
 
-        when (activeGameMode) {
+        if (!boardPaid) when (activeGameMode) {
             GameMode.SINGLE, GameMode.DAILY -> {
                 saveManager.addScore(playerName, award)
                 saveManager.addCompleted(playerName)
@@ -1989,7 +2042,7 @@ fun CrosswordApp() {
         homeRefresh++
         lastResult = PuzzleResult(
             mode = activeGameMode, isDaily = isDaily, reward = reward, hints = hints, net = net,
-            awarded = if (activeGameMode == GameMode.VINDICTIVE) null else award,
+            awarded = if (activeGameMode == GameMode.VINDICTIVE) null else if (boardPaid) 0 else award,
             dailyAlreadyPaid = dailyAlreadyPaid, seconds = elapsedSeconds,
             team = team, vind = vind, myIndex = me
         )
@@ -2036,7 +2089,8 @@ fun CrosswordApp() {
 
     // Timer — ticks only while a puzzle is actually being played: not in the
     // background, not while the Settings sheet is covering the grid.
-    val timerActive = timerRunning && appResumed && !showSettings && appMode == AppMode.DASHBOARD
+    // The puzzle clock also pauses while the phone is being handed over.
+    val timerActive = timerRunning && appResumed && !showSettings && !showTurnDialog && appMode == AppMode.DASHBOARD
     LaunchedEffect(timerActive) {
         while (timerActive) {
             delay(1000L)
@@ -2238,8 +2292,11 @@ fun CrosswordApp() {
     }
 
     // ── PUZZLE GENERATION ─────────────────────────────────────────────────────
-    LaunchedEffect(isGenerating) {
+    LaunchedEffect(isGenerating, generationId) {
         if (!isGenerating) return@LaunchedEffect
+        // Restored mid-generation: the word list is still loading.
+        if (allEntries.isEmpty()) snapshotFlow { startupDone }.first { it }
+        val request  = generationId
         val dailyKey = activeDailyKey
         val combined = combinedCategories
         val category = activeCategory
@@ -2259,11 +2316,17 @@ fun CrosswordApp() {
                 else                  -> generateCrossword(entries.filter { it.category == category }, target, used)
             }
         }
+        // A newer request (or leaving the puzzle) supersedes this one. Keying the
+        // effect on generationId already cancels it; this guards the window between.
+        if (request != generationId || !isGenerating || appMode != AppMode.DASHBOARD) return@LaunchedEffect
 
         if (generated.isEmpty()) {
-            // Never drop the player into an empty, unsolvable grid.
+            // Never drop the player into an empty, unsolvable grid — and don't leave the
+            // previous (solved) board loaded behind the home screen either.
             isGenerating = false
             timerRunning = false
+            placedWords = emptyList(); gridCells = emptyList()
+            userInputs = emptyMap(); revealedCells = emptySet(); selection = null
             cleanupOnlineSession()
             if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
             activeDailyKey = null
@@ -2788,6 +2851,10 @@ fun CrosswordApp() {
         }
 
         AppMode.DASHBOARD -> {
+            // Pop-ups over the puzzle sit just below the status bar and top bar, and are
+            // announced to screen readers when they appear.
+            val belowTopBar = Modifier.statusBarsPadding().padding(top = 72.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite }
             // Pick a top-bar accent that stays readable against the surface
             // even when the user has chosen a near-white or near-black brand
             // color. Used for the back arrow, Puzzles count, Score, and
@@ -3025,8 +3092,21 @@ fun CrosswordApp() {
                         ) {
                             // Hint: reveals the selected square (or the word's first open one).
                             val hintWord    = activeWord?.takeIf { !isWordSolved(it, userInputs) }
-                            val canAfford   = currentScore >= Economy.HINT_COST
-                            val hintEnabled = hintWord != null && canAfford && blocked == null
+                            // Hints are paid by whoever is playing: this device's player online,
+                            // otherwise the player whose turn it is (not always Player 1).
+                            val hintPayer = when {
+                                isOnlineGame -> playerName
+                                activeGameMode == GameMode.TEAM       -> nameOf(teamCurrentPlayer)
+                                activeGameMode == GameMode.VINDICTIVE -> nameOf(vindCurrentPlayer)
+                                else -> playerName
+                            }
+                            val payerScore  = if (hintPayer == playerName) currentScore else saveManager.getScore(hintPayer)
+                            val canAfford   = payerScore >= Economy.HINT_COST
+                            // Vindictive is head-to-head: a hint may help, but the last letter
+                            // has to be the player's own, or hints would score the word for them.
+                            val lastLetterOwn = activeGameMode == GameMode.VINDICTIVE && hintWord != null &&
+                                unrevealedCells(hintWord, userInputs).size <= 1
+                            val hintEnabled = hintWord != null && canAfford && !lastLetterOwn && blocked == null
                             OutlinedButton(
                                 onClick = {
                                     val word = hintWord ?: return@OutlinedButton
@@ -3036,8 +3116,8 @@ fun CrosswordApp() {
                                     val before = userInputs
                                     userInputs    = userInputs + (pos to ch)
                                     revealedCells = revealedCells + pos
-                                    currentScore  = (currentScore - Economy.HINT_COST).coerceAtLeast(0)
-                                    saveManager.addScore(playerName, -Economy.HINT_COST)
+                                    if (hintPayer == playerName) currentScore = (currentScore - Economy.HINT_COST).coerceAtLeast(0)
+                                    saveManager.addScore(hintPayer, -Economy.HINT_COST)
                                     hintsUsedThisPuzzle++
                                     if (activeGameMode == GameMode.TEAM) {
                                         // Online the hint belongs to this device's player; locally to whoever has the turn.
@@ -3055,8 +3135,9 @@ fun CrosswordApp() {
                             ) {
                                 Text(
                                     when {
-                                        !canAfford -> "💡 Hint (need ${Economy.HINT_COST} pt)"
-                                        else       -> "💡 Reveal square  −${Economy.HINT_COST}"
+                                        lastLetterOwn -> "💡 Last letter's yours"
+                                        !canAfford    -> "💡 Hint (need ${Economy.HINT_COST} pt)"
+                                        else          -> "💡 Reveal square  −${Economy.HINT_COST}"
                                     },
                                     style = MaterialTheme.typography.labelLarge, maxLines = 1
                                 )
@@ -3074,7 +3155,23 @@ fun CrosswordApp() {
                                     shape    = RoundedCornerShape(12.dp),
                                     colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C), contentColor = Color.White)
                                 ) {
-                                    Text("🎯 Give to ${nameOf(1 - vindCurrentPlayer)}", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                                    Text("🎯 Give to ${nameOf(1 - vindCurrentPlayer)}", style = MaterialTheme.typography.labelLarge,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            // After "Answer It" on an expired clock the pass stays available.
+                            val passOpen = activeGameMode == GameMode.VINDICTIVE &&
+                                vindPhase == VindicativePhase.OPPONENT_WAIT && vindAssignedWord != null &&
+                                vindOpponentCountdown == 0 && !showTurnDialog && !vindPassDialogVisible &&
+                                VindictiveRules.canAct(vindSnapshot(), isOnlineGame, myIndex())
+                            if (passOpen) {
+                                Button(
+                                    onClick  = { vibrateLight(context); passAssigned() },
+                                    modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                                    shape    = RoundedCornerShape(12.dp),
+                                    colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFFB71C1C), contentColor = Color.White)
+                                ) {
+                                    Text("Pass  (${Economy.VIND_PASS} pt)", style = MaterialTheme.typography.labelLarge, maxLines = 1)
                                 }
                             }
                         }
@@ -3142,9 +3239,11 @@ fun CrosswordApp() {
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
                         shape = RoundedCornerShape(20.dp),
                         shadowElevation = 6.dp,
-                        modifier = Modifier.padding(top = 12.dp)
+                        modifier = belowTopBar
                     ) {
-                        Text("✗  Not quite — try again", style = MaterialTheme.typography.labelLarge,
+                        // Team: a wrong word ends the turn, and its letters are cleared.
+                        Text(if (activeGameMode == GameMode.TEAM) "✗  Not quite — next player's turn" else "✗  Not quite — try again",
+                            style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp))
                     }
                 }
@@ -3153,7 +3252,7 @@ fun CrosswordApp() {
                 AnimatedVisibility(
                     visible = remoteToast != null && isOnlineGame,
                     enter = fadeIn() + slideInVertically { -it }, exit = fadeOut(),
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 64.dp)
+                    modifier = Modifier.align(Alignment.TopCenter).then(belowTopBar)
                 ) {
                     Surface(
                         color = MaterialTheme.colorScheme.inverseSurface,
@@ -3169,9 +3268,10 @@ fun CrosswordApp() {
                 if (isOnlineGame && remoteIsAnswering && !puzzleSolved) {
                     Box(
                         modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .then(belowTopBar)
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .align(Alignment.TopCenter),
+                            .padding(horizontal = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Surface(
@@ -3895,7 +3995,9 @@ fun CrosswordApp() {
     // ── TURN HANDOFF DIALOG ──────────────────────────────────────────────────────
     if (showTurnDialog && appMode == AppMode.DASHBOARD) {
         AlertDialog(
-            onDismissRequest = { showTurnDialog = false },
+            // Hand-offs need an explicit "I'm Ready": a stray tap outside (or Back)
+            // would otherwise start the next player's clock before they have the phone.
+            onDismissRequest = { },
             title = { Text(turnDialogTitle, fontWeight = FontWeight.Bold, fontSize = 20.sp,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
             text = {
@@ -4493,7 +4595,7 @@ fun CrosswordApp() {
     // phone, online the answerer's phone — which mirrors it to the other device.
     // Typing keeps the clock running; when it hits zero the documented
     // Answer It / Pass choice appears.
-    LaunchedEffect(vindPhase, showTurnDialog, vindAssignedWord) {
+    LaunchedEffect(vindPhase, showTurnDialog, vindAssignedWord, appMode) {
         if (activeGameMode != GameMode.VINDICTIVE || appMode != AppMode.DASHBOARD || puzzleSolved) return@LaunchedEffect
         if (showTurnDialog || vindAssignedWord == null) return@LaunchedEffect
         if (!VindictiveRules.ownsTimer(vindSnapshot(), isOnlineGame, myIndex())) return@LaunchedEffect
@@ -4593,7 +4695,8 @@ fun CrosswordApp() {
                     when {
                         isOnlineGame   -> goHome()
                         // The Daily is one puzzle per day — "next" means pick a category.
-                        result.isDaily -> { goHome(); showVindCategoryDialog = true }
+                        // Back in Team/Vindictive, home's START runs the player setup first.
+                        result.isDaily -> { goHome(); if (activeGameMode == GameMode.SINGLE) showVindCategoryDialog = true }
                         // Same category (or the same combined set), same difficulty, same mode.
                         else -> launchPuzzle(activeCategory, activeDifficulty, combined = combinedCategories)
                     }

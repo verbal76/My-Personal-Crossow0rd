@@ -5,21 +5,18 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import android.os.Bundle
+import androidx.core.os.bundleOf
 import com.hag.mypersonalcrossword.core.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
 /**
  * Owns the puzzle being played. Everything here survives configuration changes
  * (the ViewModel outlives the Activity) and process death (the session is
- * mirrored into [SavedStateHandle] via [SessionCodec] whenever it changes).
+ * encoded into [SavedStateHandle] via [SessionCodec] when the system saves state).
  *
  * UI-only state (dialogs, animations) and online-session plumbing stay in the
  * composable; an online game is never written to the handle because it can't be
@@ -66,25 +63,33 @@ class PuzzleViewModel(private val handle: SavedStateHandle) : ViewModel() {
     var onlineRole         by mutableStateOf<OnlineRole?>(null)
     var onlineCode         by mutableStateOf("")
 
+    /** True when the process was restored from an online game, which can't be resumed. */
+    var restoredFromOnline = false
+        private set
+
     init {
-        handle.get<String>(KEY_SESSION)?.let(SessionCodec::decode)?.let { s ->
+        val saved = handle.get<Bundle>(KEY_STATE)
+        restoredFromOnline = saved?.getBoolean(KEY_WAS_ONLINE) ?: false
+        // Older builds mirrored the session into separate handle keys.
+        val raw = saved?.getString(KEY_SESSION) ?: handle.get<String>(KEY_SESSION)
+        raw?.let(SessionCodec::decode)?.let { s ->
             restore(s)
-            puzzleSolved = handle.get<Boolean>(KEY_SOLVED) ?: false
-            selection = decodeSelection(handle.get<String>(KEY_SELECTION))
+            puzzleSolved = saved?.getBoolean(KEY_SOLVED) ?: handle.get<Boolean>(KEY_SOLVED) ?: false
+            selection = decodeSelection(saved?.getString(KEY_SELECTION) ?: handle.get<String>(KEY_SELECTION))
         }
-        // Mirror the session into the SavedStateHandle whenever it changes
-        // (debounced — typing a word shouldn't serialise the grid 5 times).
-        viewModelScope.launch {
-            snapshotFlow { snapshot() to Triple(selection, puzzleSolved, isOnline) }.collectLatest { (session, extra) ->
-                delay(250)
-                val (sel, solved, online) = extra
-                if (session == null || online) {
-                    handle.remove<String>(KEY_SESSION)
-                } else {
-                    handle[KEY_SESSION]   = SessionCodec.encode(session)
-                    handle[KEY_SELECTION] = encodeSelection(sel)
-                    handle[KEY_SOLVED]    = solved
-                }
+        // Encoded at the moment the system saves state, never from a delayed copy:
+        // a debounced mirror could miss the last letter, or the payout that followed
+        // it, and re-encoded the whole grid every time the clock ticked.
+        handle.setSavedStateProvider(KEY_STATE) {
+            val session = snapshot()
+            when {
+                isOnline -> bundleOf(KEY_WAS_ONLINE to true)
+                session == null -> Bundle()
+                else -> bundleOf(
+                    KEY_SESSION   to SessionCodec.encode(session),
+                    KEY_SELECTION to encodeSelection(selection),
+                    KEY_SOLVED    to puzzleSolved
+                )
             }
         }
     }
@@ -146,6 +151,8 @@ class PuzzleViewModel(private val handle: SavedStateHandle) : ViewModel() {
     }
 
     companion object {
+        private const val KEY_STATE     = "puzzle_state"
+        private const val KEY_WAS_ONLINE = "was_online"
         private const val KEY_SESSION   = "puzzle_session"
         private const val KEY_SELECTION = "puzzle_selection"
         private const val KEY_SOLVED    = "puzzle_solved"

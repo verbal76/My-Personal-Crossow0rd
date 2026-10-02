@@ -120,13 +120,17 @@ fun unrevealedCells(word: PlacedWord, inputs: Map<Cell, Char>): List<Pair<Cell, 
     }
 
 /**
- * Picks the letter a hint reveals: the selected cell when it is part of the word
- * and still wrong/empty, otherwise the first unrevealed cell in reading order.
- * Deterministic so the player can predict it ("reveal this square").
+ * Picks the letter a hint reveals. A square holding a *wrong* letter comes first
+ * (the selected one if it is wrong): revealing an empty square of a word with a
+ * typo would complete it wrongly and count as a failed attempt. Otherwise the
+ * selected cell when it is part of the word and still empty, else the first open
+ * cell in reading order. Deterministic so the player can predict it.
  */
 fun pickHintCell(word: PlacedWord, inputs: Map<Cell, Char>, preferred: Cell? = null): Pair<Cell, Char>? {
     val open = unrevealedCells(word, inputs)
     if (open.isEmpty()) return null
+    val wrong = open.filter { inputs[it.first] != null }
+    if (wrong.isNotEmpty()) return wrong.firstOrNull { it.first == preferred } ?: wrong.first()
     return open.firstOrNull { it.first == preferred } ?: open.first()
 }
 
