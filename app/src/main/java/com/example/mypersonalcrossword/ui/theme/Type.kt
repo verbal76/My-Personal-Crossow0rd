@@ -21,6 +21,15 @@ val Typography = Typography(
         lineHeight = 30.sp,
         letterSpacing = (-0.25).sp
     ),
+    // Material's defaults for the undefined "small" styles are larger than the
+    // "large" ones above them (displaySmall 36sp, headlineSmall 24sp), which made
+    // dialog titles (headlineSmall) bigger than screen headings. Keep the ramp in order.
+    displaySmall = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 24.sp,
+        lineHeight = 28.sp
+    ),
     headlineLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Bold,
@@ -31,6 +40,12 @@ val Typography = Typography(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
+        lineHeight = 24.sp
+    ),
+    headlineSmall = TextStyle(        // AlertDialog titles
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 19.sp,
         lineHeight = 24.sp
     ),
     titleLarge = TextStyle(

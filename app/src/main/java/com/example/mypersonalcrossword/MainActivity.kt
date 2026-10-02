@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -51,6 +52,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.core.content.edit
@@ -107,6 +111,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size as GeoSize
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.verticalScroll
@@ -140,6 +145,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.input.key.Key
@@ -1128,6 +1135,9 @@ fun BoxScope.BevelHighlight(alpha: Float = 0.25f) {
 // the tagline. Shared by the login screen and the opening card so they match.
 @Composable
 fun TitleMark() {
+    // Theme primary rather than a fixed purple: the fixed one vanished on the dark
+    // login gradient (about 1.35:1).
+    val logoColor = MaterialTheme.colorScheme.primary
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         // Logo mark — simple crossword grid drawn with Canvas
         Canvas(modifier = Modifier.size(72.dp).padding(bottom = 8.dp)) {
@@ -1144,7 +1154,7 @@ fun TitleMark() {
             )
             cells.forEach { (cx, cy) ->
                 drawRoundRect(
-                    color  = Color(0xFF6650A4),
+                    color  = logoColor,
                     topLeft = Offset(cx * cellSz + 1f, cy * cellSz + 1f),
                     size   = GeoSize(cellSz - 2f, cellSz - 2f),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f)
@@ -1237,16 +1247,19 @@ fun GradientBtn(
 ) {
     Box(
         modifier = modifier
-            .height(52.dp)
+            // Grows with large font sizes instead of clipping the label.
+            .heightIn(min = 52.dp)
             .shadow(if (enabled) 4.dp else 0.dp, RoundedCornerShape(12.dp))
+            // Disabled fades the whole button (it used to fade only the label).
+            .graphicsLayer(alpha = if (enabled) 1f else 0.45f)
             .clip(RoundedCornerShape(12.dp))
             .background(gradient)
-            .graphicsLayer(alpha = if (enabled) 1f else 0.45f)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         BevelHighlight()
-        Text(text, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(text, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
     }
 }
 
@@ -2451,7 +2464,9 @@ fun CrosswordApp() {
 
     // App-wide gradient derived from the player's chosen button color —
     // computed here (before AnimatedContent) so all screens and dialogs can use it.
-    val appBtnColor = Color(currentBtnColorArgb.toLong() and 0xFFFFFFFFL)
+    // Every button, header and tile draws white text on this, so a very light pick
+    // (white, yellow, pastels) is deepened just enough to stay readable.
+    val appBtnColor = Color(readableUnderWhiteText(currentBtnColorArgb))
     val appBtnDim   = appBtnColor.copy(
         red   = (appBtnColor.red   * 0.75f).coerceIn(0f, 1f),
         green = (appBtnColor.green * 0.75f).coerceIn(0f, 1f),
@@ -2825,7 +2840,13 @@ fun CrosswordApp() {
                 musicEnabled          = musicEnabled,
                 soundEnabled          = soundEnabled,
                 musicVolume           = musicVolume,
-                onMusicToggle         = { musicEnabled = !musicEnabled },
+                // Play/pause on the home card pauses playback only. Turning Music off
+                // (Settings) made the card vanish and the layout jump, with no way back
+                // from home.
+                onMusicToggle         = {
+                    if (AmbientMusicPlayer.isPlaying) AmbientMusicPlayer.stop()
+                    else AmbientMusicPlayer.start(musicVolume)
+                },
                 onVolumeChange        = { v ->
                     musicVolume = v
                     AmbientMusicPlayer.setVolume(v)
@@ -2918,10 +2939,11 @@ fun CrosswordApp() {
             // even when the user has chosen a near-white or near-black brand
             // color. Used for the back arrow, Puzzles count, Score, and
             // Settings icon.
-            val brandLum    = cellLuminance(appBtnColor)
-            val safeAccent  = if (brandLum < 0.2f || brandLum > 0.7f)
-                MaterialTheme.colorScheme.onSurface
-            else appBtnColor
+            // (Measured against the bar's real background with the WCAG ratio; the
+            // default purple fails on the dark bar, so dark mode falls back.)
+            val barBg       = appBtnColor.copy(alpha = 0.14f).compositeOver(MaterialTheme.colorScheme.surface)
+            val safeAccent  = Color(readableTextColor(appBtnColor.toArgb(), barBg.toArgb(),
+                MaterialTheme.colorScheme.onSurface.toArgb()))
             // Physical keyboards (Chromebooks, tablets, emulators): letters, Backspace,
             // Tab / Enter for next clue (Shift+Tab for previous), Space to flip direction.
             val keyFocus = remember { FocusRequester() }
@@ -2949,35 +2971,36 @@ fun CrosswordApp() {
                                 // Title: category + mode label for team/vindictive
                                 val modeLabel = when (activeGameMode) {
                                     GameMode.TEAM       -> " • 🤝 Team"
-                                    GameMode.VINDICTIVE -> " • ⚔️ Vind"
+                                    GameMode.VINDICTIVE -> " • ⚔️ Vindictive"
                                     else                -> ""
                                 }
                                 val titleText = (if (activeDailyKey != null) "Daily Puzzle" else prettyCategory(activeCategory)) + modeLabel
-                                Text(titleText, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                Text(titleText, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis)
                                 // Subtitle: names for multiplayer, word count + time for single
                                 val mins = elapsedSeconds / 60
                                 val secs = elapsedSeconds % 60
                                 val timeStr = "%d:%02d".format(mins, secs)
+                                // The clock leads, so it's the last thing to be cut off on narrow screens.
                                 val subtitle = when {
-                                    isGenerating -> "Generating…"
+                                    isGenerating -> "Weaving words…"
                                     activeGameMode == GameMode.TEAM ->
-                                        "$playerName vs $player2Name  •  $timeStr"
+                                        "$timeStr  •  $playerName & $player2Name"
                                     activeGameMode == GameMode.VINDICTIVE ->
-                                        "$playerName ⚔ $player2Name  •  $timeStr"
+                                        "$timeStr  •  $playerName ⚔ $player2Name"
                                     else ->
-                                        "${placedWords.size} words  •  ${activeDifficulty.label}  •  $timeStr"
+                                        "$timeStr  •  ${placedWords.size} words  •  ${activeDifficulty.label}"
                                 }
-                                Text(subtitle, fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    maxLines = 1)
+                                Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         },
                         navigationIcon = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { goHome() }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Save and go back", tint = safeAccent)
-                                }
-                                Text("Puzzles: $currentCompleted", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = safeAccent)
+                            // (The puzzles-completed count lives on home; here it starved the
+                            // title and clock of room on narrow phones.)
+                            IconButton(onClick = { goHome() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Save and go back", tint = safeAccent)
                             }
                         },
                         actions = {
@@ -3000,7 +3023,8 @@ fun CrosswordApp() {
                                     )
                                 }
                             }
-                            Text("Score: $currentScore", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = safeAccent)
+                            Text("$currentScore pts", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = safeAccent,
+                                modifier = Modifier.semantics { contentDescription = "Score $currentScore points" })
                             SettingsGearButton(onClick = { showSettings = true })
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
@@ -3084,10 +3108,18 @@ fun CrosswordApp() {
                                     ) {
                                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                                         val loadingDots = rememberAnimatedDots()
+                                        // The missing dots are drawn transparent, so the centred
+                                        // title keeps its width instead of jittering as they cycle.
                                         Text(
-                                            "Weaving Words$loadingDots",
+                                            buildAnnotatedString {
+                                                append("Weaving Words$loadingDots")
+                                                withStyle(SpanStyle(color = Color.Transparent)) {
+                                                    append(".".repeat(3 - loadingDots.length))
+                                                }
+                                            },
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp
+                                            fontSize = 16.sp,
+                                            modifier = Modifier.semantics { contentDescription = "Weaving words. Building your puzzle." }
                                         )
                                         Text(
                                             "Building your puzzle",
@@ -3370,7 +3402,7 @@ fun CrosswordApp() {
     if (showOnlineJoin) {
         AlertDialog(
             onDismissRequest = { showOnlineJoin = false; onlineJoinError = ""; onlineRequest++; onlinePending = false },
-            title = { Text("🌐 Join Online Game", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("🌐 Join Online Game", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Enter the 6-letter code from the host:", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -3474,7 +3506,9 @@ fun CrosswordApp() {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    // weight(1f): without it the long subtitle squeezed the Switch to
+                    // nothing on narrow screens or with large text.
+                    Column(Modifier.weight(1f)) {
                         Text("Sound Effects", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                         Text(
                             if (soundEnabled) "Plays taps, correct, wrong, and celebration cues"
@@ -3531,9 +3565,9 @@ fun CrosswordApp() {
                         .align(Alignment.TopCenter))
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                         Text(
-                            "♪  ${AmbientMusicPlayer.currentTrackName.ifEmpty { "No track" }.take(36)}",
+                            "♪  ${AmbientMusicPlayer.currentTrackName.ifEmpty { "No track" }}",
                             fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                            color = settingsTrackColor, maxLines = 1,
+                            color = settingsTrackColor, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
                         )
                         Row(
@@ -3662,7 +3696,7 @@ fun CrosswordApp() {
                                 )
                                 Column {
                                     Text("Button Color", fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                                    Text("Change the color of category buttons",
+                                    Text("Buttons, header and highlights",
                                         fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
@@ -3846,7 +3880,7 @@ fun CrosswordApp() {
     if (showHowToPlay) {
         AlertDialog(
             onDismissRequest = { showHowToPlay = false },
-            title = { Text("Welcome to My Personal Crossword! 🧩", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+            title = { Text("Welcome to My Personal Crossword! 🧩", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -3882,7 +3916,7 @@ fun CrosswordApp() {
     if (showVindictiveTutorial) {
         AlertDialog(
             onDismissRequest = { showVindictiveTutorial = false },
-            title = { Text("⚔️ How Vindictive Mode Works", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+            title = { Text("⚔️ How Vindictive Mode Works", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -3921,7 +3955,7 @@ fun CrosswordApp() {
     if (showSingleTutorial) {
         AlertDialog(
             onDismissRequest = { showSingleTutorial = false },
-            title = { Text("👤 Single Player Mode", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+            title = { Text("👤 Single Player Mode", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -3961,7 +3995,7 @@ fun CrosswordApp() {
     if (showTeamTutorial) {
         AlertDialog(
             onDismissRequest = { showTeamTutorial = false },
-            title = { Text("🤝 How Team Mode Works", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+            title = { Text("🤝 How Team Mode Works", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -3971,7 +4005,7 @@ fun CrosswordApp() {
                         "🤝 Goal"        to "Both players work together to solve the same puzzle.",
                         "🔄 Take turns"  to "Fill in one word per turn — right or wrong, then pass the phone.",
                         "✅ Correct"     to "+1 answer credit for that player. Both earn full points at puzzle end.",
-                        "💡 Hints"       to "Either player can use hints. Each costs 1 point from the final score.",
+                        "💡 Hints"       to "Either player can use hints. Each costs the player using it 1 point, straight away.",
                         "🏆 Win"         to "Puzzle complete when all words are solved — both players share the reward!"
                     ).forEach { (title, desc) ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -3998,13 +4032,13 @@ fun CrosswordApp() {
     if (showDailyPrompt) {
         AlertDialog(
             onDismissRequest = { showDailyPrompt = false },
-            title = { Text("📅 Daily Puzzle Available!", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("📅 Daily Puzzle Available!", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("A new crossword is generated every day using all categories — 20 words, 20 points!")
                     Spacer(Modifier.height(2.dp))
                     Text("Want to jump straight into today's puzzle?", fontWeight = FontWeight.Medium)
-                    Text("(You can also find it as the yellow Daily button in the category list.)",
+                    Text("(It's also the Daily card at the top of the home screen.)",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
@@ -4026,7 +4060,7 @@ fun CrosswordApp() {
     if (showDailyInstructions) {
         AlertDialog(
             onDismissRequest = { showDailyInstructions = false },
-            title = { Text("📅 Daily Puzzle", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("📅 Daily Puzzle", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -4035,8 +4069,8 @@ fun CrosswordApp() {
                     listOf(
                         "📅 Fresh daily"   to "A brand-new puzzle every day — everyone gets the same one.",
                         "🗂 All categories" to "Words drawn from every category in your list.",
-                        "⭐ 20 words"       to "Expert-level grid worth 20 points.",
-                        "🏆 Score"          to "Hints reduce your final score — try to go hint-free!"
+                        "⭐ 20 words"       to "A big 20-word grid worth 20 points.",
+                        "🏆 Score"          to "Each hint costs 1 point when you use it — try to go hint-free!"
                     ).forEach { (title, desc) ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp,
@@ -4067,7 +4101,7 @@ fun CrosswordApp() {
             // Hand-offs need an explicit "I'm Ready": a stray tap outside (or Back)
             // would otherwise start the next player's clock before they have the phone.
             onDismissRequest = { },
-            title = { Text(turnDialogTitle, fontWeight = FontWeight.Bold, fontSize = 20.sp,
+            title = { Text(turnDialogTitle, style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
             text = {
                 Column(
@@ -4101,7 +4135,7 @@ fun CrosswordApp() {
         val modeLabel = if (activeGameMode == GameMode.TEAM) "🤝 Team Mode Setup" else "⚔️ Vindictive Mode Setup"
         AlertDialog(
             onDismissRequest = { showPlayer2SetupDialog = false },
-            title = { Text(modeLabel, fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text(modeLabel, style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -4172,13 +4206,15 @@ fun CrosswordApp() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { whoIsP1 = idx }
+                                // One focus stop per option for screen readers (the row
+                                // and its RadioButton used to be two).
+                                .selectable(selected = whoIsP1 == idx, role = Role.RadioButton) { whoIsP1 = idx }
                                 .background(if (whoIsP1 == idx) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            RadioButton(selected = whoIsP1 == idx, onClick = { whoIsP1 = idx })
+                            RadioButton(selected = whoIsP1 == idx, onClick = null)
                             Text(name, fontSize = 15.sp,
                                 color = if (whoIsP1 == idx) MaterialTheme.colorScheme.primary else Color.Unspecified)
                         }
@@ -4214,7 +4250,7 @@ fun CrosswordApp() {
     if (showVindTimerDialog) {
         AlertDialog(
             onDismissRequest = { showVindTimerDialog = false },
-            title = { Text("⏱ Answer Time Limit", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("⏱ Answer Time Limit", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -4268,7 +4304,7 @@ fun CrosswordApp() {
     if (showVindCategoryDialog) {
         AlertDialog(
             onDismissRequest = { showVindCategoryDialog = false },
-            title = { Text("Choose Category", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("Choose Category", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Combine button — opens a multi-select dialog rather than
@@ -4306,7 +4342,7 @@ fun CrosswordApp() {
     if (showMultiCategoryDialog) {
         AlertDialog(
             onDismissRequest = { showMultiCategoryDialog = false },
-            title = { Text("🔀 Combine Categories", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("🔀 Combine Categories", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
@@ -4380,7 +4416,7 @@ fun CrosswordApp() {
     if (showCombineDiffDialog) {
         AlertDialog(
             onDismissRequest = { showCombineDiffDialog = false },
-            title = { Text("Choose Difficulty", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("Choose Difficulty", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -4460,7 +4496,7 @@ fun CrosswordApp() {
     if (showNoPlayer2Dialog) {
         AlertDialog(
             onDismissRequest = { showNoPlayer2Dialog = false },
-            title = { Text("Player 2 Name Required", fontWeight = FontWeight.Bold) },
+            title = { Text("Player 2 Name Required", style = MaterialTheme.typography.headlineSmall) },
             text  = { Text("Please set up Player 2 before starting.") },
             confirmButton = {
                 GradientBtn("Set Up Player 2", appBtnGradient, onClick = {
@@ -4480,7 +4516,7 @@ fun CrosswordApp() {
     confirmDeletePlayer?.let { nameToDelete ->
         AlertDialog(
             onDismissRequest = { confirmDeletePlayer = null },
-            title = { Text("Delete Profile?", fontWeight = FontWeight.Bold) },
+            title = { Text("Delete Profile?", style = MaterialTheme.typography.headlineSmall) },
             text  = { Text("Are you sure you want to delete \"$nameToDelete\"? This cannot be undone.") },
             confirmButton = {
                 GradientBtn("Delete", redGradient, onClick = {
@@ -4505,7 +4541,7 @@ fun CrosswordApp() {
     difficultyPickCategory?.let { cat ->
         AlertDialog(
             onDismissRequest = { difficultyPickCategory = null },
-            title = { Text("Choose Difficulty", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            title = { Text("Choose Difficulty", style = MaterialTheme.typography.headlineSmall) },
             text = {
                 Column(
                     modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -4588,7 +4624,7 @@ fun CrosswordApp() {
     resumePrompt?.let { slot ->
         AlertDialog(
             onDismissRequest = { resumePrompt = null },
-            title = { Text("Resume Puzzle?", fontWeight = FontWeight.Bold) },
+            title = { Text("Resume Puzzle?", style = MaterialTheme.typography.headlineSmall) },
             text  = { Text("You have an unfinished ${slotTitle(slot)} puzzle. Resume where you left off, or start a new one?") },
             confirmButton = {
                 GradientBtn("▶ Resume", appBtnGradient, onClick = {
@@ -4610,6 +4646,9 @@ fun CrosswordApp() {
     }
 
     if (showBgPicker) {
+        // A full-screen overlay, not a dialog: Back must close it, not leave the
+        // puzzle underneath (or close the app from home).
+        BackHandler { showBgPicker = false }
         BgPickerScreen(
             bgImagePool     = bgImagePool,
             currentBgImage  = currentBgImageName,
@@ -4711,9 +4750,10 @@ fun CrosswordApp() {
         }
         AlertDialog(
             onDismissRequest = { },
-            title = { Text(title, style = MaterialTheme.typography.headlineMedium) },
+            title = { Text(title, style = MaterialTheme.typography.headlineSmall) },
             text  = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Scrolls on short screens / large text instead of silently cutting lines.
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     @Composable
                     fun Line(label: String, value: String, strong: Boolean = false) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -4745,7 +4785,7 @@ fun CrosswordApp() {
                                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                             }
                             Line("Completion reward", "+${result.reward}")
-                            if (result.hints > 0) Line("Hints (charged when used)", "−${result.hints}")
+                            if (result.hints > 0) Line("Hints used", "−${result.hints}")
                             Line("Net for this puzzle", "+${result.net}", strong = true)
                             if (result.dailyAlreadyPaid)
                                 Text("Today's Daily was already counted — no extra points this time.",
@@ -4801,7 +4841,7 @@ fun CrosswordApp() {
     onlineNotice?.let { msg ->
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("🌐 Online play", fontWeight = FontWeight.Bold) },
+            title = { Text("🌐 Online play", style = MaterialTheme.typography.headlineSmall) },
             text  = { Text(msg) },
             confirmButton = {
                 GradientBtn("OK", appBtnGradient, onClick = {
@@ -4814,7 +4854,7 @@ fun CrosswordApp() {
     dailyInfoMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { dailyInfoMessage = null },
-            title = { Text("📅 Daily Puzzle", fontWeight = FontWeight.Bold) },
+            title = { Text("📅 Daily Puzzle", style = MaterialTheme.typography.headlineSmall) },
             text  = { Text(msg) },
             confirmButton = {
                 GradientBtn("OK", appBtnGradient, onClick = { dailyInfoMessage = null }, modifier = Modifier.fillMaxWidth())
@@ -4881,7 +4921,7 @@ fun CategoryScreen(
     btnColorArgb:           Int = 0xFF6650A4.toInt()
 ) {
     val context  = LocalContext.current
-    val btnColor    = Color(btnColorArgb.toLong() and 0xFFFFFFFFL)
+    val btnColor    = Color(readableUnderWhiteText(btnColorArgb))   // white text on it stays readable
     val btnColorDim = btnColor.copy(
         red   = (btnColor.red   * 0.75f).coerceIn(0f, 1f),
         green = (btnColor.green * 0.75f).coerceIn(0f, 1f),
@@ -4912,14 +4952,25 @@ fun CategoryScreen(
                 .background(btnColor)
         )
 
-        Column(
-            modifier = Modifier
+        // Scrolls when the content is taller than the screen (small phones, large
+        // text, a Continue card) instead of squeezing the carousel off the bottom.
+        // heightIn(min = viewport) keeps the weighted spacers centring it otherwise.
+        BoxWithConstraints(
+            Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .padding(bottom = bottomBarHeight)
+        ) {
+        val viewportHeight = maxHeight
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = viewportHeight)
                 .padding(
                     start = 16.dp, end = 16.dp,
                     top = 8.dp,
-                    bottom = bottomBarHeight + 16.dp
+                    bottom = 16.dp
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -4945,7 +4996,8 @@ fun CategoryScreen(
                             fontSize   = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color      = Color.White,
-                            maxLines   = 1
+                            maxLines   = 1,
+                            overflow   = TextOverflow.Ellipsis
                         )
                         Spacer(Modifier.height(4.dp))
                         Row(
@@ -4965,7 +5017,7 @@ fun CategoryScreen(
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = onChangeUser) {
-                            Text("Logout", fontSize = 14.sp, color = Color.White)
+                            Text("Log out", fontSize = 14.sp, color = Color.White)
                         }
                         SettingsGearButton(onClick = onOpenSettings)
                         IconButton(onClick = onQuit) {
@@ -5028,7 +5080,7 @@ fun CategoryScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(68.dp)
+                        .heightIn(min = 68.dp)
                         .shadow(elevation = 4.dp, shape = RoundedCornerShape(12.dp))
                         .clip(RoundedCornerShape(12.dp))
                         .background(dailyGradient)
@@ -5088,13 +5140,15 @@ fun CategoryScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { onGameModeChange(mode) }
+                                .selectable(selected = activeGameMode == mode, role = Role.RadioButton) { onGameModeChange(mode) }
+                                .heightIn(min = 48.dp)
                                 .padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
                                 selected = activeGameMode == mode,
-                                onClick  = { onGameModeChange(mode) },
+                                onClick  = null,
+                                modifier = Modifier.padding(horizontal = 12.dp),
                                 colors   = RadioButtonDefaults.colors(
                                     selectedColor   = Color.White,
                                     unselectedColor = Color.White.copy(alpha = 0.55f)
@@ -5285,6 +5339,7 @@ fun CategoryScreen(
 
             Spacer(Modifier.weight(1f))
         }   // end Column
+        }   // end BoxWithConstraints
 
         // ── ANCHORED BOTTOM BAR ───────────────────────────────────────────────
         Column(
@@ -5314,9 +5369,9 @@ fun CategoryScreen(
                         .align(Alignment.TopCenter))
                     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                         Text(
-                            "♪  ${AmbientMusicPlayer.currentTrackName.ifEmpty { "No track" }.take(36)}",
+                            "♪  ${AmbientMusicPlayer.currentTrackName.ifEmpty { "No track" }}",
                             fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                            color = trackColor, maxLines = 1,
+                            color = trackColor, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
                         )
                         Row(
@@ -5333,7 +5388,7 @@ fun CategoryScreen(
                             ) {
                                 Icon(
                                     imageVector = if (AmbientMusicPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (AmbientMusicPlayer.isPlaying) "Pause" else "Play",
+                                    contentDescription = if (AmbientMusicPlayer.isPlaying) "Pause music" else "Play music",
                                     tint = trackColor
                                 )
                             }
@@ -5988,7 +6043,7 @@ fun BgPickerScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("No images found", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
                         Spacer(Modifier.height(8.dp))
-                        Text("Add WebP images to\nassets/images/drawable-xxhdpi/",
+                        Text("Your puzzles use a plain colour background.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
                             textAlign = TextAlign.Center)
                     }
