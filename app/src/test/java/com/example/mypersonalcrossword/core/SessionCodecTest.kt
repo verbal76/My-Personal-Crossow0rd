@@ -20,9 +20,19 @@ class SessionCodecTest {
             elapsedSeconds = 125, hintsUsed = 2, streak = 3, player2 = "Sam",
             team = TeamState(1, 2, 1, 3, 4),
             vind = VindState(VindicativePhase.OPPONENT_WAIT, 1, -2, 5, 1),
-            vindTimerSecs = 15, bgArgb = 0xFF112233.toInt(), bgImage = "sunset.webp"
+            vindTimerSecs = 15, vindSecondsLeft = 7, bgArgb = 0xFF112233.toInt(), bgImage = "sunset.webp"
         )
         assertEquals(s, SessionCodec.decode(SessionCodec.encode(s)))
+    }
+
+    @Test fun vindictiveClockRemainingIsKeptAndBounded() {
+        val base = PuzzleSession(GameMode.VINDICTIVE, "PETS", Difficulty.EASY, words, vindTimerSecs = 30)
+        assertEquals(null, SessionCodec.decode(SessionCodec.encode(base))!!.vindSecondsLeft)
+        assertEquals(0, SessionCodec.decode(SessionCodec.encode(base.copy(vindSecondsLeft = 0)))!!.vindSecondsLeft)
+        // A tampered value can't exceed the clock or go negative.
+        val raw = SessionCodec.encode(base.copy(vindSecondsLeft = 12))
+        assertEquals(30, SessionCodec.decode(raw.replace("vleft=12", "vleft=999"))!!.vindSecondsLeft)
+        assertEquals(0, SessionCodec.decode(raw.replace("vleft=12", "vleft=-4"))!!.vindSecondsLeft)
     }
 
     @Test fun dailySessionKeepsItsDateAndSlot() {

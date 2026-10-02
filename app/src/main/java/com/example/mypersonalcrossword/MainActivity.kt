@@ -146,6 +146,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -1391,7 +1392,9 @@ fun CrosswordApp() {
     var vindAssignedWord       by vm::vindAssignedWord
     var vindPassDialogVisible   by remember { mutableStateOf(false) }  // pass/answer popup
     var pendingTurnDialog       by remember { mutableStateOf(false) }  // delayed turn dialog after wrong flash
-    var vindOpponentCountdown   by remember { mutableIntStateOf(30) }  // countdown seconds
+    var vindOpponentCountdown   by rememberSaveable { mutableIntStateOf(30) }  // countdown seconds
+    // Where the answer clock resumes from after a reload (null = a full clock).
+    var vindResumeSeconds       by rememberSaveable { mutableStateOf<Int?>(null) }
     var vindTimerSeconds        by vm::vindTimerSeconds  // selected timer (15/30/60)
     var showVindTimerDialog     by remember { mutableStateOf(false) }  // timer selection popup
     var showVindCategoryDialog  by remember { mutableStateOf(false) }  // category selection after p2 setup
@@ -1513,6 +1516,9 @@ fun CrosswordApp() {
             team           = teamSnapshot(),
             vind           = vindSnapshot(),
             vindTimerSecs  = vindTimerSeconds,
+            // Mid-clue (the answerer already had the phone): keep the clock where it was.
+            vindSecondsLeft = if (activeGameMode == GameMode.VINDICTIVE && vindPhase == VindicativePhase.OPPONENT_WAIT &&
+                                  vindAssignedWord != null && !showTurnDialog) vindOpponentCountdown else null,
             bgArgb         = currentBgColor.toArgb(),
             bgImage        = currentBgImageName
         )
@@ -1583,6 +1589,7 @@ fun CrosswordApp() {
         applyTeam(s.team)
         applyVind(s.vind)
         vindTimerSeconds   = s.vindTimerSecs
+        vindResumeSeconds  = s.vindSecondsLeft
         currentBgColor     = Color(s.bgArgb)
         currentBgImageName = s.bgImage
         resetOverlays()
@@ -2568,6 +2575,7 @@ fun CrosswordApp() {
                         onValueChange = { playerName = sanitizeName(it) },
                         label = { Text("Enter Your Name") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor   = MaterialTheme.colorScheme.primary,
@@ -4255,6 +4263,7 @@ fun CrosswordApp() {
                         onValueChange = { p2NameInput = sanitizeName(it) },
                         label = { Text("Other Player's Name") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Text("Who goes first?", fontWeight = FontWeight.Medium, fontSize = 14.sp)
@@ -4782,7 +4791,10 @@ fun CrosswordApp() {
         if (showTurnDialog || vindAssignedWord == null) return@LaunchedEffect
         if (!VindictiveRules.ownsTimer(vindSnapshot(), isOnlineGame, myIndex())) return@LaunchedEffect
         vindPassDialogVisible = false
-        for (i in vindTimerSeconds downTo 1) {
+        val startFrom = vindResumeSeconds ?: vindTimerSeconds
+        vindResumeSeconds = null
+        if (startFrom <= 0) { onVindTimeout(); return@LaunchedEffect }
+        for (i in startFrom downTo 1) {
             vindOpponentCountdown = i
             if (isOnlineGame) FirebaseGameManager.writeState(onlineCode, mapOf("vindCountdown" to i))
             if (i <= 5 && soundEnabled) SoundPlayer.playTick()
@@ -5886,6 +5898,20 @@ private val BUTTON_COLOR_PRESETS = listOf(
     0xFF37474F.toInt()  // Gunmetal
 )
 
+
+/** Spoken name for a colour swatch, e.g. "light blue" (screen readers had nothing). */
+fun colourDescription(argb: Int): String {
+    val hsv = colorToHsv(Color(argb.toLong() and 0xFFFFFFFFL))
+    val (h, sat, v) = Triple(hsv[0], hsv[1], hsv[2])
+    if (v < 0.15f) return "black"
+    if (sat < 0.12f) return if (v > 0.9f) "white" else if (v > 0.55f) "light grey" else "dark grey"
+    val hue = when {
+        h < 15 || h >= 345 -> "red";  h < 40 -> "orange"; h < 65 -> "yellow"; h < 160 -> "green"
+        h < 200 -> "teal";            h < 255 -> "blue";   h < 290 -> "purple"; else -> "pink"
+    }
+    return when { v < 0.45f -> "dark $hue"; sat < 0.45f && v > 0.8f -> "light $hue"; else -> hue }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ColorPickerSheet(
@@ -5935,7 +5961,7 @@ fun ColorPickerSheet(
                         val isSelected  = argb == pickedColor.toArgb()
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
                                 .background(swatchColor)
                                 .border(
@@ -5943,7 +5969,8 @@ fun ColorPickerSheet(
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
                                     shape = CircleShape
                                 )
-                                .clickable {
+                                .semantics { contentDescription = colourDescription(argb); selected = isSelected }
+                                .clickable(role = Role.RadioButton) {
                                     val hsv = colorToHsv(swatchColor)
                                     hue = hsv[0]
                                     sat = if (hsv[1] < 0.01f) 0f else hsv[1]
@@ -5974,7 +6001,7 @@ fun ColorPickerSheet(
                         val isSelected  = argb == pickedColor.toArgb()
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
                                 .background(swatchColor)
                                 .border(
@@ -5982,7 +6009,8 @@ fun ColorPickerSheet(
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
                                     shape = CircleShape
                                 )
-                                .clickable {
+                                .semantics { contentDescription = colourDescription(argb); selected = isSelected }
+                                .clickable(role = Role.RadioButton) {
                                     val hsv = colorToHsv(swatchColor)
                                     hue = hsv[0]; sat = hsv[1].coerceAtLeast(0.01f)
                                     brt = hsv[2].coerceAtLeast(0.3f)

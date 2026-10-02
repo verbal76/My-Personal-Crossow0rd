@@ -82,6 +82,9 @@ data class PuzzleSession(
     val team:           TeamState           = TeamState(),
     val vind:           VindState           = VindState(),
     val vindTimerSecs:  Int                 = 30,
+    // Seconds left on the answer clock when saved mid-clue; null = a fresh clock.
+    // Without it, quitting and resuming handed the answerer a full timer again.
+    val vindSecondsLeft: Int?               = null,
     val bgArgb:         Int                 = 0xFFC0C0C0.toInt(),
     val bgImage:        String              = ""
 ) {
@@ -175,6 +178,7 @@ object SessionCodec {
             "vphase" to s.vind.phase.name, "vcur" to s.vind.currentPlayer.toString(),
             "v1" to s.vind.p1Score.toString(), "v2" to s.vind.p2Score.toString(),
             "vidx" to s.vind.assignedIndex.toString(), "vtimer" to s.vindTimerSecs.toString(),
+            "vleft" to (s.vindSecondsLeft?.toString() ?: ""),
             "bg" to s.bgArgb.toString(), "bgimg" to s.bgImage
         )
         return buildString {
@@ -229,6 +233,7 @@ object SessionCodec {
                                  p2Score       = int("v2", 0),
                                  assignedIndex = vidx),
             vindTimerSecs  = int("vtimer", 30).takeIf { it in VIND_TIMER_CHOICES } ?: 30,
+            vindSecondsLeft = meta["vleft"]?.toIntOrNull()?.coerceIn(0, int("vtimer", 30).takeIf { it in VIND_TIMER_CHOICES } ?: 30),
             bgArgb         = int("bg", 0xFFC0C0C0.toInt()),
             bgImage        = meta["bgimg"].orEmpty()
         )
