@@ -5,7 +5,13 @@
 The app is offline-first. The only networked feature is two-device
 **online Team and Vindictive play** over Firebase Realtime Database, with
 anonymous Firebase Auth. There are no accounts, no payments and no personal
-data beyond the display names players type in.
+data beyond the display names players type in. The app includes no analytics
+or advertising SDKs (Firebase Analytics was removed), so nothing is sent on
+launch.
+
+Android backup and device transfer copy only the game's own preferences file
+(`CrosswordSaves`). Firebase sign-in state is never restored onto another
+phone.
 
 ## The Firebase API key
 
@@ -16,11 +22,20 @@ anyone can extract them. What keeps the data safe is:
 1. **Realtime Database security rules**, in `firebase/database.rules.json`.
    These are deployed from the console; see `docs/EXTERNAL_ACTIONS.md` §1.
 2. **API key restrictions** to the app's package and signing SHA-1
-   (§3 of the same file).
-3. Optionally, **App Check** (§4).
+   (§4 of the same file). These only bind the key to *this* app once it is
+   signed with a private release key (§3).
+3. Optionally, **App Check** (§5), once the app is on Play.
 
 Until the rules in §1 are deployed, assume any signed-in client can read and
 write any game node.
+
+## Signing
+
+Every APK built so far is a debug build signed with the committed
+`debug.keystore`, so its signature proves nothing about who built it. The
+build signs release APKs with a private key supplied through CI secrets
+(`docs/EXTERNAL_ACTIONS.md` §3); that key doesn't exist yet. The key and its
+passwords must never be committed.
 
 ## Online play: what the client enforces
 

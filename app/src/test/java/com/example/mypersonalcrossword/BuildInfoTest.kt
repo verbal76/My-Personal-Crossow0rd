@@ -1,5 +1,6 @@
 package com.hag.mypersonalcrossword
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -15,6 +16,16 @@ class BuildInfoTest {
 
     @Test fun buildNumberComesFromHistory() {
         assertTrue("VERSION_CODE was ${BuildConfig.VERSION_CODE}", BuildConfig.VERSION_CODE > 1)
+    }
+
+    /** CI numbers builds 1000 + run number so every branch's APK upgrades the last one. */
+    @Test fun ciBuildNumberIsMonotonicAcrossBranches() {
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: return
+        assertEquals(1000 + run, BuildConfig.VERSION_CODE)
+    }
+
+    @Test fun versionNameCarriesTheBuildNumber() {
+        assertEquals("1.0.${BuildConfig.VERSION_CODE}", BuildConfig.VERSION_NAME)
     }
 
     @Test fun buildTimeIsRecorded() {

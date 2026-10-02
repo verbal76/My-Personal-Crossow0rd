@@ -1,19 +1,19 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Backup and device-transfer rules for Android 12+ (API 31+). Older versions
+   read backup_rules.xml; keep the two files in step.
+
+   Only the game's own SharedPreferences file (profiles, saves, stats,
+   settings) is copied. Everything else, including Firebase Auth and
+   Installations state, stays on the device: an anonymous sign-in must never
+   be restored onto, or cloned to, another phone.
+   See https://developer.android.com/about/versions/12/backup-restore
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <include domain="sharedpref" path="CrosswordSaves.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <include domain="sharedpref" path="CrosswordSaves.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

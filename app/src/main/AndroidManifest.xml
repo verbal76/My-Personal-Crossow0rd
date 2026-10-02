@@ -15,12 +15,19 @@
         android:theme="@style/Theme.MyPersonalCrossword">
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden|navigation|smallestScreenSize|uiMode|density|fontScale|locale|layoutDirection|fontWeightAdjustment|colorMode"
             android:screenOrientation="portrait"
             android:resizeableActivity="false"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.MyPersonalCrossword">
+            <!-- Android 16 (targetSdk 36) ignores screenOrientation and
+                 resizeableActivity on displays of 600dp or wider. The game is
+                 designed portrait-only, so opt out while that is still allowed.
+                 This temporary opt-out stops working at targetSdk 37. -->
+            <property
+                android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+                android:value="true" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

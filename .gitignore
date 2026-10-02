@@ -12,9 +12,14 @@
 local.properties
 .claude/
 
-# Firebase config — contains an API key. The committed copy was leaked at
-# initial commit; mitigation requires rotating the key in Firebase Console
-# (see SECURITY.md). This entry stops *future* updates to the file from
-# being tracked.
+# Firebase config. Its Android API key is an identifier, not a secret: it ships
+# inside every APK, and the database rules and key restrictions are what protect
+# the data (see SECURITY.md and docs/EXTERNAL_ACTIONS.md). The committed copy is
+# deliberately still tracked so CI can build (ignore rules don't affect tracked
+# files); this entry keeps stray copies elsewhere out of git.
 app/google-services.json
 google-services.json
+
+# Release signing keys never belong in git (CI decodes one from a secret).
+*.jks
+release.keystore
