@@ -1,6 +1,8 @@
 package com.hag.mypersonalcrossword
 
 import android.app.Activity
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -5072,6 +5074,17 @@ fun CategoryScreen(
     )
     val categoryCounts = remember(allEntries) {
         allEntries.groupBy { it.category }.mapValues { it.value.size }
+    }
+
+    // Home paints the status bar with the (always dark, see readableUnderWhiteText)
+    // button colour, so its icons must be light even in light mode; restored on leave.
+    val hostView = LocalView.current
+    DisposableEffect(hostView) {
+        val window = (hostView.context as? Activity)?.window
+        val bars = window?.let { WindowCompat.getInsetsController(it, hostView) }
+        val wasLight = bars?.isAppearanceLightStatusBars
+        bars?.isAppearanceLightStatusBars = false
+        onDispose { if (bars != null && wasLight != null) bars.isAppearanceLightStatusBars = wasLight }
     }
 
     // Anchored bottom bar height — accounts for music card + system nav bar inset.

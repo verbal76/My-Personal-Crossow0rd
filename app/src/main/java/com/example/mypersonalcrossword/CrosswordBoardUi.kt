@@ -348,9 +348,13 @@ fun ClueBar(
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(word.clue, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (word.word.length <= 16)
+                if (word.word.length <= 16) {
+                    val filled = word.word.indices.count { inputs[word.cellAt(it)] != null }
+                    // Screen readers read "underscore underscore A…"; give them the count.
                     Text(pattern, style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
+                        modifier = Modifier.semantics { contentDescription = "$filled of ${word.word.length} letters filled" })
+                }
             }
         }
         trailing?.invoke()
