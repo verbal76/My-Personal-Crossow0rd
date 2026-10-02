@@ -13,9 +13,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew clean
 ```
 
-**Build configuration:** Gradle 9.3.1, AGP 9.1.1, Kotlin 2.2.10, compileSdk 36.1 / targetSdk 36, minSdk 24, Java 11 bytecode (build runs on JDK 17+), Compose BOM 2026.02.01, lifecycle-viewmodel-compose 2.8.7, Firebase BoM 34.12.0 (Auth, Realtime Database, Analytics).
+**Build configuration:** Gradle 9.3.1, AGP 9.1.1, Kotlin 2.2.10, compileSdk 36.1 / targetSdk 36, minSdk 24, Java 11 bytecode (build runs on JDK 17+), Compose BOM 2026.02.01, lifecycle 2.9.4 (runtime + viewmodel-compose), activity-compose 1.11.0, core-ktx 1.17.0, Firebase BoM 34.12.0 (Auth, Realtime Database only; no analytics or ads SDKs).
 
-**CI** (`.github/workflows/build.yml`) runs on every push to `main` and `claude/**` and on PRs: unit tests → `assembleDebug` (APK renamed `MyPersonalCrossword-<commit>-debug.apk`, uploaded as the `app-debug-apk-<commit>` artifact, SHA-256 printed in the log) → `lintDebug`. The build carries its commit, build number (commit count; needs the full-history checkout) and build time as `BuildConfig` fields, shown in Settings → About → Build details. The test and lint reports are uploaded as the `reports` artifact.
+**CI** (`.github/workflows/build.yml`) runs on every push to `main` and `claude/**` and on PRs: unit tests → `assembleDebug` (APK renamed `MyPersonalCrossword-<commit>-debug.apk`, uploaded as the `app-debug-apk-<commit>` artifact, SHA-256 printed in the log) → `lintDebug`. The build carries its commit, build number and build time as `BuildConfig` fields, shown in Settings → About → Build details. In CI `versionCode` is `1000 + GITHUB_RUN_NUMBER` (monotonic across branches, so every APK installs over the last; local builds fall back to the commit count) and `versionName` is `1.0.<versionCode>`. When the `RELEASE_KEYSTORE_BASE64` secret exists, CI also builds a signed release APK (`app-release-apk-<commit>`); see `docs/EXTERNAL_ACTIONS.md`. The test and lint reports are uploaded as the `reports` artifact.
 
 **Cloud sessions:** Claude Code on the web may block `dl.google.com`, which serves the Android SDK, AGP and AndroidX. In that case the Android build only runs in CI. The pure-Kotlin `core` package and its tests can still be compiled locally with a plain JVM Kotlin Gradle project whose source sets point at `app/src/main/java/.../core` and `app/src/test/java/.../core`. Pass system property `crossword.assets=<repo>/app/src/main/assets` so the tests can find `test.csv`.
 
@@ -125,7 +125,9 @@ Easy/Medium/Hard/Expert/Genius pay 1/2/4/8/20. The Daily pays 20, once per day. 
 - **Settings gear:** `res/drawable-nodpi/ic_settings_gear.png` (144×144, transparent), drawn by `SettingsGearButton` at 24 dp in a 48 dp touch target and never tinted. Use it for every Settings entry point (home header, puzzle top bar).
 
 ## Important constraints
-- Release builds are **not minified** (`isMinifyEnabled = false`). Asset loading and Firebase would need keep rules before enabling R8.
+- Release builds are **not minified** (`isMinifyEnabled = false`). Asset loading and Firebase would need keep rules before enabling R8. Release signing reads `RELEASE_KEYSTORE_PATH`/`_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` and is skipped when any is missing.
+- Backup (`res/xml/*_rules.xml`) includes only `CrosswordSaves.xml`; Firebase auth state never leaves the device.
+- **Portrait-only** relies on `PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY` on large screens under targetSdk 36. It stops working at targetSdk 37, so landscape/large-screen layouts are needed before that bump.
 - **Portrait-only.** The runtime orientation lock carries `@Suppress("SourceLockedOrientationActivity")`.
 - `@SuppressLint("StaticFieldLeak")` for `AmbientMusicPlayer` goes on the **object**, with the short-form import.
 - When a fully-qualified name is used inline, remove the matching unused import (and vice versa) to keep lint clean.
