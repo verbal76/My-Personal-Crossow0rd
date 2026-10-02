@@ -34,7 +34,9 @@ object Economy {
 
     /**
      * Net value of a finished puzzle as shown on the results card and stored in
-     * the best-record stat: reward minus hints, never negative.
+     * the best-record stat: reward minus hints, floored at 0. It differs from the
+     * real lifetime change ([lifetimeDelta]) only when hints cost more than the
+     * reward (e.g. 4 hints on Easy: shows 0, lifetime moved by −3).
      */
     fun netPoints(diff: Difficulty, isDaily: Boolean, hintsUsed: Int): Int =
         (completionPoints(diff, isDaily) - hintsUsed * HINT_COST).coerceAtLeast(0)
@@ -42,11 +44,22 @@ object Economy {
     /**
      * Amount added to lifetime score when a puzzle is completed. Hints were
      * already charged at the moment of use, so they are not deducted again —
-     * the lifetime total for the puzzle therefore equals reward − hints, which
-     * is exactly what the results card advertises.
+     * the lifetime total for the puzzle therefore moves by [lifetimeDelta]
+     * (reward − hints, unfloored). That equals [netPoints] whenever the hints
+     * cost no more than the reward; [netPoints] alone is floored at 0.
      */
     fun lifetimeAwardOnWin(diff: Difficulty, isDaily: Boolean): Int =
         completionPoints(diff, isDaily)
+
+    /** Lifetime points charged for [hintsUsed] hints, at the moment each is used. */
+    fun hintCharges(hintsUsed: Int): Int = hintsUsed.coerceAtLeast(0) * HINT_COST
+
+    /**
+     * Total lifetime change for one completed puzzle: the hint charges already
+     * taken plus [lifetimeAwardOnWin]. Can be negative (unlike [netPoints]);
+     * use it wherever the UI claims to show what the puzzle did to the total.
+     */
+    fun lifetimeDelta(reward: Int, hintsUsed: Int): Int = reward - hintCharges(hintsUsed)
 
     /** Vindictive: a player's in-match score banked into lifetime score. */
     fun vindictiveBank(matchScore: Int): Int = matchScore.coerceAtLeast(0)

@@ -58,9 +58,16 @@ data class StatRecord(
 // Forbidden delimiter chars in player / partner names. SaveManager serialises
 // stat and puzzle records with §, |, and ; — letting the user type any of those
 // silently corrupts the next save. Strip them at input time.
+// The length cap counts code points, so an emoji at the boundary is kept or
+// dropped whole — never split into a lone surrogate (which isn't valid UTF-8).
 private val FORBIDDEN_NAME_CHARS = setOf('§', '|', ';', '\n', '\r', '\t')
-fun sanitizeName(s: String): String =
-    s.filter { it !in FORBIDDEN_NAME_CHARS }.take(24)
+const val MAX_NAME_CODE_POINTS = 24
+fun sanitizeName(s: String): String {
+    val filtered = s.filter { it !in FORBIDDEN_NAME_CHARS }
+    val count    = filtered.codePointCount(0, filtered.length)
+    return if (count <= MAX_NAME_CODE_POINTS) filtered
+           else filtered.substring(0, filtered.offsetByCodePoints(0, MAX_NAME_CODE_POINTS))
+}
 
 /** Trimmed, sanitised form used as the persistent profile key. */
 fun normalizeName(s: String): String = sanitizeName(s).trim()

@@ -40,6 +40,25 @@ class InputEngineTest {
         assertEquals(Selection(c(1, 0), Direction.ACROSS), InputEngine.tap(board, down, c(1, 0)))
     }
 
+    @Test fun tapPrefersTheUnsolvedWordAtACrossing() {
+        val catSolved = mapOf(c(0, 0) to 'C', c(1, 0) to 'A', c(2, 0) to 'T')
+        val locked = board.lockedCells(catSolved, emptySet())
+        // (0,0) is in CAT (solved) and COW (open): select COW whatever the current direction.
+        assertEquals(Selection(c(0, 0), Direction.DOWN), InputEngine.tap(board, null, c(0, 0), locked))
+        assertEquals(Selection(c(0, 0), Direction.DOWN),
+            InputEngine.tap(board, Selection(c(1, 0), Direction.ACROSS), c(0, 0), locked))
+        // A repeat tap still flips onto the solved word on request.
+        assertEquals(Selection(c(0, 0), Direction.ACROSS),
+            InputEngine.tap(board, Selection(c(0, 0), Direction.DOWN), c(0, 0), locked))
+        // Both solved, or the preferred one open: the usual rule applies.
+        val bothLocked = locked + setOf(c(0, 1), c(0, 2))
+        assertEquals(Selection(c(0, 0), Direction.ACROSS), InputEngine.tap(board, null, c(0, 0), bothLocked))
+        val cowLocked = setOf(c(0, 0), c(0, 1), c(0, 2))
+        assertEquals(Selection(c(0, 0), Direction.ACROSS), InputEngine.tap(board, null, c(0, 0), cowLocked))
+        // Without locked cells (the default) behaviour is unchanged.
+        assertEquals(Selection(c(0, 0), Direction.ACROSS), InputEngine.tap(board, null, c(0, 0)))
+    }
+
     @Test fun tapOffTheBoardChangesNothing() {
         val s = Selection(c(0, 0), Direction.ACROSS)
         assertEquals(s, InputEngine.tap(board, s, c(1, 1)))
@@ -78,6 +97,27 @@ class InputEngineTest {
         assertEquals('C', r.inputs[c(0, 0)])
         assertEquals('O', r.inputs[c(0, 1)])
         assertEquals(Selection(c(0, 2), Direction.DOWN), r.selection)
+    }
+
+    /** Regression: on a locked cell with only locked cells after it, the letter was dropped. */
+    @Test fun typingOnALockedTailFallsBackToAnEarlierGap() {
+        // C O [W revealed]; cursor on the W, C and O still empty.
+        val inputs = mapOf(c(0, 2) to 'W')
+        val locked = setOf(c(0, 2))
+        val r = InputEngine.type(board, Selection(c(0, 2), Direction.DOWN), inputs, locked, 'C')
+        assertEquals(mapOf(c(0, 2) to 'W', c(0, 0) to 'C'), r.inputs)
+        assertEquals(Selection(c(0, 1), Direction.DOWN), r.selection)
+
+        // Every editable cell already filled: overwrite the first editable cell.
+        val full = mapOf(c(0, 0) to 'X', c(0, 1) to 'O', c(0, 2) to 'W')
+        val r2 = InputEngine.type(board, Selection(c(0, 2), Direction.DOWN), full, locked, 'C')
+        assertEquals('C', r2.inputs[c(0, 0)])
+        assertEquals(listOf(cow), r2.filled)
+
+        // A fully locked word still ignores the key.
+        val all = setOf(c(0, 0), c(0, 1), c(0, 2))
+        val r3 = InputEngine.type(board, Selection(c(0, 2), Direction.DOWN), full, all, 'C')
+        assertEquals(full, r3.inputs)
     }
 
     @Test fun cursorStaysAtTheEndOfAFullWord() {

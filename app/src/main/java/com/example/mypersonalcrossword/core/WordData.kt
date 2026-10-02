@@ -4,9 +4,12 @@ package com.hag.mypersonalcrossword.core
 // WORD DATA — parsing and validation of assets/test.csv
 // ============================================================
 // Format: header row, then `ANSWER,Clue text,CATEGORY` — plain CSV, no quoting.
-// The clue may not contain commas; the answer must be A–Z only. Rows that break
-// any rule are rejected (and reported) instead of silently producing bogus grid
-// cells, bogus categories, or save-file delimiter collisions.
+// The clue may not contain commas or control characters; the answer must be
+// A–Z only. Rows that break any rule are rejected (and reported) instead of
+// silently producing bogus grid cells, bogus categories, or save-file delimiter
+// collisions. Answers and categories are checked BEFORE upper-casing: "ß"
+// upper-cases to "SS", dotless "ı" to "I" and "ﬁ" to "FI", which would
+// otherwise slip in as answers nobody can type from the clue.
 
 const val MIN_ANSWER_LENGTH = 3
 const val MAX_ANSWER_LENGTH = 30
@@ -14,8 +17,9 @@ const val MAX_ANSWER_LENGTH = 30
 /** Characters reserved by SaveManager / Firebase serialisation. */
 val RESERVED_DELIMITERS = setOf('§', '|', ';')
 
-private val ANSWER_RE   = Regex("[A-Z]+")
-private val CATEGORY_RE = Regex("[A-Z]+")
+private val ANSWER_RE   = Regex("[A-Za-z]+")
+private val CATEGORY_RE = Regex("[A-Za-z]+")
+private val CONTROL_RE  = Regex("\\p{Cc}")
 
 data class RejectedRow(val lineNumber: Int, val line: String, val reason: String)
 
@@ -23,9 +27,15 @@ data class WordData(val entries: List<RawEntry>, val rejected: List<RejectedRow>
     val categories: List<String> by lazy { entries.map { it.category }.distinct().sorted() }
 }
 
+/** True for the `Answer,Clue,Category` header row (any case, optional BOM/spaces). */
+fun isWordCsvHeader(line: String): Boolean =
+    line.trimStart('\uFEFF').trimEnd('\r').split(",").map { it.trim().lowercase() } ==
+        listOf("answer", "clue", "category")
+
 /**
- * Parses CSV lines (including the header line). [lines] is consumed lazily so an
- * asset stream can be passed straight through.
+ * Parses CSV lines. Header rows are recognised by content (and skipped wherever
+ * they appear), so a file without one loses no data. [lines] is consumed lazily so an asset stream can
+ * be passed straight through.
  */
 fun parseWordCsv(lines: Sequence<String>): WordData {
     val entries  = mutableListOf<RawEntry>()
@@ -33,27 +43,29 @@ fun parseWordCsv(lines: Sequence<String>): WordData {
     val seen     = HashSet<Triple<String, String, String>>()
 
     lines.forEachIndexed { idx, rawLine ->
-        if (idx == 0) return@forEachIndexed          // header
         val lineNo = idx + 1
-        val line   = rawLine.trimEnd('\r')
-        if (line.isBlank()) return@forEachIndexed
+        val line   = (if (idx == 0) rawLine.trimStart('\uFEFF') else rawLine).trimEnd('\r')
+        if (line.isBlank() || isWordCsvHeader(line)) return@forEachIndexed
 
         val parts = line.split(",")
         if (parts.size != 3) {
             rejected += RejectedRow(lineNo, line, "expected 3 comma-separated fields, found ${parts.size}")
             return@forEachIndexed
         }
-        val answer   = parts[0].trim().uppercase()
-        val clue     = parts[1].trim()
-        val category = parts[2].trim().uppercase()
+        val rawAnswer   = parts[0].trim()
+        val clue        = parts[1].trim()
+        val rawCategory = parts[2].trim()
+        val answer      = rawAnswer.uppercase()
+        val category    = rawCategory.uppercase()
 
         val reason = when {
-            !ANSWER_RE.matches(answer)          -> "answer must be letters A-Z only"
+            !ANSWER_RE.matches(rawAnswer)       -> "answer must be letters A-Z only"
             answer.length < MIN_ANSWER_LENGTH   -> "answer shorter than $MIN_ANSWER_LENGTH letters"
             answer.length > MAX_ANSWER_LENGTH   -> "answer longer than $MAX_ANSWER_LENGTH letters"
             clue.isEmpty()                      -> "empty clue"
             clue.any { it in RESERVED_DELIMITERS } -> "clue contains a reserved delimiter"
-            !CATEGORY_RE.matches(category)      -> "category must be letters A-Z only"
+            CONTROL_RE.containsMatchIn(clue)    -> "clue contains a control character"
+            !CATEGORY_RE.matches(rawCategory)   -> "category must be letters A-Z only"
             else                                -> null
         }
         if (reason != null) {

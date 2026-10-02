@@ -66,21 +66,35 @@ data class InputResult(
 
 object InputEngine {
 
-    /** Select [cell], or flip direction when it is already selected. */
-    fun tap(board: Board, current: Selection?, cell: Cell): Selection? {
+    /**
+     * Select [cell], or flip direction when it is already selected.
+     *
+     * With [locked] supplied, a fresh tap on a cell shared by two words prefers the
+     * word that still has an editable cell: tapping a crossing of a solved word
+     * selects the unsolved one, whatever the current direction. The default (no
+     * locked cells) keeps the plain "keep the current direction" rule. A repeat
+     * tap always flips, so a solved word can still be selected deliberately.
+     */
+    fun tap(board: Board, current: Selection?, cell: Cell, locked: Set<Cell> = emptySet()): Selection? {
         if (!board.contains(cell)) return current
-        val hasAcross = board.wordAt(cell, Direction.ACROSS) != null
-        val hasDown   = board.wordAt(cell, Direction.DOWN) != null
+        val across = board.wordAt(cell, Direction.ACROSS)
+        val down   = board.wordAt(cell, Direction.DOWN)
         if (current?.cell == cell) {
             val flipped = current.direction.other
             return if (board.wordAt(cell, flipped) != null) current.copy(direction = flipped) else current
         }
         val preferred = current?.direction ?: Direction.ACROSS
-        val dir = when {
-            preferred == Direction.ACROSS && hasAcross -> Direction.ACROSS
-            preferred == Direction.DOWN   && hasDown   -> Direction.DOWN
-            hasAcross -> Direction.ACROSS
-            else      -> Direction.DOWN
+        var dir = when {
+            preferred == Direction.ACROSS && across != null -> Direction.ACROSS
+            preferred == Direction.DOWN   && down   != null -> Direction.DOWN
+            across != null -> Direction.ACROSS
+            else           -> Direction.DOWN
+        }
+        if (across != null && down != null) {
+            fun done(w: PlacedWord) = w.cells().all { it in locked }
+            val chosen = if (dir == Direction.ACROSS) across else down
+            val other  = if (dir == Direction.ACROSS) down else across
+            if (done(chosen) && !done(other)) dir = dir.other
         }
         return Selection(cell, dir)
     }
@@ -96,8 +110,9 @@ object InputEngine {
 
     /**
      * Enters [ch] at the cursor. If the cursor sits on a locked cell the letter goes
-     * into the next editable cell of the word instead. Returns the words (active and
-     * crossing) that this keystroke completed.
+     * into the next editable cell of the word instead; if every later cell is locked
+     * too, into the word's first empty editable cell (else its first editable cell).
+     * Returns the words (active and crossing) that this keystroke completed.
      */
     fun type(board: Board, sel: Selection?, inputs: Map<Cell, Char>, locked: Set<Cell>, ch: Char): InputResult {
         val word = board.activeWord(sel) ?: return InputResult(inputs, sel)
@@ -106,7 +121,9 @@ object InputEngine {
         val cells = word.cells()
         val startIdx = cells.indexOf(sel!!.cell).coerceAtLeast(0)
         val targetIdx = (startIdx until cells.size).firstOrNull { cells[it] !in locked }
-            ?: return InputResult(inputs, sel)                // nothing editable from here on
+            ?: cells.indices.firstOrNull { cells[it] !in locked && inputs[cells[it]] == null }
+            ?: cells.indices.firstOrNull { cells[it] !in locked }
+            ?: return InputResult(inputs, sel)                // the whole word is locked
         val target = cells[targetIdx]
         val next = inputs + (target to letter)
 
