@@ -1528,12 +1528,6 @@ fun CrosswordApp() {
         if (activeGameMode == GameMode.DAILY) GameMode.SINGLE else activeGameMode,
         activeCategory, activeDifficulty, combinedCategories, activeDailyKey)
 
-    /** Starts a fresh puzzle for [slot] (a combined slot regenerates from its categories). */
-    fun launchFromSlot(slot: SaveSlot) {
-        val cats = slot.combinedCategories
-        if (cats.isNotEmpty()) launchPuzzle(combinedLabel(cats), slot.difficulty, combined = cats)
-        else launchPuzzle(slot.category, slot.difficulty)
-    }
 
     fun resetOverlays() {
         showConfetti = false; showResults = false; showTurnDialog = false
@@ -1632,6 +1626,13 @@ fun CrosswordApp() {
         }
         generationId++
         isGenerating = true
+    }
+
+    /** Starts a fresh puzzle for [slot] (a combined slot regenerates from its categories). */
+    fun launchFromSlot(slot: SaveSlot) {
+        val cats = slot.combinedCategories
+        if (cats.isNotEmpty()) launchPuzzle(combinedLabel(cats), slot.difficulty, combined = cats)
+        else launchPuzzle(slot.category, slot.difficulty)
     }
 
     fun launchDailyPuzzle() {
@@ -2761,6 +2762,40 @@ fun CrosswordApp() {
             val cachedDailyDone = remember(playerName, currentCompleted, homeRefresh) {
                 saveManager.isDailyCompleted(playerName, DailyPuzzle.dateKey(System.currentTimeMillis()))
             }
+            val startPlay: () -> Unit = {
+                when (activeGameMode) {
+                    GameMode.SINGLE -> {
+                        if (saveManager.isFirstSingle()) {
+                            showSingleTutorial = true
+                            // mark on dismiss, not on show — see tutorial confirm handlers
+                        } else {
+                            showVindCategoryDialog = true
+                        }
+                    }
+                    // TEAM and VINDICTIVE: always re-open the player-2 setup
+                    // dialog. It's the only place to pick Host / Join / Local
+                    // (so we can't skip it just because player2Name happens to
+                    // be set from a prior game), and re-confirming "who goes
+                    // first" is one tap with the name pre-filled.
+                    GameMode.TEAM -> {
+                        if (saveManager.isFirstTeam()) {
+                            showTeamTutorial = true
+                            // mark on dismiss
+                        } else {
+                            showPlayer2SetupDialog = true
+                        }
+                    }
+                    GameMode.VINDICTIVE -> {
+                        if (saveManager.isFirstVindictive()) {
+                            showVindictiveTutorial = true
+                            // mark on dismiss
+                        } else {
+                            showPlayer2SetupDialog = true
+                        }
+                    }
+                    GameMode.DAILY -> launchDailyPuzzle()
+                }
+            }
             CategoryScreen(
                 categories        = categories,
                 playerName        = playerName,
@@ -2789,39 +2824,12 @@ fun CrosswordApp() {
                 inProgressList    = cachedInProgress,
                 onResume          = { slot -> resumeSlot(slot) },
                 dailyDoneToday    = cachedDailyDone,
-                onStartPlay       = {
-                    when (activeGameMode) {
-                        GameMode.SINGLE -> {
-                            if (saveManager.isFirstSingle()) {
-                                showSingleTutorial = true
-                                // mark on dismiss, not on show — see tutorial confirm handlers
-                            } else {
-                                showVindCategoryDialog = true
-                            }
-                        }
-                        // TEAM and VINDICTIVE: always re-open the player-2 setup
-                        // dialog. It's the only place to pick Host / Join / Local
-                        // (so we can't skip it just because player2Name happens to
-                        // be set from a prior game), and re-confirming "who goes
-                        // first" is one tap with the name pre-filled.
-                        GameMode.TEAM -> {
-                            if (saveManager.isFirstTeam()) {
-                                showTeamTutorial = true
-                                // mark on dismiss
-                            } else {
-                                showPlayer2SetupDialog = true
-                            }
-                        }
-                        GameMode.VINDICTIVE -> {
-                            if (saveManager.isFirstVindictive()) {
-                                showVindictiveTutorial = true
-                                // mark on dismiss
-                            } else {
-                                showPlayer2SetupDialog = true
-                            }
-                        }
-                        GameMode.DAILY -> launchDailyPuzzle()
-                    }
+                onStartPlay       = startPlay,
+                // Tapping a category card: solo players go straight to that category's
+                // difficulty; tutorials and two-player setup still go through START's flow.
+                onPickCategory    = { cat ->
+                    if (activeGameMode == GameMode.SINGLE && !saveManager.isFirstSingle()) difficultyPickCategory = cat
+                    else startPlay()
                 },
                 onDailyPuzzle     = { launchDailyPuzzle() },
                 onChangeUser      = {
@@ -2902,11 +2910,11 @@ fun CrosswordApp() {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp)
+                        .padding(20.dp)
                         .shadow(8.dp, RoundedCornerShape(20.dp))
                         .clip(RoundedCornerShape(20.dp))
                         .background(lobbyGradient)
-                        .padding(32.dp),
+                        .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
@@ -2932,23 +2940,43 @@ fun CrosswordApp() {
                         ) {
                             Text(
                                 text = onlineCode,
-                                fontSize = 44.sp,
+                                fontSize = 40.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White,
-                                letterSpacing = 8.sp
+                                letterSpacing = 6.sp,
+                                maxLines = 1, softWrap = false,
+                                // Read letter by letter, not as a made-up word.
+                                modifier = Modifier.semantics { contentDescription = "Game code " + onlineCode.toList().joinToString(" ") }
                             )
                         }
+                        TextButton(onClick = {
+                            vibrateLight(context)
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT,
+                                    "Join my My Personal Crossword game! Tap Join Game and enter code $onlineCode")
+                            }
+                            runCatching { context.startActivity(android.content.Intent.createChooser(send, "Share game code")) }
+                        }) { Text("Share code", color = Color.White, fontWeight = FontWeight.Bold) }
                         Text(
                             if (copied) "✓ Copied to clipboard" else "Tap code to copy",
                             fontSize = 12.sp,
                             color = Color.White.copy(alpha = if (copied) 1f else 0.75f),
                             fontWeight = if (copied) FontWeight.Bold else FontWeight.Normal
                         )
-                        Text(onlineStatus.ifEmpty { "Waiting for opponent to join…" },
-                            fontSize = 13.sp, color = Color.White.copy(alpha = 0.75f))
+                        // Lobbies expire after 15 minutes (the server then refuses joins).
+                        var expired by remember(onlineCode) { mutableStateOf(false) }
+                        LaunchedEffect(onlineCode) { delay(15 * 60_000L); expired = true }
+                        if (!expired) CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
+                        Text(if (expired) "This code has expired. Cancel and host a new game."
+                             else onlineStatus.ifEmpty { "Waiting for opponent to join…" },
+                            fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f), textAlign = TextAlign.Center,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     } else {
                         Text("🌐 Joining Game", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-                        Text(onlineStatus.ifEmpty { "Connecting…" }, fontSize = 14.sp, color = Color.White.copy(alpha = 0.8f))
+                        CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
+                        Text(onlineStatus.ifEmpty { "Connecting…" }, fontSize = 14.sp, color = Color.White.copy(alpha = 0.85f),
+                            textAlign = TextAlign.Center, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     }
                     GradientBtn("Cancel", redGradient, onClick = {
                         vibrateLight(context)
@@ -4657,7 +4685,15 @@ fun CrosswordApp() {
         AlertDialog(
             onDismissRequest = { resumePrompt = null },
             title = { Text("Resume Puzzle?", style = MaterialTheme.typography.headlineSmall) },
-            text  = { Text("You have an unfinished ${slotTitle(slot)} puzzle. Resume where you left off, or start a new one?") },
+            text  = {
+                // Team/Vindictive saves belong to a partner: resuming brings that partner
+                // back, so say who it is (it used to swap them in silently).
+                val partner = if (slot.mode == GameMode.TEAM || slot.mode == GameMode.VINDICTIVE)
+                    remember(slot) { saveManager.loadPuzzle(playerName, slot)?.player2?.takeIf { it.isNotBlank() } } else null
+                Text("You have an unfinished ${slotTitle(slot)} puzzle" +
+                    (partner?.let { " with $it" } ?: "") +
+                    ". Resume where you left off, or start a new one?")
+            },
             confirmButton = {
                 GradientBtn("▶ Resume", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
@@ -4802,8 +4838,14 @@ fun CrosswordApp() {
                             Line(p0, "${result.vind.p1Score} pts", strong = VindictiveRules.winner(result.vind) == 0)
                             Line(p1, "${result.vind.p2Score} pts", strong = VindictiveRules.winner(result.vind) == 1)
                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                            val mine = if (result.myIndex == 0) result.vind.p1Score else result.vind.p2Score
-                            Line("Banked to your score", "+${Economy.vindictiveBank(mine)}")
+                            if (isOnlineGame) {
+                                val mine = if (result.myIndex == 0) result.vind.p1Score else result.vind.p2Score
+                                Line("Banked to your score", "+${Economy.vindictiveBank(mine)}")
+                            } else {
+                                // Same phone: both players were credited, so show both.
+                                Line("$p0 banks", "+${Economy.vindictiveBank(result.vind.p1Score)}")
+                                Line("$p1 banks", "+${Economy.vindictiveBank(result.vind.p2Score)}")
+                            }
                         }
                         else -> {
                             if (result.mode == GameMode.TEAM) {
@@ -4944,6 +4986,7 @@ fun CategoryScreen(
     onChangeUser:           () -> Unit,
     onQuit:                 () -> Unit,
     onOpenSettings:         () -> Unit = {},
+    onPickCategory:         (String) -> Unit = {},
     onRequestPlayer2Setup:  () -> Unit = {},
     musicEnabled:           Boolean = true,
     soundEnabled:           Boolean = true,
@@ -5331,6 +5374,11 @@ fun CategoryScreen(
                                     )),
                                     shape = RoundedCornerShape(14.dp)
                                 )
+                                .clickable(onClickLabel = "Play ${prettyCategory(category)}") {
+                                    vibrateLight(context)
+                                    if (soundEnabled) SoundPlayer.playClick()
+                                    onPickCategory(category)
+                                }
                                 .padding(horizontal = 10.dp, vertical = 10.dp)
                         ) {
                             Column(modifier = Modifier.fillMaxSize()) {
