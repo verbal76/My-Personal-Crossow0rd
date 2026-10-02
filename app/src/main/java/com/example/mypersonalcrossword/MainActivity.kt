@@ -208,12 +208,29 @@ fun prettyCategory(raw: String): String =
         CATEGORY_DISPLAY[part] ?: part.lowercase().replaceFirstChar { it.uppercase() }
     }
 
+/** Short name of a combined puzzle: up to three categories joined, else a count. */
+fun combinedLabel(categories: List<String>): String =
+    if (categories.size <= 3) categories.joinToString("+") else "${categories.size} Categories"
+
+/** "2026-09-27" → "Sep 27" (no java.time: minSdk 24). Falls back to the key. */
+fun prettyDateKey(key: String): String {
+    val parts = key.split('-')
+    val month = parts.getOrNull(1)?.toIntOrNull() ?: return key
+    val day   = parts.getOrNull(2)?.toIntOrNull() ?: return key
+    val names = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    return names.getOrNull(month - 1)?.let { "$it $day" } ?: key
+}
+
 /** Player-facing name of a resumable save. */
-fun slotTitle(slot: SaveSlot): String = when (slot.mode) {
-    GameMode.DAILY      -> "Daily Puzzle (${slot.category})"
-    GameMode.TEAM       -> "🤝 Team · ${prettyCategory(slot.category)} · ${slot.difficulty.label}"
-    GameMode.VINDICTIVE -> "⚔️ Vindictive · ${prettyCategory(slot.category)} · ${slot.difficulty.label}"
-    GameMode.SINGLE     -> "${prettyCategory(slot.category)} · ${slot.difficulty.label}"
+fun slotTitle(slot: SaveSlot): String {
+    // Combined slots are keyed by their full sorted category list; show the short label.
+    val category = prettyCategory(if (slot.isCombined) combinedLabel(slot.combinedCategories) else slot.category)
+    return when (slot.mode) {
+        GameMode.DAILY      -> "Daily Puzzle · ${prettyDateKey(slot.category)}"
+        GameMode.TEAM       -> "🤝 Team · $category · ${slot.difficulty.label}"
+        GameMode.VINDICTIVE -> "⚔️ Vindictive · $category · ${slot.difficulty.label}"
+        GameMode.SINGLE     -> "$category · ${slot.difficulty.label}"
+    }
 }
 
 // ── BUILD INFORMATION ───────────────────────────────────────────────────────────
@@ -438,27 +455,38 @@ class SaveManager(context: Context) {
      */
     fun getInProgressPuzzles(name: String): List<SaveSlot> {
         val slots = getSavedSlotIds(name).mapNotNull { SaveSlot.parse(it) }
-        slots.filter { it.mode == GameMode.SINGLE && it.category == DailyPuzzle.CATEGORY }
+        // Unfinished Dailies from more than a week ago are stale (every day has a new
+        // one) and used to pile up in Continue forever.
+        val today = DailyPuzzle.epochDayOf(DailyPuzzle.dateKey(System.currentTimeMillis())) ?: Long.MAX_VALUE
+        fun staleDaily(slot: SaveSlot) = slot.mode == GameMode.DAILY &&
+            (DailyPuzzle.normalizeKey(slot.category)?.let { DailyPuzzle.epochDayOf(it) }?.let { today - it > 7 } ?: true)
+        slots.filter { (it.mode == GameMode.SINGLE && it.category == DailyPuzzle.CATEGORY) || staleDaily(it) }
             .forEach { clearPuzzle(name, it) }
         fun savedAt(slot: SaveSlot): Long =
             prefs.getLong(sessionTimeKey(name, slot), 0L).takeIf { it > 0 }
                 ?: prefs.getLong("${legacyKey(name, slot.category, slot.difficulty)}_time", 0L)
         return slots
-            .filterNot { it.mode == GameMode.SINGLE && it.category == DailyPuzzle.CATEGORY }
+            .filterNot { (it.mode == GameMode.SINGLE && it.category == DailyPuzzle.CATEGORY) || staleDaily(it) }
             .sortedByDescending { savedAt(it) }
     }
 
     // ── DAILY COMPLETION ──────────────────────────────────────────────────────
     // Set of UTC date keys on which this profile solved the Daily (last 60 kept).
-    fun isDailyCompleted(name: String, dateKey: String): Boolean =
-        (prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet()).contains(dateKey)
+    // Keys are normalised to ASCII yyyy-MM-dd on read and write: builds before the
+    // locale fix stored keys in the device's digits (Arabic, Persian, Bengali…), so
+    // the same day could be paid twice after a language change.
+    fun isDailyCompleted(name: String, dateKey: String): Boolean {
+        val key = DailyPuzzle.normalizeKey(dateKey) ?: dateKey
+        return key in getDailyCompletedKeys(name)
+    }
 
     fun getDailyCompletedKeys(name: String): Set<String> =
-        prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet()
+        (prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet())
+            .mapNotNull { DailyPuzzle.normalizeKey(it) }.toSet()
 
     fun markDailyCompleted(name: String, dateKey: String) {
-        val done = (prefs.getStringSet("dailydone_$name", emptySet()) ?: emptySet())
-            .plus(dateKey).sortedDescending().take(60).toSet()
+        val key  = DailyPuzzle.normalizeKey(dateKey) ?: dateKey
+        val done = getDailyCompletedKeys(name).plus(key).sortedDescending().take(60).toSet()
         prefs.edit { putStringSet("dailydone_$name", done) }
     }
 
@@ -474,32 +502,16 @@ class SaveManager(context: Context) {
 
     fun deletePlayer(name: String) {
         if (name.isBlank()) return
-        val current = (prefs.getStringSet("all_players", emptySet()) ?: emptySet()).toMutableSet()
+        val everyone = prefs.getStringSet("all_players", emptySet()) ?: emptySet()
+        val current = everyone.toMutableSet()
         current.remove(name)
-        // Sweep every per-player prefs key. Without this, recreating a deleted
-        // profile inherited the previous score, completed count, in-progress
-        // saves, used-word lists, and color choices.
-        val allKeys = prefs.all.keys.toList()
+        // Sweep every key this profile owns. Ownership is exact (core PlayerKeys): a
+        // plain prefix match also deleted other profiles whose names start with
+        // "<name>_" (deleting "Kev" wiped "Kev_2").
+        val owned = PlayerKeys.keysOwnedBy(prefs.all.keys, name, everyone)
         prefs.edit {
             putStringSet("all_players", current)
-            for (key in allKeys) {
-                val isPerPlayer = key == "score_$name" ||
-                        key == "completed_$name" ||
-                        key == "cellcolor_$name" ||
-                        key == "btncolor_$name" ||
-                        key == "recentcolors_$name" ||
-                        key == "saves_$name" ||
-                        key == "statkeys_$name" ||
-                        key == "dailydone_$name" ||
-                        key == "paid_$name" ||
-                        key.startsWith("used_${name}_") ||
-                        key.startsWith("puzzle_${name}_") ||
-                        key.startsWith("psession_${name}_") ||
-                        key.startsWith("psession_time_${name}_") ||
-                        key.startsWith("stat_${name}_") ||
-                        key.startsWith("elapsed_${name}_")
-                if (isPerPlayer) remove(key)
-            }
+            owned.forEach { remove(it) }
             if (prefs.getString("last_user", "") == name) putString("last_user", "")
         }
     }
@@ -523,7 +535,14 @@ class SaveManager(context: Context) {
         val id = statIndexId(record)
         val k  = statKey(player, id)
         // Keep the better record: higher score wins; ties broken by fewer hints, then faster time
-        val existing = prefs.getString(k, null)?.let { parseStat(it) }
+        var existing = prefs.getString(k, null)?.let { parseStat(it) }
+        // Older builds stored Team/Vindictive bests under the solo key, where they
+        // could block solo personal bests for good. Move such a record to its own
+        // namespaced key first, then compare against nothing.
+        if (existing != null && existing.gameMode != record.gameMode && statIndexId(existing) != id) {
+            saveStat(player, existing)
+            existing = null
+        }
         if (existing != null) {
             val isImprovement = record.score > existing.score ||
                 (record.score == existing.score && record.hintsUsed < existing.hintsUsed) ||
@@ -1505,9 +1524,16 @@ fun CrosswordApp() {
         currentSession()?.let { saveManager.savePuzzle(playerName, it) }
     }
 
-    fun currentSlot(): SaveSlot =
-        activeDailyKey?.let { SaveSlot.daily(it) }
-            ?: SaveSlot(if (activeGameMode == GameMode.DAILY) GameMode.SINGLE else activeGameMode, activeCategory, activeDifficulty)
+    fun currentSlot(): SaveSlot = SaveSlot.forPuzzle(
+        if (activeGameMode == GameMode.DAILY) GameMode.SINGLE else activeGameMode,
+        activeCategory, activeDifficulty, combinedCategories, activeDailyKey)
+
+    /** Starts a fresh puzzle for [slot] (a combined slot regenerates from its categories). */
+    fun launchFromSlot(slot: SaveSlot) {
+        val cats = slot.combinedCategories
+        if (cats.isNotEmpty()) launchPuzzle(combinedLabel(cats), slot.difficulty, combined = cats)
+        else launchPuzzle(slot.category, slot.difficulty)
+    }
 
     fun resetOverlays() {
         showConfetti = false; showResults = false; showTurnDialog = false
@@ -1585,6 +1611,9 @@ fun CrosswordApp() {
         if (s == null) { saveManager.clearPuzzle(playerName, slot); homeRefresh++; return false }
         if (isOnlineGame) cleanupOnlineSession()
         restoreSession(s)
+        // Older builds keyed combined puzzles by their label; move such a save to its
+        // canonical slot so it can't linger (or be overwritten) under the old one.
+        if (s.slot != slot) { saveManager.savePuzzle(playerName, s); saveManager.clearPuzzle(playerName, slot) }
         return true
     }
 
@@ -1833,7 +1862,7 @@ fun CrosswordApp() {
         selection = if (forced != null) {
             if (cell in forced.cells()) Selection(cell, forced.direction)
             else InputEngine.selectWord(forced, userInputs, lockedNow())
-        } else InputEngine.tap(board, selection, cell)
+        } else InputEngine.tap(board, selection, cell, lockedNow())   // prefers the unsolved word at a crossing
         vibrateLight(context)
     }
 
@@ -4446,8 +4475,7 @@ fun CrosswordApp() {
                                     showCombineDiffDialog = false
                                     val cats = combineSelection
                                     combineSelection = emptyList()
-                                    val label = if (cats.size <= 3) cats.joinToString("+")
-                                    else "${cats.size} Categories"
+                                    val label = combinedLabel(cats)
                                     if (isOnlineGame && onlineRole == OnlineRole.HOST) {
                                         activeCategory     = label
                                         activeDifficulty   = diff
@@ -4457,7 +4485,11 @@ fun CrosswordApp() {
                                         ))
                                         appMode = AppMode.ONLINE_LOBBY
                                     } else {
-                                        launchPuzzle(label, diff, combined = cats)
+                                        // Same resume check as a single category: starting a new
+                                        // combined puzzle used to overwrite an unfinished one.
+                                        val slot = SaveSlot.forPuzzle(activeGameMode, label, diff, cats)
+                                        if (saveManager.hasSave(playerName, slot)) resumePrompt = slot
+                                        else launchPuzzle(label, diff, combined = cats)
                                     }
                                 },
                             contentAlignment = Alignment.Center
@@ -4630,7 +4662,7 @@ fun CrosswordApp() {
                 GradientBtn("▶ Resume", appBtnGradient, onClick = {
                     vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                     resumePrompt = null
-                    if (!resumeSlot(slot)) launchPuzzle(slot.category, slot.difficulty)
+                    if (!resumeSlot(slot)) launchFromSlot(slot)
                 }, modifier = Modifier.fillMaxWidth())
             },
             dismissButton = {
@@ -4639,7 +4671,7 @@ fun CrosswordApp() {
                     resumePrompt = null
                     saveManager.clearPuzzle(playerName, slot)
                     homeRefresh++
-                    launchPuzzle(slot.category, slot.difficulty)
+                    launchFromSlot(slot)
                 }, modifier = Modifier.fillMaxWidth())
             }
         )
@@ -5054,11 +5086,11 @@ fun CategoryScreen(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "▶  Continue ${slotTitle(lastInProgress)}",
+                                "Continue ${slotTitle(lastInProgress)}",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                maxLines = 1
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 "Tap to resume where you left off",

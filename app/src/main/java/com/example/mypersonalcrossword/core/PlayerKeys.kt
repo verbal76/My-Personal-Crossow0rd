@@ -33,7 +33,7 @@ object PlayerKeys {
     /** Keys that are exactly "<prefix><name>". */
     val EXACT_PREFIXES: List<String> = listOf(
         "score_", "completed_", "cellcolor_", "btncolor_", "recentcolors_",
-        "saves_", "statkeys_", "dailydone_"
+        "saves_", "statkeys_", "dailydone_", "paid_"
     )
 
     /** Keys shaped "<prefix><name>_<rest>". */

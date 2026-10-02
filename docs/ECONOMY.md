@@ -54,7 +54,14 @@ the player (tutorials, dialogs, results card).
 | E2 | The Daily pays out **once per UTC day** per profile, tracked by date key. The Daily card shows "Solved today" and a countdown instead of relaunching. | Removes the farm. Points already farmed are kept. |
 | E3 | Online games credit **only the local player** on each device. | Each player earns exactly once, on their own phone. No shadow profiles. |
 | E4 | Timeout now opens the documented **Answer It / Pass (−1)** choice on the answering player's device. | Timeouts cost −1 (pass) or ±1/−2 (answer), as the tutorial describes. |
-| E5 | Team and Vindictive stats are stored under **mode-namespaced keys**. Solo keys are unchanged, so existing solo records remain. | Solo bests can no longer be overwritten by other modes. Legacy mixed records stay readable. |
+| E5 | Team and Vindictive stats are stored under **mode-namespaced keys**. Solo keys are unchanged, so existing solo records remain. A legacy Team/Vindictive best found under a solo key is moved to its namespaced key on the next solo save. | Solo bests can no longer be overwritten or blocked by other modes. Legacy mixed records stay readable. |
+| E6 | In Team and Vindictive, a hint is charged to and gated on **the player whose turn it is** (it was always Player 1). In Vindictive a hint can't fill a word's **last letter**. | Player 1 no longer pays for Player 2's hints, and Vindictive hints can't score an assigned word (+1) for the hinting player. |
+| E7 | **Payout ledger** (`paid_<name>`): each finished board's fingerprint is recorded with the payout; the same board can't pay twice, even when a saved state taken just before the payout is restored. | Closes a narrow repeat-payout window after process death. No effect on normal play. |
+| E8 | Daily date keys are always ASCII and stored keys are normalised. | A device language change can no longer earn a second Daily reward for the same day. |
+
+Note: `netPoints` (results card, stat records) is floored at 0, while the lifetime
+change is `reward − hints` and can be negative (for example Easy with 3 hints:
+card 0, lifetime −2). `Economy.lifetimeDelta` gives the unfloored value.
 
 No reward values, costs, or multipliers were changed. `EconomyTest` pins
 1 / 2 / 4 / 8 / 20, Daily 20, hint 1, and Vindictive +1 / −1 / +1 / −2 / −1.

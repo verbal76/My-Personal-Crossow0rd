@@ -11,7 +11,7 @@ class PlayerKeysTest {
     /** Every key shape SaveManager writes for one profile. */
     private fun keysOf(p: String) = listOf(
         "score_$p", "completed_$p", "cellcolor_$p", "btncolor_$p", "recentcolors_$p",
-        "saves_$p", "statkeys_$p", "dailydone_$p",
+        "saves_$p", "statkeys_$p", "dailydone_$p", "paid_$p",
         "used_${p}_FOOD",
         "puzzle_${p}_FOOD_EASY_words", "puzzle_${p}_FOOD_EASY_bgimg",
         "psession_${p}_FOOD__EASY", "psession_time_${p}_FOOD__EASY",

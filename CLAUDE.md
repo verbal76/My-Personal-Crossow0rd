@@ -30,7 +30,7 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 | `PuzzleViewModel.kt` | Owns all puzzle state and mirrors it into `SavedStateHandle`. |
 | `CrosswordBoardUi.kt` | `CrosswordGrid` (Canvas), `ClueBar`, `CrosswordKeyboard`. |
 | `ui/theme/` | Material 3 colour scheme, typography ramp, theme. |
-| `app/src/test/.../core/` | JVM unit tests (~90). |
+| `app/src/test/.../core/` | JVM unit tests (~140), including a golden Daily snapshot. |
 | `firebase/database.rules.json` | Realtime Database rules, deployed from the Firebase Console (see `docs/EXTERNAL_ACTIONS.md`). |
 | `docs/` | `BRANCHES.md` (why this line of history is authoritative), `ECONOMY.md` (scoring audit), `EXTERNAL_ACTIONS.md` (console tasks). |
 
@@ -48,9 +48,12 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 ### State ownership
 - **`PuzzleViewModel`** holds the puzzle: words, grid cells, letters, hint reveals, selection, timer, mode, category/combined/difficulty, Daily date key, Player 2, Team and Vindictive state, and background. It serialises a `PuzzleSession` into `SavedStateHandle` (debounced), so rotation, theme change and process death restore the grid in place. The online session (`isOnline`, `onlineRole`, `onlineCode`) also lives here so an Activity recreation doesn't drop a live game, but online games are never written to the handle. The manifest also handles `uiMode`, `fontScale`, `density` and `locale`, so most of those changes don't recreate the Activity at all.
 - `goHome()` unloads the puzzle after saving it. A solved grid must never stay loaded: completion would re-run and pay out again after a recreation.
+- The session is encoded into the `SavedStateHandle` by a saved-state provider at the moment the system saves state (never a debounced mirror, which could miss the last letter and repay a finished puzzle). A process restored from an online game returns home with a notice.
+- Puzzle generation carries a request id (`generationId`); leaving or starting another puzzle invalidates it, so a late board is discarded.
 - `CrosswordApp` binds to it with `var placedWords by vm::placedWords`. Assigning to these locals writes the ViewModel.
 - UI-only state (dialogs, overlays, animations, online plumbing) is `remember`/`rememberSaveable` inside `CrosswordApp`.
-- **Scoring and turn rules never live in UI code.** Always call `TeamRules`, `VindictiveRules` and `Economy`.
+- **Scoring and turn rules never live in UI code.** Always call `TeamRules`, `VindictiveRules` and `Economy`. Hints are charged to the player whose turn it is; in Vindictive a hint can't fill a word's last letter.
+- **Colour:** the player's button colour goes through `readableUnderWhiteText` (core `Contrast.kt`, WCAG 4.5:1) because every button/header/tile puts white text on it; accent text on other surfaces uses `readableTextColor`.
 
 ### Game modes (`core.GameMode`)
 - `SINGLE`: solo.
@@ -74,11 +77,11 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 - `numberBoard()` normalises the board to (0,0) and numbers clues in reading order.
 
 ### Daily Puzzle (`core/Daily.kt`)
-- The date key is the UTC `yyyy-MM-dd` computed from epoch millis.
-- The seed is FNV-1a of (algorithm version, date key) XOR the word-list fingerprint.
+- The date key is the UTC `yyyy-MM-dd` computed from epoch millis, always in ASCII digits (a locale-formatted key gave Arabic/Persian/… devices a different Daily and a second payout). Stored keys go through `DailyPuzzle.normalizeKey`; `epochDayOf` accepts only canonical keys.
+- The seed is FNV-1a of (algorithm version, date key) XOR the word-list fingerprint. Randomness is the in-house `SplitMix64` with `fisherYates` (`core/Rng.kt`), not `kotlin.random`, whose seeded algorithm may change between Kotlin versions. `DailyGoldenTest` pins real boards; it fails if generation changes.
 - The pool is sorted canonically before generation, and player history is never used. Same date and same word list give the same grid on every device.
 - Rewards are paid once per UTC day per profile (`dailydone_<name>`). Daily words never enter per-category used-word history.
-- Bump `ALGORITHM_VERSION` if generation changes on purpose.
+- Bump `ALGORITHM_VERSION` (now 2) and re-pin `DailyGoldenTest` if generation changes on purpose.
 
 ### Persistence (`SaveManager`, SharedPreferences `CrosswordSaves`)
 - **Saves:** one `PuzzleSession` per `SaveSlot`, stored under `psession_<name>_<slotId>` with an index in `saves_<name>`.
@@ -87,7 +90,10 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
   - Online games are never saved. The puzzle autosaves on `ON_PAUSE`, back, and Save & Quit.
 - **Stats:** best record per player + mode + category + difficulty. Solo keys are legacy (`stat_<p>_<cat>_<DIFF>`); other modes are namespaced. Better means higher score, then fewer hints, then faster time.
 - **Settings:** sound, music, vibration and volume are device-wide and persisted. Cell and button colours are per profile.
-- `deletePlayer` sweeps every per-player key, including `psession_`, `dailydone_`, `used_`, `stat_` and legacy keys.
+- `deletePlayer` removes exactly the keys `core/PlayerKeys` says the profile owns (longest matching profile name wins), so deleting "Kev" can't touch "Kev_2". Add any new per-player key prefix to `PlayerKeys` and `PlayerKeysTest`.
+- **Combined puzzles** save under `SaveSlot.forPuzzle(...)`: the sorted category list (`CITIES+FOOD__HARD`), not the display label (which was "4 Categories" for every 4+ mix). Older label-keyed saves move to the canonical slot when resumed.
+- **Payout ledger** (`paid_<name>`, `core/Ledger.kt`): each finished board's fingerprint; a board pays out once even if a stale saved copy is restored.
+- Unfinished Dailies older than a week are pruned from Continue.
 - **Serialisation:** `SessionCodec` is versioned (`v2`) and skips malformed segments. Names are sanitised (`sanitizeName` strips `§ | ;` and newlines). Clues can't contain those characters (the CSV validator enforces it).
 
 ### Economy (`core/Economy.kt`, audit in `docs/ECONOMY.md`)
