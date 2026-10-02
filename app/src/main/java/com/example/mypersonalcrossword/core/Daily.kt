@@ -28,8 +28,13 @@ object DailyPuzzle {
      * Bump when the generation algorithm changes in a way that alters output.
      * v2: SplitMix64 + in-house Fisher–Yates; used words placeable at word edges;
      *     early stop tracks the best board's intersections.
+     * v3: each day draws from a seeded [DAILY_POOL_SIZE]-entry sample (the same
+     *     longest answers were in every Daily).
      */
-    const val ALGORITHM_VERSION = 2
+    const val ALGORITHM_VERSION = 3
+
+    /** Entries each day's Daily is built from (a seeded sample of the whole list). */
+    const val DAILY_POOL_SIZE = 400
 
     /** ISO `yyyy-MM-dd` for the UTC calendar day containing [epochMillis]. */
     fun dateKey(epochMillis: Long): String {
@@ -63,7 +68,12 @@ object DailyPuzzle {
         val key       = normalizeKey(dateKey) ?: dateKey   // a legacy-digit key still gets its day's board
         val canonical = entries.sortedWith(compareBy({ it.category }, { it.answer }, { it.clue }))
         val rng       = SplitMix64(seed(key, wordDataFingerprint(canonical)))
-        return generateCrossword(canonical, WORD_COUNT, usedWords = emptySet(), rng = rng)
+        // Each day draws from its own sample of the list. Over the whole list the
+        // board scoring always found room for the very longest answers, so the same
+        // few (PIRATESOFTHECARIBBEAN, …) appeared in every single Daily.
+        val pool = if (canonical.size <= DAILY_POOL_SIZE) canonical
+                   else canonical.fisherYates(rng).take(DAILY_POOL_SIZE)
+        return generateCrossword(pool, WORD_COUNT, usedWords = emptySet(), rng = rng)
     }
 
     /**

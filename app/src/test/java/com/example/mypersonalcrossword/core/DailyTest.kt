@@ -132,4 +132,15 @@ class DailyTest {
         assertEquals("across a month boundary", 3,
             DailyPuzzle.streak(setOf("2026-02-27", "2026-02-28", "2026-03-01"), "2026-03-01"))
     }
+
+    /** The Daily must feel new each day: no answer may dominate a month of boards. */
+    @Test fun dailyAnswersVaryFromDayToDay() {
+        val days = (1..30).map { "2026-10-%02d".format(Locale.ROOT, it) }
+        val counts = days.flatMap { d -> DailyPuzzle.generate(entries, d).map { it.word } }
+            .groupingBy { it }.eachCount()
+        val (worst, n) = counts.maxByOrNull { it.value }!!.toPair()
+        // Before v3 four answers were in all 30 boards.
+        assertTrue("$worst is in $n of 30 Dailies", n <= 12)
+        assertTrue("only ${counts.size} distinct answers in 30 Dailies", counts.size >= 300)
+    }
 }

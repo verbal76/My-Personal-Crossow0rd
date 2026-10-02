@@ -81,7 +81,8 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 - The seed is FNV-1a of (algorithm version, date key) XOR the word-list fingerprint. Randomness is the in-house `SplitMix64` with `fisherYates` (`core/Rng.kt`), not `kotlin.random`, whose seeded algorithm may change between Kotlin versions. `DailyGoldenTest` pins real boards; it fails if generation changes.
 - The pool is sorted canonically before generation, and player history is never used. Same date and same word list give the same grid on every device.
 - Rewards are paid once per UTC day per profile (`dailydone_<name>`). Daily words never enter per-category used-word history.
-- Bump `ALGORITHM_VERSION` (now 2) and re-pin `DailyGoldenTest` if generation changes on purpose.
+- Each day builds from its own seeded `DAILY_POOL_SIZE` (400) sample of the list; over the whole list the scoring always placed the same longest answers (four were in every Daily). `dailyAnswersVaryFromDayToDay` guards this.
+- Bump `ALGORITHM_VERSION` (now 3) and re-pin `DailyGoldenTest` if generation changes on purpose.
 
 ### Persistence (`SaveManager`, SharedPreferences `CrosswordSaves`)
 - **Saves:** one `PuzzleSession` per `SaveSlot`, stored under `psession_<name>_<slotId>` with an index in `saves_<name>`.
