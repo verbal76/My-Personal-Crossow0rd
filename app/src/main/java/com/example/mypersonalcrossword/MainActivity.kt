@@ -27,8 +27,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.VolumeDown
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -159,7 +159,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import kotlin.math.abs as kabs
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -630,15 +630,28 @@ object SoundPlayer {
             ).build()
         pool = sp
         Thread {
+            val keep = HashSet<String>()
             for (effect in SoundSynth.Effect.entries) {
                 try {
-                    val f = java.io.File(app.cacheDir, "sfx_v2_${effect.name.lowercase()}.wav")
-                    if (!f.exists() || f.length() == 0L) f.writeBytes(SoundSynth.toWav(SoundSynth.render(effect)))
+                    // Named by the rendered content, so a changed effect replaces its cached
+                    // WAV after an update; written to a temp file and renamed, so a process
+                    // killed mid-write can't leave a truncated file behind for good.
+                    val wav = SoundSynth.toWav(SoundSynth.render(effect))
+                    val name = "sfx_${effect.name.lowercase()}_${Integer.toHexString(wav.contentHashCode())}.wav"
+                    keep += name
+                    val f = java.io.File(app.cacheDir, name)
+                    if (f.length() != wav.size.toLong()) {
+                        val tmp = java.io.File(app.cacheDir, "$name.tmp")
+                        tmp.writeBytes(wav)
+                        if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+                    }
                     ids[effect] = sp.load(f.path, 1)
                 } catch (e: Exception) {
                     android.util.Log.w("CrosswordSound", "Couldn't prepare $effect", e)
                 }
             }
+            // Drop WAVs from earlier versions.
+            app.cacheDir.listFiles { f -> f.name.startsWith("sfx_") && f.name !in keep }?.forEach { it.delete() }
         }.also { it.isDaemon = true }.start()
     }
 
@@ -684,6 +697,7 @@ object AmbientMusicPlayer {
     private var hasFocus  = false
     private var ducked    = false
     private var failures  = 0
+    private var prepared  = false                    // the current player finished prepareAsync
     private var gain      = 0f                       // volume currently applied to the player
     private val handler   = Handler(Looper.getMainLooper())
     private var fade: Runnable? = null
@@ -702,6 +716,7 @@ object AmbientMusicPlayer {
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS -> {            // another app took over for good
                 hasFocus = false
+                isPlaying = false                        // the UI offers Play again
                 fadeTo(0f) { runCatching { player?.pause() } }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {  // phone call, voice assistant
@@ -793,6 +808,7 @@ object AmbientMusicPlayer {
         currentTrackName = prettyName(filename)
         runCatching { player?.release() }
         player = null
+        prepared = false
         gain = 0f
         try {
             player = MediaPlayer().apply {
@@ -808,6 +824,7 @@ object AmbientMusicPlayer {
                 setVolume(0f, 0f)
                 setOnPreparedListener { mp ->
                     failures = 0
+                    prepared = true
                     if (enabled && hasFocus) { mp.start(); fadeTo(if (ducked) vol * 0.25f else vol) }
                 }
                 setOnCompletionListener { advance() }
@@ -822,8 +839,10 @@ object AmbientMusicPlayer {
         if (failures >= playlist.size) {            // nothing playable — stop, don't loop forever
             runCatching { player?.release() }
             player = null
+            prepared = false
             isPlaying = false
             currentTrackName = ""
+            abandonFocus()                           // let the player's own music resume
             return
         }
         advance()
@@ -836,10 +855,13 @@ object AmbientMusicPlayer {
         if (!requestFocus()) { isPlaying = false; return }
         isPlaying = true
         val p = player
-        if (p == null) playCurrentTrack()
-        else {
-            runCatching { if (!p.isPlaying) p.start() }
-            fadeTo(vol)
+        when {
+            p == null  -> playCurrentTrack()
+            !prepared  -> Unit                        // still preparing: it starts itself when ready
+            else -> {
+                runCatching { if (!p.isPlaying) p.start() }
+                fadeTo(vol)
+            }
         }
     }
 
@@ -856,6 +878,7 @@ object AmbientMusicPlayer {
         fade?.let { handler.removeCallbacks(it) }
         runCatching { player?.stop(); player?.release() }
         player = null
+        prepared = false
         abandonFocus()
     }
 
@@ -905,7 +928,21 @@ object FirebaseGameManager {
 
     fun generateCode(): String = (1..CODE_LENGTH).map { CODE_CHARS.random() }.joinToString("")
 
+    /** Keeps only characters a game code can contain (Firebase paths reject . # $ [ ]). */
+    fun sanitizeCode(input: String): String = input.uppercase().filter { it in CODE_CHARS }.take(CODE_LENGTH)
+    fun isValidCode(code: String): Boolean = code.length == CODE_LENGTH && code.all { it in CODE_CHARS }
+
     private fun gameRef(code: String) = db.child("games").child(code)
+
+    /** Set by the UI: told when the server refuses a write, so the two phones can't drift apart silently. */
+    var onWriteRefused: ((String) -> Unit)? = null
+
+    private fun <T> com.google.android.gms.tasks.Task<T>.reportFailure(what: String, code: String): com.google.android.gms.tasks.Task<T> =
+        addOnFailureListener { e ->
+            // Offline writes queue rather than fail, so a failure is the server refusing it.
+            android.util.Log.w("CrosswordFirebase", "$what failed for game $code", e)
+            onWriteRefused?.invoke("The game server refused an update. The other phone may be out of sync.")
+        }
 
     val myUid: String? get() = FirebaseAuth.getInstance().currentUser?.uid
 
@@ -975,6 +1012,7 @@ object FirebaseGameManager {
         onSuccess: (mode: String, category: String, difficulty: String, hostName: String) -> Unit,
         onError: (String) -> Unit
     ) {
+        if (!isValidCode(code)) { onError("Codes are 6 letters and numbers, like K7Q2MX."); return }
         val uid = myUid ?: ""
         var reason = "That game is no longer available."
         gameRef(code).runTransaction(object : Transaction.Handler {
@@ -1017,6 +1055,7 @@ object FirebaseGameManager {
 
     fun writePuzzle(code: String, words: List<PlacedWord>) {
         gameRef(code).updateChildren(mapOf("puzzle" to SessionCodec.encodeWords(words), "status" to STATUS_PLAYING))
+            .reportFailure("writePuzzle", code)
     }
 
     fun parsePuzzle(raw: String): List<PlacedWord> = SessionCodec.decodeWords(raw)
@@ -1025,14 +1064,16 @@ object FirebaseGameManager {
     fun writeInputs(code: String, letters: Map<Pair<Int, Int>, Char>) {
         if (letters.isEmpty()) return
         gameRef(code).child("inputs").updateChildren(letters.entries.associate { (c, ch) -> "${c.first}_${c.second}" to ch.toString() })
+            .reportFailure("writeInputs", code)
     }
 
     fun writeInput(code: String, x: Int, y: Int, char: Char) {
         gameRef(code).child("inputs").child("${x}_${y}").setValue(char.toString())
+            .reportFailure("writeInput", code)
     }
 
     fun writeState(code: String, updates: Map<String, Any>) {
-        gameRef(code).updateChildren(updates)
+        gameRef(code).updateChildren(updates).reportFailure("writeState ${updates.keys}", code)
     }
 
     fun listen(code: String, onUpdate: (DataSnapshot) -> Unit, onError: (String) -> Unit): ValueEventListener {
@@ -1261,6 +1302,9 @@ fun CrosswordApp() {
     var onlineJoinError  by remember { mutableStateOf("") }
     var onlineStatus     by remember { mutableStateOf("") }  // shown on lobby screen
     var showOnlineJoin   by remember { mutableStateOf(false) }
+    // Host/Join requests in flight: a newer request (or a cancel) makes older answers stale.
+    var onlineRequest    by remember { mutableIntStateOf(0) }
+    var onlinePending    by remember { mutableStateOf(false) }
     var onlineListener   by remember { mutableStateOf<ValueEventListener?>(null) }
     // Remote inputs received from the other device — merged into local userInputs on change
     var remoteInputs        by remember { mutableStateOf<Map<Pair<Int,Int>, Char>>(emptyMap()) }
@@ -1374,8 +1418,10 @@ fun CrosswordApp() {
     // ── Cell input ─────────────────────────────────────────────────────────
     var selection           by vm::selection
     val board               = remember(placedWords) { Board(placedWords) }
-    val lockedCells         = remember(board, userInputs, revealedCells) { board.lockedCells(userInputs, revealedCells) }
-    val activeWord          = board.activeWord(selection)
+    // Derived, so the app root only recomposes when the *result* changes (a word is
+    // solved, the cursor moves to another word) — not on every keystroke.
+    val lockedCells by remember(board) { derivedStateOf { board.lockedCells(userInputs, revealedCells) } }
+    val activeWord  by remember(board) { derivedStateOf { board.activeWord(selection) } }
     var waveFx              by remember { mutableStateOf<GridFx?>(null) }   // solved-word wave
     var shakeFx             by remember { mutableStateOf<GridFx?>(null) }   // wrong-word shake
     var showClueList        by remember { mutableStateOf(false) }
@@ -2053,12 +2099,16 @@ fun CrosswordApp() {
         showResults = true
     }
 
-    // Start/stop ambient music based on enabled state and volume
-    LaunchedEffect(musicEnabled, musicVolume) {
+    // Start/stop ambient music when the switch changes. Volume changes are applied
+    // directly by the sliders; restarting playback on every drag tick restarted the
+    // fade and rewrote the whole prefs file each time.
+    LaunchedEffect(musicEnabled) {
         if (musicEnabled) AmbientMusicPlayer.start(musicVolume)
         else AmbientMusicPlayer.stop()
         saveManager.setMusicEnabled(musicEnabled)
     }
+    // Persist the volume once the slider settles.
+    LaunchedEffect(musicVolume) { delay(400L); saveManager.setMusicVolume(musicVolume) }
     // Sound-effect and haptic switches apply everywhere and persist across launches.
     LaunchedEffect(soundEnabled)   { SoundPlayer.enabled = soundEnabled;  saveManager.setSoundEnabled(soundEnabled) }
     LaunchedEffect(hapticsEnabled) { Haptics.enabled = hapticsEnabled;    saveManager.setHapticsEnabled(hapticsEnabled) }
@@ -2221,7 +2271,15 @@ fun CrosswordApp() {
             }.toMap()
             if (rawInputs != remoteInputs) {
                 remoteInputs = rawInputs
-                userInputs   = mergeRemoteInputs(userInputs, rawInputs, solutionOf(placedWords))
+                val merged   = mergeRemoteInputs(userInputs, rawInputs, solutionOf(placedWords))
+                userInputs   = merged
+                // A remote letter outside a solved word is the other player's hint: lock
+                // and mark it here too, as it is on their phone, so it can't be erased.
+                // (Board built from live state: this listener outlives the composition
+                // that created it, so the captured `board` may be a previous puzzle's.)
+                val solvedNow = Board(placedWords).lockedCells(merged, emptySet())
+                val hinted = rawInputs.keys.filter { merged[it] == rawInputs[it] && it !in solvedNow }
+                if (hinted.isNotEmpty()) revealedCells = revealedCells + hinted
             }
 
             // Sync turn and scores (team + vindictive both use hostScore/guestScore).
@@ -2276,9 +2334,11 @@ fun CrosswordApp() {
             }
         }, onError = { msg -> if (isOnlineGame) onlineNotice = msg })
         onlineListener = listener
+        FirebaseGameManager.onWriteRefused = { msg -> if (isOnlineGame) remoteToast = msg }
         try {
             awaitCancellation()
         } finally {
+            FirebaseGameManager.onWriteRefused = null
             FirebaseGameManager.stopListening(code, listener)
         }
     }
@@ -2769,7 +2829,6 @@ fun CrosswordApp() {
                 onVolumeChange        = { v ->
                     musicVolume = v
                     AmbientMusicPlayer.setVolume(v)
-                    saveManager.setMusicVolume(v)
                 },
                 btnColorArgb          = currentBtnColorArgb
             )
@@ -3310,16 +3369,19 @@ fun CrosswordApp() {
     // ── ONLINE JOIN DIALOG ────────────────────────────────────────────────────────
     if (showOnlineJoin) {
         AlertDialog(
-            onDismissRequest = { showOnlineJoin = false; onlineJoinError = "" },
+            onDismissRequest = { showOnlineJoin = false; onlineJoinError = ""; onlineRequest++; onlinePending = false },
             title = { Text("🌐 Join Online Game", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Enter the 6-letter code from the host:", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     OutlinedTextField(
                         value = onlineJoinInput,
-                        onValueChange = { onlineJoinInput = it.uppercase().take(6); onlineJoinError = "" },
+                        onValueChange = { onlineJoinInput = FirebaseGameManager.sanitizeCode(it); onlineJoinError = "" },
                         label = { Text("Game Code") },
                         singleLine = true,
+                        enabled = !onlinePending,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters,
+                            autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (onlineJoinError.isNotEmpty()) {
@@ -3328,16 +3390,23 @@ fun CrosswordApp() {
                 }
             },
             confirmButton = {
-                GradientBtn("Join", appBtnGradient,
-                    enabled = onlineJoinInput.length == 6,
+                GradientBtn(if (onlinePending) "Joining…" else "Join", appBtnGradient,
+                    enabled = FirebaseGameManager.isValidCode(onlineJoinInput) && !onlinePending,
                     onClick = {
                         vibrateLight(context); if (soundEnabled) SoundPlayer.playClick()
                         val code = onlineJoinInput
+                        val request = ++onlineRequest
+                        onlinePending = true
+                        // A cancelled dialog's late answer must not pull the player into a game.
+                        fun stale() = request != onlineRequest || !showOnlineJoin
                         FirebaseGameManager.signInAnonymously { ok, err ->
-                            if (!ok) { onlineJoinError = err ?: "Couldn't connect."; return@signInAnonymously }
+                            if (stale()) return@signInAnonymously
+                            if (!ok) { onlinePending = false; onlineJoinError = err ?: "Couldn't connect."; return@signInAnonymously }
                             FirebaseGameManager.joinGame(
                                 code, playerName,
                                 onSuccess = { mode, category, difficulty, hostName ->
+                                    if (stale()) { FirebaseGameManager.abandonGame(code); return@joinGame }
+                                    onlinePending     = false
                                     activeGameMode    = runCatching { GameMode.valueOf(mode) }.getOrDefault(GameMode.TEAM)
                                     activeCategory    = category
                                     activeDifficulty  = runCatching { Difficulty.valueOf(difficulty) }.getOrDefault(Difficulty.MEDIUM)
@@ -3352,7 +3421,7 @@ fun CrosswordApp() {
                                     onlineJoinInput   = ""
                                     appMode           = AppMode.ONLINE_LOBBY
                                 },
-                                onError = { msg -> onlineJoinError = msg }
+                                onError = { msg -> if (!stale()) { onlinePending = false; onlineJoinError = msg } }
                             )
                         }
                     }, modifier = Modifier.fillMaxWidth())
@@ -3360,6 +3429,7 @@ fun CrosswordApp() {
             dismissButton = {
                 GradientBtn("Cancel", appBtnGradient, onClick = {
                     vibrateLight(context); showOnlineJoin = false; onlineJoinError = ""; onlineJoinInput = ""
+                    onlineRequest++; onlinePending = false
                 }, modifier = Modifier.fillMaxWidth())
             }
         )
@@ -3477,20 +3547,19 @@ fun CrosswordApp() {
                             IconButton(onClick = { musicEnabled = !musicEnabled }, modifier = Modifier.size(48.dp)) {
                                 Icon(
                                     imageVector = if (AmbientMusicPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (musicEnabled) "Pause" else "Play",
+                                    contentDescription = if (AmbientMusicPlayer.isPlaying) "Pause music" else "Play music",
                                     tint = settingsTrackColor
                                 )
                             }
                             IconButton(onClick = { AmbientMusicPlayer.next() }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = settingsTrackColor)
                             }
-                            Icon(Icons.Default.VolumeDown, contentDescription = null, tint = settingsTrackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.VolumeDown, contentDescription = null, tint = settingsTrackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
                             Slider(
                                 value = musicVolume,
                                 onValueChange = { v ->
                                     musicVolume = v
                                     AmbientMusicPlayer.setVolume(v)
-                                    saveManager.setMusicVolume(v)
                                     if (!musicEnabled) musicEnabled = true
                                 },
                                 valueRange = 0f..1f,
@@ -3501,7 +3570,7 @@ fun CrosswordApp() {
                                 ),
                                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                             )
-                            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = settingsTrackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = settingsTrackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -4054,9 +4123,15 @@ fun CrosswordApp() {
                                 showPlayer2SetupDialog = false
                                 val hostMode = activeGameMode
                                 val hostDiff = activeDifficulty
+                                val request  = ++onlineRequest
+                                // Ignore the answer if the player has since started something else.
+                                fun stale() = request != onlineRequest || appMode != AppMode.CATEGORY_SELECT || isOnlineGame
                                 FirebaseGameManager.signInAnonymously { ok, err ->
+                                    if (stale()) return@signInAnonymously
                                     if (!ok) { onlineNotice = err; return@signInAnonymously }
                                     FirebaseGameManager.createGame(playerName, hostMode, hostDiff) { code, error ->
+                                        if (code != null && stale()) { FirebaseGameManager.abandonGame(code); return@createGame }
+                                        if (stale()) return@createGame
                                         if (code == null) { onlineNotice = error; return@createGame }
                                         isOnlineGame      = true
                                         onlineRole        = OnlineRole.HOST
@@ -5265,7 +5340,7 @@ fun CategoryScreen(
                             IconButton(onClick = { AmbientMusicPlayer.next() }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = trackColor)
                             }
-                            Icon(Icons.Default.VolumeDown, contentDescription = null, tint = trackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.VolumeDown, contentDescription = null, tint = trackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
                             Slider(
                                 value = musicVolume,
                                 onValueChange = { onVolumeChange(it) },
@@ -5277,7 +5352,7 @@ fun CategoryScreen(
                                 ),
                                 modifier = Modifier.weight(1f).padding(horizontal = 4.dp)
                             )
-                            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = trackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = trackColor.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
                         }
                     }
                 }
