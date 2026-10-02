@@ -33,16 +33,31 @@ class EconomyTest {
 
     /**
      * Regression: hints were charged twice — once when revealed and again when the
-     * puzzle's reward was paid. The lifetime delta of a puzzle must equal the net
-     * shown on the results card: reward − hints.
+     * puzzle's reward was paid. Plays a puzzle through the same calls the app makes
+     * (one charge per hint as it is used, then the completion award) and checks the
+     * lifetime change against hard-coded expectations: reward − hints, unfloored.
      */
     @Test fun hintsAreChargedExactlyOnce() {
-        for (diff in Difficulty.entries) for (hints in 0..5) {
-            val chargedAtUse = hints * Economy.HINT_COST
-            val lifetimeDelta = Economy.lifetimeAwardOnWin(diff, isDaily = false) - chargedAtUse
-            assertEquals(Economy.pointsForDifficulty(diff) - hints, lifetimeDelta)
+        val rewards = mapOf(Difficulty.EASY to 1, Difficulty.MEDIUM to 2, Difficulty.HARD to 4,
+                            Difficulty.EXPERT to 8, Difficulty.GENIUS to 20)
+        for ((diff, reward) in rewards) for (isDaily in listOf(false, true)) for (hints in 0..25) {
+            var lifetime = 100
+            repeat(hints) { lifetime -= Economy.hintCharges(1) }            // charged at use
+            lifetime += Economy.lifetimeAwardOnWin(diff, isDaily)           // paid at completion
+            val expectedReward = if (isDaily) 20 else reward
+            val label = "$diff daily=$isDaily hints=$hints"
+            assertEquals(label, 100 + expectedReward - hints, lifetime)
+            assertEquals(label, lifetime - 100, Economy.lifetimeDelta(expectedReward, hints))
+            // The results card's net matches the lifetime change until it would go negative.
+            assertEquals(label, maxOf(0, expectedReward - hints), Economy.netPoints(diff, isDaily, hints))
+            if (hints <= expectedReward) assertEquals(label, Economy.netPoints(diff, isDaily, hints), lifetime - 100)
         }
-        assertEquals(20 - 3, Economy.lifetimeAwardOnWin(Difficulty.EXPERT, isDaily = true) - 3)
+    }
+
+    @Test fun lifetimeDeltaIsUnflooredWhileNetIsFloored() {
+        assertEquals(-3, Economy.lifetimeDelta(Economy.pointsForDifficulty(Difficulty.EASY), 4))
+        assertEquals(0, Economy.netPoints(Difficulty.EASY, false, 4))
+        assertEquals(0, Economy.hintCharges(-2))
     }
 
     @Test fun netPointsNeverNegative() {

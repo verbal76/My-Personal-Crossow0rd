@@ -28,6 +28,34 @@ class WordDataTest {
         assertEquals(4, d.rejected.size)
     }
 
+    /** Regression: answers were upper-cased before validation, so ß→SS, ı→I, ﬁ→FI got in. */
+    @Test fun nonAsciiLettersAreRejectedBeforeUppercasing() {
+        val d = parse("straße,German street,PLACES", "ıce,Frozen water,FOOD", "ﬁsh,Swims,FOOD",
+                      "CAFÉ,Coffee shop,FOOD", "CAT,Pet,peтs", "DOG,Pet,ﬁsh")
+        assertTrue(d.entries.toString(), d.entries.isEmpty())
+        assertEquals(6, d.rejected.size)
+    }
+
+    @Test fun controlCharactersInCluesAreRejected() {
+        val d = parse("CAT,Pet\u0000x,PETS", "DOG,Pet\u0007,PETS", "RAT,Rod\tent,PETS", "COW,Farm \u001B animal,NATURE", "EMU,Big bird,NATURE")
+        assertEquals(listOf("EMU"), d.entries.map { it.answer })
+        assertEquals(4, d.rejected.size)
+        assertTrue(d.rejected.all { it.reason.contains("control") })
+    }
+
+    /** Regression: without a header row the first entry was silently dropped. */
+    @Test fun headerIsDetectedByContent() {
+        assertEquals(listOf("CAT", "DOG"), parseWordCsv(sequenceOf("CAT,Pet,PETS", "DOG,Pet,PETS")).entries.map { it.answer })
+        assertEquals(listOf("CAT"), parseWordCsv(sequenceOf("\uFEFFanswer , CLUE,category\r", "CAT,Pet,PETS")).entries.map { it.answer })
+        assertEquals(listOf("CAT"), parseWordCsv(sequenceOf("", "Answer,Clue,Category", "CAT,Pet,PETS")).entries.map { it.answer })
+        // A repeated header (concatenated files) is skipped, not turned into an entry.
+        val d = parseWordCsv(sequenceOf("CAT,Pet,PETS", "Answer,Clue,Category"))
+        assertEquals(listOf("CAT"), d.entries.map { it.answer })
+        assertTrue(d.rejected.isEmpty())
+        // A BOM-prefixed first data row is still data.
+        assertEquals(listOf("CAT"), parseWordCsv(sequenceOf("\uFEFFCAT,Pet,PETS")).entries.map { it.answer })
+    }
+
     @Test fun delimiterInClueIsRejected() {
         val d = parse("CAT,Pet | feline,PETS", "DOG,Pet § canine,PETS", "RAT,Pet; rodent,PETS")
         assertTrue(d.entries.isEmpty())

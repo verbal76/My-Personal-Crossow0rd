@@ -11,13 +11,46 @@ package com.hag.mypersonalcrossword.core
  * Every other mode is namespaced (`TEAM::CATEGORY__DIFFICULTY`) so a Team or
  * Vindictive game can never overwrite — or be resumed as — a solo puzzle.
  * DAILY slots use the UTC date key as their category.
+ *
+ * Combined puzzles: [category] is the slot KEY, not the display label. Build
+ * the slot with [forPuzzle] (or [combinedKey]) so it is the sorted, de-duplicated
+ * source categories joined by `+` (`CITIES+FOOD+PETS+SPORTS__HARD`). The label
+ * the UI shows ("4 Categories", "FOOD+CITIES") lives in [PuzzleSession.category]
+ * and is free to collide; the key isn't. Category names are A–Z only, so `+`
+ * can't occur in a single-category slot.
  */
 data class SaveSlot(val mode: GameMode, val category: String, val difficulty: Difficulty) {
     val id: String
         get() = if (mode == GameMode.SINGLE) "${category}__${difficulty.name}"
                 else "${mode.name}::${category}__${difficulty.name}"
 
+    /** True for a slot keyed by a combined category set (new or legacy `A+B` label). */
+    val isCombined: Boolean get() = '+' in category
+
+    /**
+     * Source categories of a combined slot, sorted (empty otherwise) — enough to
+     * regenerate the puzzle when its save can't be loaded. Legacy "N Categories"
+     * slots don't record their categories and return empty.
+     */
+    val combinedCategories: List<String>
+        get() = if (isCombined) category.split('+').filter { it.isNotBlank() }.distinct().sorted() else emptyList()
+
     companion object {
+        /** Canonical slot key for a combined puzzle: sorted, distinct, `+`-joined. */
+        fun combinedKey(categories: Collection<String>): String =
+            categories.map { it.trim() }.filter { it.isNotEmpty() }.distinct().sorted().joinToString("+")
+
+        /**
+         * The slot a puzzle saves into. Prefer this over the constructor at every
+         * call site: Daily ⇒ date slot; combined ⇒ [combinedKey]; else [label].
+         */
+        fun forPuzzle(mode: GameMode, label: String, difficulty: Difficulty,
+                      combined: Collection<String> = emptyList(), dailyKey: String? = null): SaveSlot = when {
+            dailyKey != null      -> daily(dailyKey)
+            combined.isNotEmpty() -> SaveSlot(mode, combinedKey(combined), difficulty)
+            else                  -> SaveSlot(mode, label, difficulty)
+        }
+
         fun parse(id: String): SaveSlot? {
             val (modePart, rest) = if ("::" in id) {
                 val m = runCatching { GameMode.valueOf(id.substringBefore("::")) }.getOrNull() ?: return null
@@ -54,8 +87,9 @@ data class PuzzleSession(
 ) {
     val isDaily: Boolean get() = dailyKey != null
 
+    /** Combined puzzles key their slot by the sorted category set, not the label. */
     val slot: SaveSlot
-        get() = if (dailyKey != null) SaveSlot.daily(dailyKey) else SaveSlot(mode, category, difficulty)
+        get() = SaveSlot.forPuzzle(mode, category, difficulty, combined, dailyKey)
 }
 
 // ── CODEC ────────────────────────────────────────────────────────────────────
@@ -71,14 +105,21 @@ data class PuzzleSession(
 object SessionCodec {
     private const val VERSION = "v2"
 
+    /** Vindictive answer-timer lengths the UI offers; anything else decodes as 30. */
+    val VIND_TIMER_CHOICES = setOf(15, 30, 60)
+
     fun encodeWords(words: List<PlacedWord>): String = words.joinToString("|") {
         "${it.word}§${it.clue}§${it.startX}§${it.startY}§${it.isHorizontal}§${it.number}§${it.category}"
     }
 
     /** Parses words; malformed segments are skipped instead of discarding the whole list. */
-    fun decodeWords(raw: String): List<PlacedWord> {
-        if (raw.isBlank()) return emptyList()
-        return raw.split("|").mapNotNull { seg ->
+    fun decodeWords(raw: String): List<PlacedWord> = decodeWordsCounting(raw).first
+
+    /** Decoded words plus the number of segments that were malformed and skipped. */
+    private fun decodeWordsCounting(raw: String): Pair<List<PlacedWord>, Int> {
+        if (raw.isBlank()) return emptyList<PlacedWord>() to 0
+        val segments = raw.split("|")
+        val words = segments.mapNotNull { seg ->
             val p = seg.split("§")
             if (p.size < 6) return@mapNotNull null
             runCatching {
@@ -88,6 +129,7 @@ object SessionCodec {
                     p.getOrElse(6) { "" })
             }.getOrNull()
         }
+        return words to (segments.size - words.size)
     }
 
     fun encodeInputs(inputs: Map<Cell, Char>): String =
@@ -152,13 +194,16 @@ object SessionCodec {
         val meta = section("meta").split("§").mapNotNull { kv ->
             val i = kv.indexOf('='); if (i <= 0) null else kv.substring(0, i) to kv.substring(i + 1)
         }.toMap()
-        val words = decodeWords(section("words"))
+        val (words, skipped) = decodeWordsCounting(section("words"))
         if (words.isEmpty()) return null
         fun int(k: String, d: Int) = meta[k]?.toIntOrNull() ?: d
+        fun count(k: String) = int(k, 0).coerceAtLeast(0)   // counts can't be negative
         val mode  = runCatching { GameMode.valueOf(meta["mode"] ?: "") }.getOrDefault(GameMode.SINGLE)
         val diff  = runCatching { Difficulty.valueOf(meta["difficulty"] ?: "") }.getOrDefault(Difficulty.MEDIUM)
         val phase = runCatching { VindicativePhase.valueOf(meta["vphase"] ?: "") }.getOrDefault(VindicativePhase.PICK_OWN)
-        val vidx  = int("vidx", -1).takeIf { it in words.indices } ?: -1
+        // A skipped word segment shifts every later index, so a stored assigned-clue
+        // index could point at the wrong word: drop it rather than guess.
+        val vidx  = int("vidx", -1).takeIf { it in words.indices && skipped == 0 } ?: -1
         return PuzzleSession(
             mode           = mode,
             category       = meta["category"].orEmpty(),
@@ -168,12 +213,12 @@ object SessionCodec {
             revealed       = decodeCells(section("revealed")),
             combined       = meta["combined"].orEmpty().split(",").filter { it.isNotBlank() },
             dailyKey       = meta["daily"]?.takeIf { it.isNotBlank() },
-            elapsedSeconds = meta["elapsed"]?.toLongOrNull() ?: 0L,
-            hintsUsed      = int("hints", 0),
-            streak         = int("streak", 0),
+            elapsedSeconds = (meta["elapsed"]?.toLongOrNull() ?: 0L).coerceAtLeast(0L),
+            hintsUsed      = count("hints"),
+            streak         = count("streak"),
             player2        = meta["p2"].orEmpty(),
-            team           = TeamState(int("t1", 0), int("t2", 0), int("tturn", 0).coerceIn(0, 1),
-                                       int("th1", 0), int("th2", 0)),
+            team           = TeamState(count("t1"), count("t2"), int("tturn", 0).coerceIn(0, 1),
+                                       count("th1"), count("th2")),
             vind           = VindState(
                                  // An assigned-clue phase without a valid clue can't continue — fall back
                                  // to letting the current player assign again.
@@ -183,7 +228,7 @@ object SessionCodec {
                                  p1Score       = int("v1", 0),
                                  p2Score       = int("v2", 0),
                                  assignedIndex = vidx),
-            vindTimerSecs  = int("vtimer", 30),
+            vindTimerSecs  = int("vtimer", 30).takeIf { it in VIND_TIMER_CHOICES } ?: 30,
             bgArgb         = int("bg", 0xFFC0C0C0.toInt()),
             bgImage        = meta["bgimg"].orEmpty()
         )

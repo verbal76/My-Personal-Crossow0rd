@@ -1,7 +1,9 @@
 package com.hag.mypersonalcrossword.core
 
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -67,6 +69,59 @@ class DailyTest {
         }
         assertEquals(null, DailyPuzzle.epochDayOf("2026-13-01"))
         assertEquals(null, DailyPuzzle.epochDayOf("nonsense"))
+    }
+
+    /**
+     * Regression: the key was built with String.format, which uses the default
+     * locale's digits — an Arabic or Bengali device got "٢٠٢٦-…", a different
+     * board, a different save slot and a second Daily payout.
+     */
+    @Test fun dateKeyIsAsciiInEveryLocale() {
+        val ms = 1_790_000_000_000L
+        val saved = Locale.getDefault()
+        val expected = try { Locale.setDefault(Locale.US); DailyPuzzle.dateKey(ms) } finally { Locale.setDefault(saved) }
+        assertEquals("2026-09-21", expected)
+        for (tag in listOf("ar", "ar-EG", "fa-IR", "bn-BD", "mr-IN", "my-MM", "ne-NP", "th-TH-u-nu-thai", "tr-TR")) {
+            try {
+                Locale.setDefault(Locale.forLanguageTag(tag))
+                assertEquals(tag, expected, DailyPuzzle.dateKey(ms))
+                assertEquals(tag, "2026-09-21__EXPERT", SaveSlot.daily(DailyPuzzle.dateKey(ms)).id.substringAfter("::"))
+            } finally {
+                Locale.setDefault(saved)
+            }
+        }
+    }
+
+    @Test fun normalizeKeyMigratesLegacyDigitKeys() {
+        assertEquals("2026-09-21", DailyPuzzle.normalizeKey("2026-09-21"))
+        assertEquals("2026-09-21", DailyPuzzle.normalizeKey("\u0662\u0660\u0662\u0666-\u0660\u0669-\u0662\u0661"))   // Arabic-Indic
+        assertEquals("2026-09-21", DailyPuzzle.normalizeKey("\u06F2\u06F0\u06F2\u06F6-\u06F0\u06F9-\u06F2\u06F1"))   // Persian
+        assertEquals("2026-09-21", DailyPuzzle.normalizeKey("\u09E8\u09E6\u09E8\u09EC-\u09E6\u09EF-\u09E8\u09E7"))   // Bengali
+        assertEquals("2026-09-21", DailyPuzzle.normalizeKey("\u0E52\u0E50\u0E52\u0E56-\u0E50\u0E59-\u0E52\u0E51"))   // Thai
+        assertEquals("2026-09-21", DailyPuzzle.normalizeKey(" 2026-09-21 "))
+        assertNull(DailyPuzzle.normalizeKey("2026-02-31"))
+        assertNull(DailyPuzzle.normalizeKey("garbage"))
+        assertNull(DailyPuzzle.normalizeKey(""))
+        // A legacy key generates the same board as its canonical form.
+        assertEquals(DailyPuzzle.generate(entries, "2026-09-21"),
+            DailyPuzzle.generate(entries, "\u0662\u0660\u0662\u0666-\u0660\u0669-\u0662\u0661"))
+    }
+
+    @Test fun epochDayOfIsStrict() {
+        assertEquals(20_515L, DailyPuzzle.epochDayOf("2026-03-03"))
+        for (bad in listOf("2026-02-31", "2026-02-29", "2026-04-31", "2026-3-3", "+2026-03-03", " 2026-03-03",
+                           "2026-03-03 ", "02026-03-03", "2026-00-10", "2026-13-01", "2026-01-00", "-001-01-01",
+                           "\u0662\u0660\u0662\u0666-\u0660\u0663-\u0660\u0663")) {
+            assertNull(bad, DailyPuzzle.epochDayOf(bad))
+        }
+        assertEquals(DailyPuzzle.epochDayOf("2024-02-28")!! + 1, DailyPuzzle.epochDayOf("2024-02-29"))
+    }
+
+    @Test fun streakIgnoresAliasesButCountsLegacyDigitKeys() {
+        // "2026-02-30" and "2026-3-3" used to alias real days and extend the streak.
+        assertEquals(1, DailyPuzzle.streak(setOf("2026-03-02", "2026-02-30", "2026-3-3"), "2026-03-02"))
+        val arabicYesterday = "\u0662\u0660\u0662\u0666-\u0660\u0663-\u0660\u0662"
+        assertEquals(2, DailyPuzzle.streak(setOf(arabicYesterday, "2026-03-03"), "2026-03-03"))
     }
 
     @Test fun dailyStreakCountsConsecutiveDays() {

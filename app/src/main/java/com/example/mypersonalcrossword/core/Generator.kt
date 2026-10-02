@@ -13,7 +13,8 @@ import kotlin.random.Random
 //      only became usable after later words were placed.
 //
 // All randomness flows through the `rng` parameter, so a seeded Random gives a
-// fully reproducible board (the Daily Puzzle depends on this). Iteration over
+// fully reproducible board (the Daily Puzzle depends on this, via SplitMix64).
+// Shuffles use the in-house fisherYates, never stdlib shuffled(). Iteration over
 // the internal maps is insertion-ordered, never hash-ordered.
 // ============================================================
 
@@ -185,9 +186,12 @@ fun findBestPlacement(
                     inside.size == 2 -> 400_000
                     else             -> 0
                 }
-                val score = (if (isInner) 30_000 else -15_000) +
-                        bridgeBonus + len * 500 -
-                        (if (usedWords.contains(entry.answer)) 30_000 else 0)
+                // Quality of the placement itself; the used-word penalty only ranks.
+                // Applying the cutoff after the penalty used to ban used words at a
+                // word edge (-15 000 - 30 000), contradicting "deprioritised, never banned".
+                val placementScore = (if (isInner) 30_000 else -15_000) + bridgeBonus + len * 500
+                if (placementScore <= MIN_PLACEMENT_SCORE) continue
+                val score = placementScore - (if (usedWords.contains(entry.answer)) USED_WORD_PENALTY else 0)
 
                 if (score > bestScore) {
                     bestScore = score
@@ -197,8 +201,14 @@ fun findBestPlacement(
         }
     }
 
-    return if (bestScore > -20_000) bestWord else null
+    return bestWord
 }
+
+/** Placements scoring at or below this (before the used-word penalty) are refused. */
+private const val MIN_PLACEMENT_SCORE = -20_000
+
+/** Ranking penalty for an answer the player has already seen in this category. */
+private const val USED_WORD_PENALTY = 30_000
 
 // ── MAIN GENERATOR ────────────────────────────────────────────────────────────
 /**
@@ -206,31 +216,35 @@ fun findBestPlacement(
  * Words in [usedWords] are deprioritised (tried last, penalised in scoring) but
  * still usable so a well-explored category never produces an empty board.
  * Returns a normalised (top-left at 0,0), numbered word list; empty if [items]
- * can't produce a board of at least two words.
+ * can't produce a board of at least two words. With [stopEarly] (the default)
+ * it stops as soon as the best board so far is full and well connected;
+ * false always spends every attempt (tests use it as the reference).
  */
 fun generateCrossword(
     items:     List<RawEntry>,
     target:    Int,
     usedWords: Set<String>,
-    rng:       Random = Random.Default,
-    attempts:  Int    = GENERATOR_ATTEMPTS
+    rng:       Random  = Random.Default,
+    attempts:  Int     = GENERATOR_ATTEMPTS,
+    stopEarly: Boolean = true
 ): List<PlacedWord> {
     // Shuffle before de-duplicating so an answer that appears with several clues
     // (e.g. ROGER in CARTOONS) doesn't always surface the same clue.
-    val uniqueItems   = items.shuffled(rng).distinctBy { it.answer }
+    val uniqueItems   = items.fisherYates(rng).distinctBy { it.answer }
     val unusedItems   = uniqueItems.filter { !usedWords.contains(it.answer) }
     val usedItems     = uniqueItems.filter {  usedWords.contains(it.answer) }
 
     val wordIndex     = buildWordIndex(uniqueItems)
     val entryByAnswer = uniqueItems.associateBy { it.answer }
 
-    var bestResult = emptyList<PlacedWord>()
-    var maxScore   = Long.MIN_VALUE
+    var bestResult        = emptyList<PlacedWord>()
+    var bestIntersections = 0
+    var maxScore          = Long.MIN_VALUE
 
     for (iteration in 0 until attempts) {
         val inPool = LinkedHashSet<String>().apply {
-            unusedItems.shuffled(rng).forEach { add(it.answer) }
-            usedItems.shuffled(rng).forEach   { add(it.answer) }
+            unusedItems.fisherYates(rng).forEach { add(it.answer) }
+            usedItems.fisherYates(rng).forEach   { add(it.answer) }
         }
 
         val gridChar = HashMap<Cell, Char>(512)
@@ -285,12 +299,17 @@ fun generateCrossword(
                     targetPenalty
 
             if (boardScore > maxScore) {
-                maxScore   = boardScore
-                bestResult = placed.toList()
+                maxScore          = boardScore
+                bestResult        = placed.toList()
+                bestIntersections = finalIntersections
             }
 
-            // Good enough — stop spending attempts.
-            if (bestResult.size >= target && finalIntersections >= target - 2) break
+            // Good enough — stop spending attempts. Judge the board we'd actually
+            // return, not this attempt (which may have lost on score). Note: every
+            // placement needs a crossing, so a connected board of n words already has
+            // ≥ n − 1 intersections; this bar is met by ANY full board. A stricter bar
+            // (extra crossings) would change output: bump the Daily ALGORITHM_VERSION.
+            if (stopEarly && bestResult.size >= target && bestIntersections >= target - 2) break
         }
     }
 

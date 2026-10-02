@@ -23,6 +23,8 @@ object TestAssets {
 /**
  * Asserts a board is a legal crossword:
  *  • every placed word's letters are consistent where words cross,
+ *  • every placed word is a maximal run (no letter just before its start or just
+ *    after its end in its own direction — catches CAT placed inside CATS),
  *  • every maximal horizontal/vertical run of 2+ letters is exactly one placed word
  *    (no accidental adjacent-letter "non-words"),
  *  • all words are connected,
@@ -37,6 +39,15 @@ fun assertValidBoard(words: List<PlacedWord>) {
         if (prev != null && prev != w.word[i]) fail("conflict at $c: $prev vs ${w.word[i]} (${w.word})")
     }
     assertEquals("duplicate answers", words.size, words.map { it.word }.toSet().size)
+
+    for (w in words) {
+        val dx = if (w.isHorizontal) 1 else 0
+        val dy = if (w.isHorizontal) 0 else 1
+        val before = Pair(w.startX - dx, w.startY - dy)
+        val after  = Pair(w.startX + w.word.length * dx, w.startY + w.word.length * dy)
+        assertTrue("${w.word} is not a maximal run: letter before its start at $before", before !in grid)
+        assertTrue("${w.word} is not a maximal run: letter after its end at $after", after !in grid)
+    }
 
     val placedRuns = words.map { Triple(it.startX, it.startY, it.isHorizontal) to it.word.length }.toSet()
     for (h in listOf(true, false)) {

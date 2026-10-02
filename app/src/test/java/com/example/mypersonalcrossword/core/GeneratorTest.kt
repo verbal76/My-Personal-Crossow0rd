@@ -54,6 +54,78 @@ class GeneratorTest {
         assertEquals("fully explored category must still generate", 8, board.size)
     }
 
+    /**
+     * Regression: a used word at a word edge scored -15 000 - 30 000, under the
+     * -20 000 cutoff — effectively banned. It must lose to unused words only.
+     */
+    @Test fun usedWordAtAWordEdgeIsStillPlaceable() {
+        val gridChar = HashMap<Cell, Char>()
+        val gridDir  = HashMap<Cell, Boolean?>()
+        addToGrid(PlacedWord("CAT", "", 0, 0, true), gridChar, gridDir)
+        val index = buildWordIndex(listOf(RawEntry("TOE", "Foot digit", "X")))
+        val placed = findBestPlacement(2, 0, false, 'T', setOf("TOE"), index, gridChar, gridDir, usedWords = setOf("TOE"))
+        assertEquals(PlacedWord("TOE", "Foot digit", 2, 0, false, category = "X"), placed)
+
+        // Fully used tiny pool: still a board, not "empty".
+        val tiny = listOf(RawEntry("CAT", "Pet", "X"), RawEntry("TOE", "Foot digit", "X"), RawEntry("COW", "Farm animal", "X"))
+        val board = generateCrossword(tiny, 3, tiny.map { it.answer }.toSet(), Random(1))
+        assertEquals(3, board.size)
+        assertValidBoard(board)
+    }
+
+    @Test fun unusedWordBeatsUsedWordForTheSameSpot() {
+        val gridChar = HashMap<Cell, Char>()
+        val gridDir  = HashMap<Cell, Boolean?>()
+        addToGrid(PlacedWord("CAT", "", 0, 0, true), gridChar, gridDir)
+        val pool  = listOf(RawEntry("TOE", "Foot digit", "X"), RawEntry("TIE", "Neckwear", "X"))
+        val index = buildWordIndex(pool)
+        for (used in listOf("TOE", "TIE")) {
+            val placed = findBestPlacement(2, 0, false, 'T', setOf("TOE", "TIE"), index, gridChar, gridDir, setOf(used))
+            assertTrue("$used is used", placed != null && placed.word != used)
+        }
+    }
+
+    @Test fun partiallyUsedPoolPrefersUnusedAnswers() {
+        for (cat in listOf("PETS", "FOOD", "CITIES")) {
+            val pool = data.entries.filter { it.category == cat }
+            val answers = pool.map { it.answer }.distinct().sorted()
+            val used = answers.filterIndexed { i, _ -> i % 2 == 0 }.toSet()   // half the category seen before
+            for (seed in 1..5) {
+                val board = generateCrossword(pool, Difficulty.HARD.wordCount, used, Random(seed))
+                assertEquals(Difficulty.HARD.wordCount, board.size)
+                val usedCount = board.count { it.word in used }
+                assertTrue("$cat/$seed placed $usedCount used of ${board.size}", usedCount * 4 <= board.size)
+                assertValidBoard(board)
+            }
+        }
+    }
+
+    /**
+     * The early stop used to compare the BEST board's size with THIS attempt's
+     * intersections. Stopping early must only ever return a board that meets the
+     * bar; otherwise the result is the same as spending every attempt. (Because a
+     * connected board of n words always has ≥ n − 1 crossings, the old mix-up was
+     * never observable on real data — this pins the invariant, see below.)
+     */
+    @Test fun earlyStopOnlyReturnsBoardsThatMeetTheBar() {
+        fun intersections(b: List<PlacedWord>) = b.flatMap { it.cells() }.groupingBy { it }.eachCount().count { it.value > 1 }
+        var stoppedEarly = 0
+        for (cat in data.categories) {
+            val pool = data.entries.filter { it.category == cat }
+            for (diff in listOf(Difficulty.EXPERT, Difficulty.GENIUS)) for (seed in 1..2) {
+                val target = diff.wordCount
+                val early  = generateCrossword(pool, target, emptySet(), Random(seed))
+                val full   = generateCrossword(pool, target, emptySet(), Random(seed), stopEarly = false)
+                if (early == full) continue
+                stoppedEarly++
+                assertEquals("$cat/$diff/$seed stopped early with a short board", target, early.size)
+                assertTrue("$cat/$diff/$seed stopped early with ${intersections(early)} intersections",
+                    intersections(early) >= target - 2)
+            }
+        }
+        assertTrue("early stop never triggered; test is vacuous", stoppedEarly > 0)
+    }
+
     @Test fun emptyOrTinyPoolReturnsEmptyInsteadOfCrashing() {
         assertTrue(generateCrossword(emptyList(), 8, emptySet(), Random(1)).isEmpty())
         val one = listOf(RawEntry("CAT", "Pet", "PETS"))
@@ -76,6 +148,22 @@ class GeneratorTest {
         val placed = findBestPlacement(0, 0, false, 'C', setOf("COW"), index, gridChar, gridDir, emptySet())
         assertNotNull(placed)
         assertEquals(PlacedWord("COW", "Farm animal", 0, 0, false, category = "NATURE"), placed)
+    }
+
+    @Test fun everyBoardHasAtLeastOneCrossingPerAddedWord() {
+        fun intersections(b: List<PlacedWord>) = b.flatMap { it.cells() }.groupingBy { it }.eachCount().count { it.value > 1 }
+        for (cat in data.categories) for (diff in Difficulty.entries) {
+            val board = generateCrossword(data.entries.filter { it.category == cat }, diff.wordCount, emptySet(), Random(11))
+            assertTrue("$cat/$diff", intersections(board) >= board.size - 1)
+        }
+    }
+
+    @Test fun boardValidatorRejectsAWordHiddenInsideALongerOne() {
+        val nested = listOf(PlacedWord("CATS", "", 0, 0, true, 1), PlacedWord("CAT", "", 0, 0, true, 1))
+        val error = runCatching { assertValidBoard(nested) }.exceptionOrNull()
+        assertTrue("CAT inside CATS must be rejected", error is AssertionError && "maximal" in error.message.orEmpty())
+        val shifted = listOf(PlacedWord("SCAT", "", 0, 0, true, 1), PlacedWord("CAT", "", 1, 0, true, 2))
+        assertTrue(runCatching { assertValidBoard(shifted) }.exceptionOrNull() is AssertionError)
     }
 
     @Test fun areaIsInclusiveOnBothAxes() {
