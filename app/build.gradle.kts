@@ -67,6 +67,7 @@ android {
         // 2026-10-03 (new apps and updates must target API 36 from 2026-08-31).
         // Re-verify and bump when Google publishes the next level.
         buildConfigField("int", "PLAY_REQUIRED_TARGET_API", "36")
+        buildConfigField("String", "COMPILE_SDK_LABEL", "\"36.1\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

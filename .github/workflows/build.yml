@@ -56,6 +56,41 @@ jobs:
           echo "APK: $NAME"
           sha256sum "$NAME"
 
+      # ── Inspect the APK actually built (Tartaria lesson: targetSdk 36 does not
+      # prove 16 KB compliance; read the artifact itself). ───────────────────
+      - name: Inspect built APK (identity, permissions, native libs, 16 KB)
+        continue-on-error: true
+        run: |
+          APK="${{ steps.apk.outputs.name }}"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $(basename "$BT")"
+          echo "=== gradle distribution sha256 (pin this in gradle-wrapper.properties) ==="
+          sha256sum ~/.gradle/wrapper/dists/gradle-*-bin/*/gradle-*-bin.zip 2>/dev/null || echo "(wrapper zip not retained)"
+          echo "=== APK size / sha256 ==="
+          ls -l "$APK"; sha256sum "$APK"
+          echo "=== badging (package, versions, sdk) ==="
+          "$BT/aapt2" dump badging "$APK" | grep -E "^package:|sdkVersion|targetSdkVersion|native-code|compileSdk"
+          echo "=== effective permissions (merged manifest) ==="
+          "$BT/aapt2" dump permissions "$APK" | sort -u
+          echo "=== native libraries ==="
+          mkdir -p "$RUNNER_TEMP/apkx" && unzip -q -o "$APK" 'lib/*' -d "$RUNNER_TEMP/apkx" || true
+          SOS=$(find "$RUNNER_TEMP/apkx" -name '*.so' 2>/dev/null | sort)
+          if [ -z "$SOS" ]; then
+            echo "NO native .so libraries in the APK: 16 KB ELF check not applicable"
+          else
+            BAD=0
+            for so in $SOS; do
+              A=$(readelf -lW "$so" | awk '$1=="LOAD"{print $NF}' | sort -u | head -1)
+              echo "$so  LOAD align=$A"
+              [ $((A)) -ge 16384 ] || BAD=$((BAD+1))
+            done
+            echo "16 KB ELF RESULT: $BAD library(ies) below 0x4000"
+            [ "$BAD" -eq 0 ] || exit 1
+          fi
+          echo "=== zipalign -c -P 16 (packaging) ==="
+          "$BT/zipalign" -c -P 16 -v 4 "$APK" > "$RUNNER_TEMP/za.txt" 2>&1 && echo "ZIPALIGN 16 KB: PASS" || { tail -5 "$RUNNER_TEMP/za.txt"; echo "ZIPALIGN 16 KB: FAIL"; exit 1; }
+          "$BT/apksigner" verify --print-certs "$APK" | head -3
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
