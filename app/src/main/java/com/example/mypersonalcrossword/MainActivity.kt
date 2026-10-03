@@ -273,7 +273,7 @@ object BuildInfo {
             "Target SDK"              to "$target",
             "Play required target"    to "${BuildConfig.PLAY_REQUIRED_TARGET_API} (as verified 2026-10-03)",
             "Play API compliant"      to playOk,
-            "Updates"                 to "OTA: not applicable (native app, nothing is updated outside the APK). Update state: new builds are installed as APKs"
+            "Updates"                 to "Installed Android build. New app builds are installed through Android distribution"
         )
     }
 
