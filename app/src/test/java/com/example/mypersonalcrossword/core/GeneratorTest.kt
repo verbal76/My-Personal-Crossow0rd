@@ -86,18 +86,23 @@ class GeneratorTest {
     }
 
     @Test fun partiallyUsedPoolPrefersUnusedAnswers() {
+        // Half of each category already seen. Repeats should be rare overall (about
+        // 6% today; 10% before board scoring counted them) and never dominate a board.
+        var usedTotal = 0; var wordsTotal = 0
         for (cat in listOf("PETS", "FOOD", "CITIES")) {
             val pool = data.entries.filter { it.category == cat }
             val answers = pool.map { it.answer }.distinct().sorted()
             val used = answers.filterIndexed { i, _ -> i % 2 == 0 }.toSet()   // half the category seen before
-            for (seed in 1..5) {
+            for (seed in 1..10) {
                 val board = generateCrossword(pool, Difficulty.HARD.wordCount, used, Random(seed))
                 assertEquals(Difficulty.HARD.wordCount, board.size)
                 val usedCount = board.count { it.word in used }
-                assertTrue("$cat/$seed placed $usedCount used of ${board.size}", usedCount * 4 <= board.size)
+                assertTrue("$cat/$seed placed $usedCount used of ${board.size}", usedCount * 3 <= board.size)
+                usedTotal += usedCount; wordsTotal += board.size
                 assertValidBoard(board)
             }
         }
+        assertTrue("$usedTotal of $wordsTotal placed answers were repeats", usedTotal * 10 <= wordsTotal)
     }
 
     /**
@@ -177,5 +182,29 @@ class GeneratorTest {
         val cells = buildGridCells(words).associateBy { Pair(it.x, it.y) }
         assertEquals(1, cells.getValue(Pair(0, 0)).number)
         assertEquals(null, cells.getValue(Pair(1, 0)).number)
+    }
+
+    /**
+     * Boards must branch, not be combs: one long word crossed by about half of all
+     * the others (the old first-in-first-out growth). Measured as the most crossings
+     * on any one word divided by the board's word count, averaged per difficulty.
+     */
+    @Test fun boardsBranchInsteadOfFormingACombAroundOneSpine() {
+        val entries = TestAssets.wordData.entries
+        val cats = entries.map { it.category }.distinct().sorted()
+        fun spine(board: List<PlacedWord>): Double {
+            val count = HashMap<Pair<Int, Int>, Int>()
+            board.forEach { w -> w.cells().forEach { count[it] = (count[it] ?: 0) + 1 } }
+            return board.maxOf { w -> w.cells().count { (count[it] ?: 0) > 1 } }.toDouble() / board.size
+        }
+        for (diff in listOf(Difficulty.HARD, Difficulty.EXPERT)) {
+            val boards = cats.map { c -> generateCrossword(entries.filter { it.category == c }, diff.wordCount, emptySet(), SplitMix64(c.length * 7919L)) }
+                .filter { it.size == diff.wordCount }
+            val avg = boards.map(::spine).average()
+            assertTrue("$diff average spine %.2f (comb boards were ~0.49)".format(avg), avg <= 0.42)
+        }
+        val dailies = (1..20).map { DailyPuzzle.generate(entries, "2026-11-%02d".format(it)) }
+        val avg = dailies.map(::spine).average()
+        assertTrue("Daily average spine %.2f (comb boards were 0.49)".format(avg), avg <= 0.40)
     }
 }

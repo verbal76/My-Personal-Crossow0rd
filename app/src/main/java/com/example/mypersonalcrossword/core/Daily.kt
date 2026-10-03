@@ -30,8 +30,10 @@ object DailyPuzzle {
      *     early stop tracks the best board's intersections.
      * v3: each day draws from a seeded [DAILY_POOL_SIZE]-entry sample (the same
      *     longest answers were in every Daily).
+     * v4: board shape — random, centre-biased growth, a real area penalty and a
+     *     stricter early stop (boards were combs around one long spine).
      */
-    const val ALGORITHM_VERSION = 3
+    const val ALGORITHM_VERSION = 4
 
     /** Entries each day's Daily is built from (a seeded sample of the whole list). */
     const val DAILY_POOL_SIZE = 400

@@ -71,9 +71,9 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 - `CrosswordGrid` draws everything on one Canvas. Pan and zoom state is read only during draw, so gestures never recompose. Scale 1 fits the whole board; small cells open zoomed in.
 
 ### Puzzle generation (`core/Generator.kt`)
-- BFS placement over a `length → position → char` index, up to `GENERATOR_ATTEMPTS` (50) boards, keeping the best-scoring one. It stops early on a good board.
+- Placement over a `length → position → char` index, up to `GENERATOR_ATTEMPTS` (50) boards, keeping the best-scoring one. Growth picks a random frontier cell, preferring the one nearest the anchor (`TOURNAMENT`); the board score counts words, crossings, bounding-box area and repeats, and it stops early only once a full board has extra crossings. Strict first-in-first-out growth made comb-shaped boards around one long spine; `boardsBranchInsteadOfFormingACombAroundOneSpine` guards this.
 - **All randomness comes from the `rng` parameter.** A seeded `Random` gives an identical board. Maps are iterated in insertion order.
-- Used words are deprioritised, never banned. Each `PlacedWord` carries its source `category`.
+- Used words are deprioritised (per placement and per board), never banned. Each `PlacedWord` carries its source `category`.
 - `numberBoard()` normalises the board to (0,0) and numbers clues in reading order.
 
 ### Daily Puzzle (`core/Daily.kt`)
@@ -82,7 +82,7 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 - The pool is sorted canonically before generation, and player history is never used. Same date and same word list give the same grid on every device.
 - Rewards are paid once per UTC day per profile (`dailydone_<name>`). Daily words never enter per-category used-word history.
 - Each day builds from its own seeded `DAILY_POOL_SIZE` (400) sample of the list; over the whole list the scoring always placed the same longest answers (four were in every Daily). `dailyAnswersVaryFromDayToDay` guards this.
-- Bump `ALGORITHM_VERSION` (now 3) and re-pin `DailyGoldenTest` if generation changes on purpose.
+- Bump `ALGORITHM_VERSION` (now 4) and re-pin `DailyGoldenTest` if generation changes on purpose.
 
 ### Persistence (`SaveManager`, SharedPreferences `CrosswordSaves`)
 - **Saves:** one `PuzzleSession` per `SaveSlot`, stored under `psession_<name>_<slotId>` with an index in `saves_<name>`.
