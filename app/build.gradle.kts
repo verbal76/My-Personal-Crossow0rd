@@ -63,6 +63,11 @@ android {
         buildConfigField("String", "BUILD_TIME_UTC", "\"$buildTimeUtc\"")
         buildConfigField("String", "BUILD_ORIGIN", "\"$buildOrigin\"")
 
+        // Google Play's target-API rule as verified from developer.android.com on
+        // 2026-10-03 (new apps and updates must target API 36 from 2026-08-31).
+        // Re-verify and bump when Google publishes the next level.
+        buildConfigField("int", "PLAY_REQUIRED_TARGET_API", "36")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -87,7 +92,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "SIGNING_STATE", "\"DEBUG (committed debug keystore)\"")
+        }
         release {
+            buildConfigField("String", "SIGNING_STATE",
+                if (hasReleaseSigning) "\"RELEASE KEY (upload-key candidate; not Play-verified)\"" else "\"UNSIGNED\"")
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }

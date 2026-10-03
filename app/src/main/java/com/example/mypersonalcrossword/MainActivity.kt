@@ -254,18 +254,39 @@ object BuildInfo {
         }.getOrNull()
         val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'UTC'", java.util.Locale.US)
             .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+        val target = context.applicationInfo.targetSdkVersion
+        val playOk = if (target >= BuildConfig.PLAY_REQUIRED_TARGET_API) "YES" else "NO"
         return listOfNotNull(
+            "Application"             to "My Personal Crossword",
+            "Package"                 to BuildConfig.APPLICATION_ID,
             "Version"                 to BuildConfig.VERSION_NAME,
             "Build number"            to "${BuildConfig.VERSION_CODE} (versionCode)",
             "Source commit"           to BuildConfig.GIT_SHA,
             "Build type"              to BuildConfig.BUILD_TYPE,
+            "Signing"                 to BuildConfig.SIGNING_STATE,
             "Built"                   to BuildConfig.BUILD_TIME_UTC.replace('T', ' ').replace("Z", " UTC"),
             "Built by"                to BuildConfig.BUILD_ORIGIN,
-            "Package"                 to BuildConfig.APPLICATION_ID,
             pkg?.let { "Installed / updated" to "${fmt.format(java.util.Date(it.firstInstallTime))} / ${fmt.format(java.util.Date(it.lastUpdateTime))}" },
             "Android"                 to "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
-            "Updates"                 to "No over-the-air updates — new builds are installed as APKs"
+            "Device"                  to "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
+            "Locale"                  to java.util.Locale.getDefault().toLanguageTag(),
+            "Target SDK"              to "$target",
+            "Play required target"    to "${BuildConfig.PLAY_REQUIRED_TARGET_API} (as verified 2026-10-03)",
+            "Play API compliant"      to playOk,
+            "Updates"                 to "OTA: not applicable (native app, nothing is updated outside the APK). Update state: new builds are installed as APKs"
         )
+    }
+
+    /** Plain text for pasting into a chat: a labelled header, the rows, and a capture time. No saves, names or secrets. */
+    fun diagnosticsText(context: Context): String {
+        val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss 'UTC'", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date())
+        return buildString {
+            appendLine("=== MY PERSONAL CROSSWORD DIAGNOSTICS ===")
+            details(context).forEach { appendLine("${it.first}: ${it.second}") }
+            appendLine("Captured at: $stamp")
+            append("=== END DIAGNOSTICS ===")
+        }
     }
 }
 
@@ -291,9 +312,9 @@ fun BuildInfoDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = {
-                clipboard.setText(AnnotatedString(rows.joinToString("\n") { "${it.first}: ${it.second}" }))
+                clipboard.setText(AnnotatedString(BuildInfo.diagnosticsText(context)))
                 copied = true
-            }) { Text(if (copied) "Copied ✓" else "Copy") }
+            }) { Text(if (copied) "Copied ✓" else "Copy diagnostics") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
