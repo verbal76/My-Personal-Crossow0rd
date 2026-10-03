@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew clean
 ```
 
-**Build configuration:** Gradle 9.3.1, AGP 9.1.1, Kotlin 2.2.10, compileSdk 36.1 / targetSdk 36, minSdk 24, Java 11 bytecode (build runs on JDK 17+), Compose BOM 2026.02.01, lifecycle 2.9.4 (runtime + viewmodel-compose), activity-compose 1.11.0, core-ktx 1.17.0, Firebase BoM 34.12.0 (Auth, Realtime Database only; no analytics or ads SDKs).
+**Build configuration:** Gradle 9.6.1, AGP 9.4.0, Kotlin 2.3.21, compileSdk 36.1 / targetSdk 36, minSdk 24, Java 11 bytecode (build runs on JDK 17+), Compose BOM 2026.06.01, lifecycle 2.10.0 (runtime + viewmodel-compose), activity-compose 1.13.0, core-ktx 1.18.0, Firebase BoM 34.12.0 (Auth, Realtime Database only; no analytics or ads SDKs). Compose 1.12 / lifecycle 2.11 / core 1.19 and newer require compileSdk 37, so they are held back until compileSdk is deliberately raised; see `docs/STACK.md`.
 
 **CI** (`.github/workflows/build.yml`) runs on every push to `main` and `claude/**` and on PRs: unit tests → `assembleDebug` (APK renamed `MyPersonalCrossword-<commit>-debug.apk`, uploaded as the `app-debug-apk-<commit>` artifact, SHA-256 printed in the log) → `lintDebug`. The build carries its commit, build number and build time as `BuildConfig` fields, shown in Settings → About → Build details. In CI `versionCode` is `1000 + GITHUB_RUN_NUMBER` (monotonic across branches, so every APK installs over the last; local builds fall back to the commit count) and `versionName` is `1.0.<versionCode>`. When the `RELEASE_KEYSTORE_BASE64` secret exists, CI also builds a signed release APK (`app-release-apk-<commit>`); see `docs/EXTERNAL_ACTIONS.md`. The test and lint reports are uploaded as the `reports` artifact.
 

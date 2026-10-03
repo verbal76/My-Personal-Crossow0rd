@@ -27,3 +27,6 @@ Settings gear → "Build details" (`BuildInfoDialog`, `BuildInfo` in `MainActivi
 
 ## D. Hot Attic Games studio splash
 NOT IMPLEMENTED: the canonical asset `branding/Hot_Attic_Games_Master_Logo.png` does not exist in this repository. Searched on 2026-10-03: every local and remote branch, all history and PR refs, git objects, worktrees and the filesystem. No file with a matching name or purpose exists. It must be supplied by the owner or portfolio manager; no substitute is to be used. Supply it and the card can be added after the opening card without touching the existing startup sequence. Native build required.
+
+## E. Native stack
+See `docs/STACK.md`. Branch `claude/native-stack-modernization` carries Gradle 9.6.1, AGP 9.4.0, Kotlin 2.3.21 and Compose BOM 2026.06.01. It is a debug-signed physical-test candidate only.
