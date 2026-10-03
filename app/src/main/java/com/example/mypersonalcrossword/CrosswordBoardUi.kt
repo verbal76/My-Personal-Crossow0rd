@@ -38,6 +38,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -85,11 +87,18 @@ fun CrosswordGrid(
     wave:         GridFx?,
     shake:        GridFx?,
     onTapCell:    (Cell) -> Unit,
-    modifier:     Modifier = Modifier
+    modifier:     Modifier = Modifier,
+    // Screen-reader actions on the grid (TalkBack can't aim taps at canvas cells).
+    onNextClue:        (() -> Unit)? = null,
+    onPreviousClue:    (() -> Unit)? = null,
+    onSwitchDirection: (() -> Unit)? = null
 ) {
     if (cells.isEmpty()) { Box(modifier); return }
     val density = LocalDensity.current
     val tapCell by rememberUpdatedState(onTapCell)
+    val nextClue by rememberUpdatedState(onNextClue)
+    val previousClue by rememberUpdatedState(onPreviousClue)
+    val switchDirection by rememberUpdatedState(onSwitchDirection)
     val minX = remember(cells) { cells.minOf { it.x } }
     val minY = remember(cells) { cells.minOf { it.y } }
     val gridW = remember(cells) { cells.maxOf { it.x } - minX + 1 }
@@ -196,7 +205,14 @@ fun CrosswordGrid(
         modifier
             .clipToBounds()
             .onSizeChanged { viewSize = it }
-            .semantics { contentDescription = gridDescription }
+            .semantics {
+                contentDescription = gridDescription
+                customActions = listOfNotNull(
+                    nextClue?.let { CustomAccessibilityAction("Next clue") { nextClue?.invoke(); true } },
+                    previousClue?.let { CustomAccessibilityAction("Previous clue") { previousClue?.invoke(); true } },
+                    switchDirection?.let { CustomAccessibilityAction("Switch across or down") { switchDirection?.invoke(); true } }
+                )
+            }
             .pointerInput(board, baseCell) {
                 detectTransformGestures { centroid, pan, zoomBy, _ ->
                     val newScale = (zoom * zoomBy).coerceIn(1f, maxScale)

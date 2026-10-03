@@ -149,6 +149,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -1305,7 +1309,10 @@ fun GradientBtn(
     ) {
         BevelHighlight()
         Text(text, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                // Spoken without decorative emoji/arrows ("🌐 Host Game" was read as
+                // "globe with meridians, Host Game").
+                .semantics { contentDescription = spokenLabel(text) })
     }
 }
 
@@ -3267,6 +3274,9 @@ fun CrosswordApp() {
                                 wave         = waveFx,
                                 shake        = shakeFx,
                                 onTapCell    = { onCellTap(it) },
+                                onNextClue        = { moveToNextUnsolved(true) },
+                                onPreviousClue    = { moveToNextUnsolved(false) },
+                                onSwitchDirection = { toggleDirection() },
                                 modifier     = Modifier.fillMaxSize().padding(6.dp)
                             )
                         }
@@ -5839,6 +5849,13 @@ fun colorToHsv(color: Color): FloatArray {
 fun HueRingPicker(hue: Float, onHueChange: (Float) -> Unit, modifier: Modifier = Modifier) {
     Canvas(
         modifier = modifier
+            // Adjustable for screen readers (the ring is drag-only otherwise).
+            .semantics {
+                contentDescription = "Hue"
+                stateDescription = "${hue.toInt()} degrees"
+                progressBarRangeInfo = ProgressBarRangeInfo(hue, 0f..360f)
+                setProgress { onHueChange(it.coerceIn(0f, 359f)); true }
+            }
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
                     val cx = size.width / 2f;  val cy = size.height / 2f
@@ -5906,6 +5923,12 @@ fun GradientSlider(
                 .height(36.dp)
                 .clip(RoundedCornerShape(50))
                 .background(Brush.horizontalGradient(listOf(startColor, endColor)))
+                .semantics {
+                    contentDescription = label
+                    stateDescription = "${(value * 100).toInt()} percent"
+                    progressBarRangeInfo = ProgressBarRangeInfo(value, 0f..1f)
+                    setProgress { onValueChange(it.coerceIn(0f, 1f)); true }
+                }
                 .pointerInput(Unit) {
                     detectTapGestures { offset ->
                         onValueChange((offset.x / size.width).coerceIn(0f, 1f))
