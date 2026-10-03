@@ -1054,6 +1054,10 @@ object FirebaseGameManager {
                 if (status != STATUS_WAITING) { reason = "That game has already started or ended."; return Transaction.abort() }
                 val existing = current.child("guestName").getValue(String::class.java) ?: ""
                 if (existing.isNotEmpty()) { reason = "That game is already full."; return Transaction.abort() }
+                // The host's app is gone (presence false): don't seat a guest in a dead lobby.
+                if (current.child("hostOnline").getValue(Boolean::class.java) == false) {
+                    reason = "The host has gone offline. Ask them for a new code."; return Transaction.abort()
+                }
                 current.child("guestName").value = guestName
                 current.child("guestUid").value  = uid
                 return Transaction.success(current)
@@ -1386,6 +1390,10 @@ fun CrosswordApp() {
     var soundEnabled       by rememberSaveable { mutableStateOf(saveManager.isSoundEnabled()) }
     var musicVolume        by rememberSaveable { mutableFloatStateOf(saveManager.getMusicVolume()) }
     var musicEnabled       by rememberSaveable { mutableStateOf(saveManager.isMusicEnabled()) }
+    // Music has two controls: Settings' play/pause is the persistent Music on/off;
+    // the home card's pauses for this session only (and must survive a trip to the
+    // background — ON_RESUME used to restart it).
+    var musicPausedByUser  by rememberSaveable { mutableStateOf(false) }
     var hapticsEnabled     by rememberSaveable { mutableStateOf(saveManager.isHapticsEnabled()) }
     // Cell color stored as ARGB Int so rememberSaveable handles it without a custom saver
     var currentCellColorArgb   by rememberSaveable { mutableIntStateOf(android.graphics.Color.WHITE) }
@@ -1551,8 +1559,11 @@ fun CrosswordApp() {
             vind           = vindSnapshot(),
             vindTimerSecs  = vindTimerSeconds,
             // Mid-clue (the answerer already had the phone): keep the clock where it was.
+            // While the hand-off dialog is up the clock hasn't restarted yet, so keep
+            // whatever it is due to resume from (a save there used to reset it to full).
             vindSecondsLeft = if (activeGameMode == GameMode.VINDICTIVE && vindPhase == VindicativePhase.OPPONENT_WAIT &&
-                                  vindAssignedWord != null && !showTurnDialog) vindOpponentCountdown else null,
+                                  vindAssignedWord != null)
+                                  (if (showTurnDialog) vindResumeSeconds else vindOpponentCountdown) else null,
             bgArgb         = currentBgColor.toArgb(),
             bgImage        = currentBgImageName
         )
@@ -1654,6 +1665,7 @@ fun CrosswordApp() {
 
     fun launchPuzzle(category: String, difficulty: Difficulty, combined: List<String> = emptyList()) {
         if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
+        vindResumeSeconds  = null   // a fresh puzzle never inherits a saved answer clock
         activeCategory     = category
         activeDifficulty   = difficulty
         combinedCategories = combined
@@ -1724,6 +1736,7 @@ fun CrosswordApp() {
         // answer clock that was running on the puzzle screen.
         vindPhase        = VindicativePhase.PICK_OWN
         vindAssignedWord = null
+        vindResumeSeconds = null
         if (activeGameMode == GameMode.DAILY) activeGameMode = modeBeforeDaily
         activeDailyKey = null
         isDailyPuzzle  = false
@@ -2055,6 +2068,8 @@ fun CrosswordApp() {
                         vindPhase == VindicativePhase.OPPONENT_WAIT && vindAssignedWord != null) {
                         turnDialogTitle   = "Pass the Phone!"
                         turnDialogMessage = "✋ ${nameOf(vindCurrentPlayer)} — your clue is waiting!"
+                        // The countdown is saveable: resume it rather than a full clock.
+                        if (vindResumeSeconds == null) vindResumeSeconds = vindOpponentCountdown
                         showTurnDialog    = true
                     }
                 }
@@ -2134,17 +2149,19 @@ fun CrosswordApp() {
                 saveManager.addScore(playerName, award)
                 saveManager.addCompleted(playerName)
                 creditWords(playerName)
+                // Locally each player pays for their own hints, so each gets their own net.
                 val myHints    = if (isOnlineGame) hints else team.p1Hints
+                val myNet      = Economy.netPoints(activeDifficulty, isDaily, myHints)
                 saveManager.saveStat(playerName, StatRecord(
                     activeCategory, activeDifficulty.name, GameMode.TEAM.name,
-                    myHints, elapsedSeconds, net, player2Name))
+                    myHints, elapsedSeconds, myNet, player2Name))
                 if (creditP2) {
                     saveManager.addScore(player2Name, award)
                     saveManager.addCompleted(player2Name)
                     creditWords(player2Name)
                     saveManager.saveStat(player2Name, StatRecord(
                         activeCategory, activeDifficulty.name, GameMode.TEAM.name,
-                        team.p2Hints, elapsedSeconds, net, playerName))
+                        team.p2Hints, elapsedSeconds, Economy.netPoints(activeDifficulty, isDaily, team.p2Hints), playerName))
                 }
             }
             GameMode.VINDICTIVE -> {
@@ -2187,7 +2204,7 @@ fun CrosswordApp() {
     // directly by the sliders; restarting playback on every drag tick restarted the
     // fade and rewrote the whole prefs file each time.
     LaunchedEffect(musicEnabled) {
-        if (musicEnabled) AmbientMusicPlayer.start(musicVolume)
+        if (musicEnabled) { musicPausedByUser = false; AmbientMusicPlayer.start(musicVolume) }
         else AmbientMusicPlayer.stop()
         saveManager.setMusicEnabled(musicEnabled)
     }
@@ -2211,7 +2228,7 @@ fun CrosswordApp() {
                 }
                 Lifecycle.Event.ON_RESUME  -> {
                     appResumed = true
-                    if (musicEnabled) AmbientMusicPlayer.start(musicVolume)
+                    if (musicEnabled && !musicPausedByUser) AmbientMusicPlayer.start(musicVolume)
                 }
                 Lifecycle.Event.ON_DESTROY -> AmbientMusicPlayer.release()
                 else -> {}
@@ -2304,7 +2321,8 @@ fun CrosswordApp() {
 
             if (status == FirebaseGameManager.STATUS_ABANDONED && !puzzleSolved) {
                 val who = player2Name.ifBlank { if (onlineRole == OnlineRole.HOST) "Your opponent" else "The host" }
-                onlineNotice = "$who left the game."
+                // Don't overwrite the more specific "lost connection" notice.
+                if (onlineNotice == null) onlineNotice = "$who left the game."
                 return@listen
             }
             // The other phone's connection. The server sets its flag false when it drops;
@@ -2945,8 +2963,8 @@ fun CrosswordApp() {
                 // (Settings) made the card vanish and the layout jump, with no way back
                 // from home.
                 onMusicToggle         = {
-                    if (AmbientMusicPlayer.isPlaying) AmbientMusicPlayer.stop()
-                    else AmbientMusicPlayer.start(musicVolume)
+                    if (AmbientMusicPlayer.isPlaying) { AmbientMusicPlayer.stop(); musicPausedByUser = true }
+                    else { musicPausedByUser = false; AmbientMusicPlayer.start(musicVolume) }
                 },
                 onVolumeChange        = { v ->
                     musicVolume = v
@@ -3702,7 +3720,12 @@ fun CrosswordApp() {
                             IconButton(onClick = { AmbientMusicPlayer.previous() }, modifier = Modifier.size(48.dp)) {
                                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous", tint = settingsTrackColor)
                             }
-                            IconButton(onClick = { musicEnabled = !musicEnabled }, modifier = Modifier.size(48.dp)) {
+                            // Persistent Music on/off (the home card's pause is per session).
+                            IconButton(onClick = {
+                                if (AmbientMusicPlayer.isPlaying) musicEnabled = false
+                                else if (!musicEnabled) musicEnabled = true
+                                else { musicPausedByUser = false; AmbientMusicPlayer.start(musicVolume) }
+                            }, modifier = Modifier.size(48.dp)) {
                                 Icon(
                                     imageVector = if (AmbientMusicPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (AmbientMusicPlayer.isPlaying) "Pause music" else "Play music",
@@ -4930,8 +4953,16 @@ fun CrosswordApp() {
                                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                             }
                             Line("Completion reward", "+${result.reward}")
-                            if (result.hints > 0) Line("Hints used", "−${result.hints}")
-                            Line("Net for this puzzle", "+${result.net}", strong = true)
+                            if (result.mode == GameMode.TEAM && !isOnlineGame) {
+                                // Same phone: each player paid for their own hints.
+                                for ((name, h) in listOf(p0 to result.team.p1Hints, p1 to result.team.p2Hints)) {
+                                    val n = Economy.netPoints(activeDifficulty, result.isDaily, h)
+                                    Line(if (h > 0) "$name (−$h hint${if (h == 1) "" else "s"})" else name, "+$n", strong = true)
+                                }
+                            } else {
+                                if (result.hints > 0) Line("Hints used", "−${result.hints}")
+                                Line("Net for this puzzle", "+${result.net}", strong = true)
+                            }
                             if (result.dailyAlreadyPaid)
                                 Text("Today's Daily was already counted — no extra points this time.",
                                     style = MaterialTheme.typography.bodySmall,
