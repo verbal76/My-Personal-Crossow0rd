@@ -1262,7 +1262,7 @@ fun TitleMark() {
 }
 
 /** Minimum time the opening card stays up, so it reads as intentional rather than a flash. */
-const val OPENING_CARD_MIN_MS = 1200L
+const val OPENING_CARD_MIN_MS = 2500L
 /** Longest the opening card waits for startup loading after that minimum. */
 const val OPENING_CARD_MAX_WAIT_MS = 5000L
 
