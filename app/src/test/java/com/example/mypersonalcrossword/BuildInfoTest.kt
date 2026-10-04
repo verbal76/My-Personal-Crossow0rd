@@ -24,8 +24,13 @@ class BuildInfoTest {
         assertEquals(1000 + run, BuildConfig.VERSION_CODE)
     }
 
-    @Test fun versionNameCarriesTheBuildNumber() {
-        assertEquals("1.0.${BuildConfig.VERSION_CODE}", BuildConfig.VERSION_NAME)
+    /** The public version is the single integer in the root VERSION file ("v7"), never the versionCode. */
+    @Test fun versionNameIsThePublicSequentialVersion() {
+        val file = java.io.File("../VERSION").takeIf { it.exists() } ?: java.io.File("VERSION")
+        val n = file.readText().trim().toInt()
+        assertTrue("VERSION must be a positive integer", n >= 1)
+        assertEquals("v$n", BuildConfig.VERSION_NAME)
+        assertEquals("My Personal Crossword", BuildConfig.PRODUCT_NAME)
     }
 
     @Test fun buildTimeIsRecorded() {
