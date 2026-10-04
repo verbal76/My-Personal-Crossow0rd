@@ -77,6 +77,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -1263,6 +1264,8 @@ fun TitleMark() {
 
 /** Minimum time the opening card stays up, so it reads as intentional rather than a flash. */
 const val OPENING_CARD_MIN_MS = 2500L
+/** How long the Hot Attic Games studio card is shown on a cold start (before the opening card). */
+const val STUDIO_SPLASH_MS = 1500L
 /** Longest the opening card waits for startup loading after that minimum. */
 const val OPENING_CARD_MAX_WAIT_MS = 5000L
 
@@ -1284,6 +1287,27 @@ fun OpeningCard() {
         contentAlignment = Alignment.Center
     ) {
         TitleMark()
+    }
+}
+
+// Hot Attic Games studio card: the canonical logo (res/drawable-nodpi/hot_attic_logo.png,
+// byte-identical to branding/Hot_Attic_Games_Master_Logo.png) on solid black, scaled to fit
+// with its aspect ratio kept (never cropped or stretched). Silent. Swallows taps.
+@Composable
+fun StudioSplash() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(Unit) { detectTapGestures { } },
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter            = painterResource(R.drawable.hot_attic_logo),
+            contentDescription = "Hot Attic Games",
+            contentScale       = ContentScale.Fit,
+            modifier           = Modifier.fillMaxWidth().padding(horizontal = 20.dp)
+        )
     }
 }
 
@@ -1362,6 +1386,9 @@ fun CrosswordApp() {
     var showOpeningCard by rememberSaveable {
         mutableStateOf(appMode == AppMode.LOGIN && saveManager.getLastUser().isNotBlank())
     }
+    // Studio card: once per cold start, before the opening card. It is remembered across
+    // recreation, so rotation or a theme change never replays it.
+    var showStudioSplash by rememberSaveable { mutableStateOf(true) }
     var startupDone by remember { mutableStateOf(false) }
 
     var currentScore by rememberSaveable { mutableIntStateOf(0) }
@@ -2105,8 +2132,14 @@ fun CrosswordApp() {
 
     // Hold the opening card for its minimum time and until startup has finished
     // (capped, so a failed load can never leave the player stuck on it).
-    LaunchedEffect(showOpeningCard) {
-        if (!showOpeningCard) return@LaunchedEffect
+    LaunchedEffect(showStudioSplash) {
+        if (!showStudioSplash) return@LaunchedEffect
+        delay(STUDIO_SPLASH_MS)
+        showStudioSplash = false
+    }
+    // The opening card's clock starts after the studio card, so each is seen in full.
+    LaunchedEffect(showOpeningCard, showStudioSplash) {
+        if (!showOpeningCard || showStudioSplash) return@LaunchedEffect
         delay(OPENING_CARD_MIN_MS)
         withTimeoutOrNull(OPENING_CARD_MAX_WAIT_MS) { snapshotFlow { startupDone }.first { it } }
         showOpeningCard = false
@@ -5064,6 +5097,10 @@ fun CrosswordApp() {
     // Drawn last so it covers every screen; fades into home when it's done.
     AnimatedVisibility(visible = showOpeningCard, enter = fadeIn(), exit = fadeOut(tween(400))) {
         OpeningCard()
+    }
+    // Above everything, including the opening card: the studio card is the first thing seen.
+    AnimatedVisibility(visible = showStudioSplash, enter = EnterTransition.None, exit = fadeOut(tween(300))) {
+        StudioSplash()
     }
 }
 

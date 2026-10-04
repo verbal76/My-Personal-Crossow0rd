@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark-mode window theme: without it the window behind the first Compose frame
-         is the light theme's white, which flashed on a dark-mode cold start. -->
+    <!-- Android 12+ system splash: plain black with an empty icon. The wide studio logo
+         would be clipped by the system's round icon mask, so the real logo is drawn by the
+         app's first Compose frame (StudioSplash) on the same black: one seamless splash. -->
     <style name="Theme.MyPersonalCrossword" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
-        <!-- Black behind the first frame: the Hot Attic Games card is on black, so no white or grey flash. -->
         <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowSplashScreenBackground">@android:color/black</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_blank</item>
     </style>
 </resources>

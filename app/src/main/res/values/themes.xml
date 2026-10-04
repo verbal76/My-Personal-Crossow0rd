@@ -5,5 +5,7 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
+        <!-- Black behind the first frame: the Hot Attic Games card is on black, so no white or grey flash. -->
+        <item name="android:windowBackground">@android:color/black</item>
     </style>
 </resources>
