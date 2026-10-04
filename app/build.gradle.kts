@@ -30,6 +30,10 @@ val buildSourceSha: String = (System.getenv("BUILD_SOURCE_SHA")?.take(7)
 val buildNumber: Int = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.let { 1000 + it }
     ?: gitOutput("rev-list", "--count", "HEAD")?.toIntOrNull()
     ?: 1
+// Public product version: ONE number, kept in the repo-root VERSION file. It is the
+// only version a person should ever need ("My Personal Crossword v7"). versionCode,
+// commit and CI run stay as engineering metadata. See docs/RELEASES.md.
+val publicVersion: Int = rootProject.file("VERSION").readText().trim().toInt()
 val buildTimeUtc: String = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
 val buildOrigin: String = System.getenv("GITHUB_RUN_NUMBER")?.let { "GitHub Actions run #$it" } ?: "local build"
 
@@ -57,8 +61,9 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = buildNumber
-        versionName = "1.0.$buildNumber"
+        versionName = "v$publicVersion"
 
+        buildConfigField("String", "PRODUCT_NAME", "\"My Personal Crossword\"")
         buildConfigField("String", "GIT_SHA", "\"$buildSourceSha\"")
         buildConfigField("String", "BUILD_TIME_UTC", "\"$buildTimeUtc\"")
         buildConfigField("String", "BUILD_ORIGIN", "\"$buildOrigin\"")

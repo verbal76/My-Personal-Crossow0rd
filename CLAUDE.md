@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Release naming (read first)
+Public versions are `My Personal Crossword v<N>`, sequential, from the root `VERSION` file. Bump it for every playable build delivered to the owner; never use codenames or build/SHA in names the owner reads. Full rules: `docs/RELEASES.md`.
+
 ## Build Commands
 
 ```bash

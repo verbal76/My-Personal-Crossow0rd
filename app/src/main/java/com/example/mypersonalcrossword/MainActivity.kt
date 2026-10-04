@@ -245,7 +245,7 @@ fun slotTitle(slot: SaveSlot): String {
 object BuildInfo {
     /** One line for footers: "v1.0 (42) · 0f78713 · debug". */
     val short: String get() =
-        "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · ${BuildConfig.GIT_SHA} · ${BuildConfig.BUILD_TYPE}"
+        "${BuildConfig.VERSION_NAME} · ${BuildConfig.GIT_SHA} · ${BuildConfig.BUILD_TYPE}"
 
     fun details(context: Context): List<Pair<String, String>> {
         val pkg = runCatching {
@@ -257,10 +257,10 @@ object BuildInfo {
         val target = context.applicationInfo.targetSdkVersion
         val playOk = if (target >= BuildConfig.PLAY_REQUIRED_TARGET_API) "YES" else "NO"
         return listOfNotNull(
-            "Application"             to "My Personal Crossword",
-            "Package"                 to BuildConfig.APPLICATION_ID,
+            "Product"                 to BuildConfig.PRODUCT_NAME,
             "Version"                 to BuildConfig.VERSION_NAME,
-            "Build number"            to "${BuildConfig.VERSION_CODE} (versionCode)",
+            "Package"                 to BuildConfig.APPLICATION_ID,
+            "Android versionCode"     to "${BuildConfig.VERSION_CODE}",
             "Source commit"           to BuildConfig.GIT_SHA,
             "Build type"              to BuildConfig.BUILD_TYPE,
             "Signing"                 to BuildConfig.SIGNING_STATE,

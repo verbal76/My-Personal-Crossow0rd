@@ -9,6 +9,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write   # lets the release step create the GitHub Release
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -49,8 +52,10 @@ jobs:
         id: apk
         run: |
           SHORT=${BUILD_SOURCE_SHA::7}
-          NAME="MyPersonalCrossword-${SHORT}-debug.apk"
+          VER="v$(tr -d '[:space:]' < VERSION)"
+          NAME="My-Personal-Crossword-${VER}.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "$NAME"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "short=$SHORT" >> "$GITHUB_OUTPUT"
           echo "APK: $NAME"
@@ -94,10 +99,44 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk-${{ steps.apk.outputs.short }}
+          name: My-Personal-Crossword-${{ steps.apk.outputs.ver }}-${{ steps.apk.outputs.short }}
           path: ${{ steps.apk.outputs.name }}
           if-no-files-found: error
           retention-days: 30
+
+      # ── Public release: one GitHub Release per public version ────────────
+      # The version lives in the VERSION file. A release is created once per
+      # version, from this exact APK (no rebuild, no renaming), marked Latest.
+      # To deliver a new playable build: bump VERSION and push. See docs/RELEASES.md.
+      - name: Publish GitHub Release (once per version)
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/native-stack-modernization')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="${{ steps.apk.outputs.ver }}"
+          FILE="${{ steps.apk.outputs.name }}"
+          if gh release view "$VER" >/dev/null 2>&1; then
+            echo "Release $VER already exists; leaving it untouched. Bump VERSION to deliver a new build."
+            exit 0
+          fi
+          sha256sum "$FILE" > "${FILE}.sha256"
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          # My Personal Crossword ${VER}
+
+          **Android:** \`${FILE}\`
+          Install it over your existing app (do not uninstall first). This is a debug-signed test build, not a Play release.
+
+          ## Technical details
+          - Source commit: ${BUILD_SOURCE_SHA}
+          - Android versionCode: ${{ github.run_number }} (+1000)
+          - Package: com.hag.mypersonalcrossword
+          - CI run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - SHA-256: $(cut -d' ' -f1 "${FILE}.sha256")
+          EOF
+          sed -i 's/^          //' "$RUNNER_TEMP/notes.md"
+          gh release create "$VER" "$FILE" "${FILE}.sha256" \
+            --target "$BUILD_SOURCE_SHA" --title "My Personal Crossword ${VER}" \
+            --notes-file "$RUNNER_TEMP/notes.md" --latest
 
       - name: Lint
         run: ./gradlew lintDebug --no-daemon
