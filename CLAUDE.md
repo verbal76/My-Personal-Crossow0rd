@@ -42,7 +42,7 @@ The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders 
 **Single activity, Compose, no navigation library, no Room.** `CrosswordApp()` switches screens with `when (appMode)`:
 
 - `LOGIN`: pick or create a profile. Profile cards continue straight home; a separate icon opens Stats.
-- **Opening card:** on a cold start with a saved player, `OpeningCard` (the login screen's `TitleMark` on the login gradient) covers everything for at least `OPENING_CARD_MIN_MS` (2.5 s) and until startup loading finishes (capped), then fades into home. The Daily prompt waits for it, because dialogs draw above it. It is the title screen older builds showed while the word list loaded on the main thread; keep it.
+- **Startup sequence:** Android shows a plain black system splash, then `StudioSplash` (the Hot Attic Games logo, `STUDIO_SPLASH_MS`), then `OpeningCard` (the My Personal Crossword splash art, at least `OPENING_CARD_MIN_MS` and until startup loading finishes, capped), then home or login. Both images are byte-identical copies of the files in `branding/` (`StudioSplashTest` enforces this). The old purple "Welcome" title card is retired; `TitleMark` now only appears on the login screen. The Daily prompt waits for the splash, because dialogs draw above it.
 - `STATS`: summary tiles (score, puzzles, Daily streak), in-progress saves, personal bests grouped by mode.
 - `CATEGORY_SELECT`: the home hub. Header (with the Settings gear), Continue card, Daily card, play-mode picker with START, and the category carousel.
 - `ONLINE_LOBBY`: host shows the code; guest waits.

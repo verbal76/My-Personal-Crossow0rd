@@ -99,6 +99,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalConfiguration
 import kotlin.random.Random
@@ -1262,33 +1264,48 @@ fun TitleMark() {
     }
 }
 
-/** Minimum time the opening card stays up, so it reads as intentional rather than a flash. */
-const val OPENING_CARD_MIN_MS = 2500L
+/** Minimum time the game splash stays up after the studio card, so it reads as intentional rather than a flash. */
+const val OPENING_CARD_MIN_MS = 1800L
 /** How long the Hot Attic Games studio card is shown on a cold start (before the opening card). */
 const val STUDIO_SPLASH_MS = 1500L
 /** Longest the opening card waits for startup loading after that minimum. */
 const val OPENING_CARD_MAX_WAIT_MS = 5000L
 
-// Opening card for returning players: the title screen on the login gradient,
-// shown while startup loading finishes. It swallows taps so nothing underneath
-// can be pressed before it fades.
+// My Personal Crossword splash: the supplied artwork (res/drawable-nodpi/mpc_splash.png, byte-
+// identical to branding/my_personal_crossword_splash_1080x2280.png), shown after the studio
+// card while startup loading finishes. It replaces the old purple "Welcome" title screen.
+// The art is scaled to the screen's WIDTH so nothing at the left or right edge is cut off;
+// any spare height is filled by a blurred copy of the same art (no black or white bars).
+// Taller-than-screen art (16:9 phones) is anchored to the top so the title is never cropped.
+// It swallows taps so nothing underneath can be pressed before it fades.
 @Composable
 fun OpeningCard() {
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(listOf(
-                    MaterialTheme.colorScheme.primaryContainer,
-                    MaterialTheme.colorScheme.background
-                ))
-            )
-            .pointerInput(Unit) { detectTapGestures { } },
-        contentAlignment = Alignment.Center
+            .background(Color.Black)
+            .pointerInput(Unit) { detectTapGestures { } }
     ) {
-        TitleMark()
+        val artHeight = maxWidth * (MPC_SPLASH_HEIGHT_PX.toFloat() / MPC_SPLASH_WIDTH_PX)
+        Image(
+            painter            = painterResource(R.drawable.mpc_splash),
+            contentDescription = null,
+            contentScale       = ContentScale.Crop,
+            modifier           = Modifier.fillMaxSize().blur(36.dp, BlurredEdgeTreatment.Unbounded).clipToBounds()
+        )
+        Image(
+            painter            = painterResource(R.drawable.mpc_splash),
+            contentDescription = "My Personal Crossword",
+            contentScale       = ContentScale.FillWidth,
+            alignment          = if (artHeight > maxHeight) Alignment.TopCenter else Alignment.Center,
+            modifier           = Modifier.fillMaxSize()
+        )
     }
 }
+
+/** Pixel size of the supplied splash artwork (1080 x 2280), used to choose its alignment. */
+const val MPC_SPLASH_WIDTH_PX = 1080
+const val MPC_SPLASH_HEIGHT_PX = 2280
 
 // Hot Attic Games studio card: the canonical logo (res/drawable-nodpi/hot_attic_logo.png,
 // byte-identical to branding/Hot_Attic_Games_Master_Logo.png) on solid black, scaled to fit
@@ -1380,12 +1397,9 @@ fun CrosswordApp() {
         stateSaver = listSaver(save = { listOf(it.name) }, restore = { AppMode.valueOf(it[0]) })
     ) { mutableStateOf(AppMode.LOGIN) }
     var playerName by rememberSaveable { mutableStateOf("") }
-    // Opening card: returning players see the title screen once per cold start
-    // while startup loading finishes (older builds showed it because the word
-    // list loaded on the main thread). A recreation mid-session skips it.
-    var showOpeningCard by rememberSaveable {
-        mutableStateOf(appMode == AppMode.LOGIN && saveManager.getLastUser().isNotBlank())
-    }
+    // Game splash: shown once per cold start, after the Hot Attic Games card and while
+    // startup loading finishes. A recreation mid-session skips it.
+    var showOpeningCard by rememberSaveable { mutableStateOf(true) }
     // Studio card: once per cold start, before the opening card. It is remembered across
     // recreation, so rotation or a theme change never replays it.
     var showStudioSplash by rememberSaveable { mutableStateOf(true) }
