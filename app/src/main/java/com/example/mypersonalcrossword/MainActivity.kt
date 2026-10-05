@@ -119,6 +119,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import android.media.AudioAttributes
@@ -2372,7 +2373,7 @@ fun CrosswordApp() {
             val freshPool = withContext(Dispatchers.IO) { discoverBgImages(context) }
             bgImagePool = freshPool
             // If the active background was deleted, reset to none
-            if (currentBgImageName != BG_IMAGE_NONE && !freshPool.contains(currentBgImageName)) {
+            if (currentBgImageName != BG_IMAGE_NONE && !freshPool.contains(currentBgImageName) && !BackgroundCatalog.isCatalog(currentBgImageName)) {
                 currentBgImageName = BG_IMAGE_NONE
             }
         }
@@ -2611,11 +2612,8 @@ fun CrosswordApp() {
         lastResult = null
         showResults = false
         timerRunning = true
-        // Pick a random background image from the pool.
-        // Fall back to a random colour if the pool is empty.
-        currentBgImageName = if (bgImagePool.isNotEmpty())
-            bgImagePool[Random.nextInt(bgImagePool.size)]
-        else BG_IMAGE_NONE
+        // Pick a random background from the 25-image collection (the player can change it in Settings).
+        currentBgImageName = BackgroundCatalog.all[Random.nextInt(BackgroundCatalog.all.size)].file
         currentBgColor = Color(
             Random.nextFloat().coerceIn(0.4f, 0.7f),
             Random.nextFloat().coerceIn(0.4f, 0.7f),
@@ -3347,6 +3345,9 @@ fun CrosswordApp() {
                                     painter = bgPainter, contentDescription = null,
                                     contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
                                 )
+                                // Per-picture dimming keeps the tiles and letters the clearest thing on screen.
+                                val scrim = BackgroundCatalog.scrimFor(currentBgImageName)
+                                if (scrim > 0f) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrim)))
                             }
                             CrosswordGrid(
                                 board        = board,
@@ -5888,6 +5889,11 @@ fun loadBgBitmap(context: Context, filename: String): ImageBitmap? {
     val dm = context.resources.displayMetrics
     val key = "bg:$filename:${dm.widthPixels}x${dm.heightPixels}"
     BitmapCache.get(key)?.let { return it }
+    if (BackgroundCatalog.isCatalog(filename)) {
+        val bmp = decodeAssetScaled(context, "${BackgroundCatalog.DIR}/$filename", dm.widthPixels, dm.heightPixels)
+        if (bmp != null) BitmapCache.put(key, bmp)
+        return bmp
+    }
     val folders = if (dm.density >= 4.0f) listOf("drawable-xxxhdpi", "drawable-xxhdpi")
                   else listOf("drawable-xxhdpi", "drawable-xxxhdpi")
     for (folder in folders) {
@@ -5901,6 +5907,11 @@ fun loadBgBitmap(context: Context, filename: String): ImageBitmap? {
 fun loadBgThumbnail(context: Context, filename: String): ImageBitmap? {
     val key = "thumb:$filename"
     BitmapCache.get(key)?.let { return it }
+    if (BackgroundCatalog.isCatalog(filename)) {
+        val bmp = decodeAssetScaled(context, "${BackgroundCatalog.DIR}/$filename", 330, 585)
+        if (bmp != null) BitmapCache.put(key, bmp)
+        return bmp
+    }
     for (folder in listOf("drawable-xxhdpi", "drawable-xxxhdpi")) {
         val bmp = decodeAssetScaled(context, "images/$folder/$filename", 220, 390)
         if (bmp != null) { BitmapCache.put(key, bmp); return bmp }
@@ -6280,9 +6291,11 @@ fun ColorPickerSheet(
     }
 }
 
-// ── BACKGROUND IMAGE PICKER SCREEN ───────────────────────────────────────────
-// Full-screen grid of thumbnails. Tap one to apply immediately. Checkmark on
-// the active image. Loads thumbnails from assets on a background thread.
+// ── BACKGROUND PICKER SCREEN ─────────────────────────────────────────────────
+// Choose a category (SPACE, SKY, WOODS, MOTION CITY, OCEAN), then one of its five
+// pictures from big thumbnails. Tap one to apply it immediately. A sixth CLASSIC tab
+// holds the older art so earlier choices still show. Free for everyone: no currency,
+// unlocks or progression. Thumbnails load off the main thread and are cached.
 @Composable
 fun BgPickerScreen(
     bgImagePool:    List<String>,
@@ -6291,30 +6304,29 @@ fun BgPickerScreen(
     onSelect:       (String) -> Unit,
     onDismiss:      () -> Unit
 ) {
-    // Load thumbnails asynchronously — small bitmaps for the grid.
-    // Purge any cached entries whose files no longer exist in the current pool.
     val thumbnails   = remember { mutableStateMapOf<String, ImageBitmap?>() }
-    val displayNames = remember(bgImagePool) { backgroundDisplayNames(bgImagePool) }
-    LaunchedEffect(bgImagePool) {
-        // Drop thumbnails for images no longer in the pool, then load the rest
-        // one by one (each ~220 px wide, cached app-wide).
-        val poolSet = bgImagePool.toSet()
-        thumbnails.keys.toList().forEach { key -> if (!poolSet.contains(key)) thumbnails.remove(key) }
-        bgImagePool.forEach { name ->
-            if (!thumbnails.containsKey(name)) {
-                thumbnails[name] = withContext(Dispatchers.IO) { loadBgThumbnail(context, name) }
-            }
+    val classicNames = remember(bgImagePool) { backgroundDisplayNames(bgImagePool) }
+    // Open on the active picture's category (CLASSIC for older art, SPACE otherwise).
+    var tab by rememberSaveable {
+        mutableStateOf(BackgroundCatalog.find(currentBgImage)?.category?.id
+            ?: if (currentBgImage != BG_IMAGE_NONE && bgImagePool.contains(currentBgImage)) "classic" else BackgroundCategory.SPACE.id)
+    }
+    val shown: List<String> = if (tab == "classic") bgImagePool
+        else BackgroundCategory.entries.firstOrNull { it.id == tab }?.let { c -> BackgroundCatalog.inCategory(c).map { it.file } } ?: emptyList()
+
+    LaunchedEffect(tab, bgImagePool) {
+        shown.forEach { name ->
+            if (!thumbnails.containsKey(name)) thumbnails[name] = withContext(Dispatchers.IO) { loadBgThumbnail(context, name) }
         }
     }
+    fun titleOf(name: String) = BackgroundCatalog.find(name)?.title ?: classicNames[name] ?: ""
 
     val config = LocalConfiguration.current
     val isLand = config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val columns = if (isLand) 4 else 2
-    val cardRatio = if (isLand) 16f / 9f else 9f / 16f  // landscape cards are wide, portrait are tall
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -6322,99 +6334,78 @@ fun BgPickerScreen(
                     .statusBarsPadding()
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                    Text("Background Image", fontSize = 20.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(start = 4.dp))
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    Text("Background", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp))
                 }
             }
-
-            if (bgImagePool.isEmpty()) {
+            // Category chips
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val tabs = BackgroundCategory.entries.map { it.id to it.label } + ("classic" to "CLASSIC")
+                tabs.forEach { (id, label) ->
+                    FilterChip(
+                        selected = tab == id,
+                        onClick  = { tab = id },
+                        label    = { Text(label, fontWeight = FontWeight.Bold, fontSize = 13.sp) },
+                        modifier = Modifier.semantics { contentDescription = "$label backgrounds" }
+                    )
+                }
+            }
+            if (shown.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No images found", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Your puzzles use a plain colour background.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp,
-                            textAlign = TextAlign.Center)
-                    }
+                    Text("Nothing here yet", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
                 }
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
-                    modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(horizontal = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 12.dp)
                 ) {
-                    gridItems(bgImagePool) { name ->
-                        val thumb     = thumbnails[name]
-                        val isActive  = name == currentBgImage
+                    gridItems(shown) { name ->
+                        val thumb    = thumbnails[name]
+                        val isActive = name == currentBgImage
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .aspectRatio(cardRatio)
-                                .clip(RoundedCornerShape(10.dp))
+                                .aspectRatio(if (isLand) 16f / 9f else 9f / 16f)
+                                .clip(RoundedCornerShape(12.dp))
                                 .border(
                                     width = if (isActive) 3.dp else 1.dp,
                                     color = if (isActive) MaterialTheme.colorScheme.primary else Color.Gray.copy(alpha = 0.4f),
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 )
                                 .background(Color.DarkGray)
+                                .semantics { selected = isActive }
                                 .clickable(onClickLabel = "Use this background") { onSelect(name) }
                         ) {
                             if (thumb != null) {
                                 Image(
-                                    bitmap         = thumb,
-                                    contentDescription = "Background: ${displayNames[name] ?: ""}",
-                                    contentScale   = ContentScale.Crop,
-                                    modifier       = Modifier.fillMaxSize()
+                                    bitmap = thumb, contentDescription = "Background: ${titleOf(name)}",
+                                    contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()
                                 )
                             } else {
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(24.dp),
-                                        color    = Color.White
-                                    )
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                                 }
                             }
-
-                            // Checkmark overlay on selected image
                             if (isActive) {
                                 Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .padding(6.dp)
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(28.dp)
+                                        .clip(CircleShape).background(MaterialTheme.colorScheme.primary),
                                     contentAlignment = Alignment.Center
-                                ) {
-                                    Text("✓", color = Color.White,
-                                        fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                }
+                                ) { Text("✓", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
                             }
-
-                            // Filename label at bottom
                             Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .background(Color.Black.copy(alpha = 0.45f))
-                                    .padding(4.dp)
+                                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                    .background(Color.Black.copy(alpha = 0.5f)).padding(6.dp)
                             ) {
-                                Text(
-                                    displayNames[name] ?: "",
-                                    color    = Color.White,
-                                    style    = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = TextAlign.Center
-                                )
+                                Text(titleOf(name), color = Color.White, style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
                             }
                         }
                     }

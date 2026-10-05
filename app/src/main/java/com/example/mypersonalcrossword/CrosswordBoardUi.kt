@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -245,7 +246,7 @@ fun CrosswordGrid(
             val left = size.width / 2f + panOff.x - gridW * cellPx * s / 2f
             val top  = size.height / 2f + panOff.y - gridH * cellPx * s / 2f
             val corner = CornerRadius(cellPx * 0.12f)
-            val inset = max(1f, cellPx * 0.04f)
+            val inset = max(1.5f, cellPx * 0.05f)   // small, even gaps between tiles
             val shakeDx = if (shakeProgress.value < 1f)
                 sin(shakeProgress.value * Math.PI * 6).toFloat() * cellPx * 0.12f * (1f - shakeProgress.value) else 0f
             val waveT = waveProgress.value
@@ -279,7 +280,14 @@ fun CrosswordGrid(
                         scale(1f + bump, pivot = Offset(cx, cy)) {
                             val tl = Offset(x + inset + dx, y + inset)
                             val sz = Size(cellPx - inset * 2, cellPx - inset * 2)
-                            drawRoundRect(fill, tl, sz, corner)
+                            // Tactile depth: a soft contact shadow below, then a face that is a touch
+                            // lighter at the top and darker at the bottom. Letters stay flat and crisp.
+                            drawRoundRect(Color.Black.copy(alpha = 0.30f), Offset(tl.x, tl.y + cellPx * 0.05f), sz, corner)
+                            drawRoundRect(
+                                brush = Brush.verticalGradient(
+                                    listOf(lerp(fill, Color.White, 0.14f), lerp(fill, Color.Black, 0.07f)),
+                                    startY = tl.y, endY = tl.y + sz.height),
+                                topLeft = tl, size = sz, cornerRadius = corner)
                             if (cell in shakeCells && shakeProgress.value < 1f)
                                 drawRoundRect(WrongRed.copy(alpha = 0.35f * (1f - shakeProgress.value)), tl, sz, corner)
                             drawRoundRect(if (isSel) accent else outline, tl, sz, corner,
