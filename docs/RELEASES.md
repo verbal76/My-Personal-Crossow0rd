@@ -9,3 +9,6 @@ No semantic versions, no codenames (`b9`, `modernized`, `candidate`, `final`) in
 - **Engineering metadata stays available** but is not the version: Android `versionCode` (`1000 + CI run number`, must only go up), source commit, package, CI run, Kotlin/target SDK. About and Copy diagnostics show them next to the product version.
 - **History:** no releases existed before v7. Counting every build actually handed over for testing gives v1 = `0f78713` ... v6 = `80f93ab` (Build 1057); the v7 label starts with the first build carrying this convention. Those older builds were never published, so there are no old releases or tags to rename.
 - **Next version after v7 is v8.**
+
+## Build log (public version: what changed)
+- v7: first build with this convention. v8: Hot Attic Games studio splash. v9: game splash art, new launcher icon. v10: 25 categorized backgrounds, category picker, tile depth.
