@@ -5,9 +5,14 @@ name: Release AAB (manual)
 on:
   workflow_dispatch:
 
+concurrency:
+  group: release-aab
+  cancel-in-progress: true
+
 jobs:
   aab:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     env:
       BUILD_SOURCE_SHA: ${{ github.sha }}
     steps:

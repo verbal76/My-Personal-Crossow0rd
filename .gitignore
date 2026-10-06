@@ -23,3 +23,7 @@ google-services.json
 # Release signing keys never belong in git (CI decodes one from a secret).
 *.jks
 release.keystore
+
+# local core validation (tools/validate_local.sh)
+tools/core-jvm/.gradle/
+tools/core-jvm/build/
