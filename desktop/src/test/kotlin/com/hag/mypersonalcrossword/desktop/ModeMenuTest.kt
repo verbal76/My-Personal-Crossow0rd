@@ -83,4 +83,33 @@ class ModeMenuTest {
         val before = m.menuItems; assertEquals(before, m.menuItems)
         assertTrue("a bad file added later is not even looked at until the menu is re-entered", m.notice.isEmpty())
     }
+
+    @Test fun theClocksStopWhileTheWindowIsInTheBackgroundAndResumeOnReturn() {
+        val store = ProfileStore(T.dir()); store.playMode = "VINDICTIVE"; store.vindTimer = 60; val m = T.model(store); toMenu(m)
+        focus(m, AppModel.MenuItem.START); m.act(Action.CONFIRM)
+        m.tick(3_000); assertEquals(3L, m.game.session!!.elapsedSeconds)
+        m.focused = false; m.tick(10_000); assertEquals("no time passes in the background", 3L, m.game.session!!.elapsedSeconds)
+        m.focused = true; m.tick(2_000); assertEquals(5L, m.game.session!!.elapsedSeconds)
+    }
+
+    @Test fun aWholeVindictiveTurnCanBePlayedWithTheControllerAlone() {
+        val store = ProfileStore(T.dir()); store.playMode = "VINDICTIVE"; store.vindTimer = 15; val m = T.model(store); toMenu(m)
+        focus(m, AppModel.MenuItem.START); m.act(Action.CONFIRM, fromPad = true)
+        val first = m.game.board!!.clueOrder.first(); m.game.selectWord(first)
+        m.act(Action.CONFIRM, fromPad = true); assertTrue("A opens the on-screen keyboard", m.keyboardOpen)
+        for ((i, ch) in first.word.withIndex()) {                                   // letters via the D-pad keyboard
+            if (m.game.inputs[first.cells()[i]] == ch) continue
+            var guard = 0
+            while (m.keyboard.key() != ch.toString() && guard++ < 40) m.act(if (ch.toString() in OnScreenKeyboard.ROWS[m.keyboard.row]) Action.RIGHT else Action.DOWN, true)
+            m.act(Action.CONFIRM, true)
+        }
+        assertTrue(m.game.assigning)
+        m.act(Action.CANCEL, true)                                                  // B closes the keyboard
+        assertFalse(m.keyboardOpen)
+        m.act(Action.CONFIRM, true)                                                 // A = Give
+        assertEquals(VindicativePhase.OPPONENT_WAIT, m.game.vind.phase)
+        m.act(Action.CONFIRM, true)                                                 // A = I'm Ready
+        m.tick(15_500); m.act(Action.RIGHT, true); m.act(Action.CONFIRM, true)      // D-pad right, A = Pass
+        assertEquals(Economy.VIND_PASS, m.game.vind.p2Score)
+    }
 }

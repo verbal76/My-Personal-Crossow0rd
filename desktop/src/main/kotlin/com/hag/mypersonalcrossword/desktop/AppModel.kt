@@ -23,6 +23,8 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
     var menuIndex = 0; private set
     var pauseIndex = 0; private set
     private var autosaveMs = 0L
+    /** False while the window is in the background (Alt+Tab, Steam overlay, suspend): the puzzle clocks stop, like Android's ON_PAUSE. */
+    var focused = true
     var screenMillis = 0L; private set      // time on the current screen (splashes)
     /** Which input family was used last, so the UI can show matching hints (keys vs. pad). */
     var lastInput = "keyboard"; private set
@@ -66,7 +68,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
             Screen.STUDIO_SPLASH -> if (screenMillis >= STUDIO_MS) go(Screen.GAME_SPLASH)
             Screen.GAME_SPLASH   -> if (screenMillis >= GAME_MS) go(Screen.MENU)
             Screen.PUZZLE        -> {
-                game.advance(ms)
+                if (focused) game.advance(ms)
                 // Crash / suspend / power-loss insurance, like Android's save on pause.
                 autosaveMs += ms
                 if (autosaveMs >= AUTOSAVE_MS) { autosaveMs = 0; game.save() }

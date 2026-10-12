@@ -51,9 +51,15 @@ class DesktopApp(val options: Options, private val onExit: (Int) -> Unit = { exi
     init {
         Assets.icon?.let { frame.iconImage = it }
         frame.defaultCloseOperation = JFrame.DO_NOTHING_ON_CLOSE
+        frame.addWindowFocusListener(object : WindowAdapter() {
+            override fun windowLostFocus(e: WindowEvent) { model.focused = false }
+            override fun windowGainedFocus(e: WindowEvent) { model.focused = true; panel.repaint() }
+        })
         frame.addWindowListener(object : WindowAdapter() { override fun windowClosing(e: WindowEvent) = quit()
             // Focus loss (Alt+Tab, Steam overlay, suspend) is a good moment to save.
             override fun windowDeactivated(e: WindowEvent) { runCatching { game.save() } }
+            override fun windowLostFocus(e: WindowEvent) { model.focused = false }
+            override fun windowGainedFocus(e: WindowEvent) { model.focused = true; panel.repaint() }
         })
         panel.preferredSize = Dimension(options.width, options.height)
         panel.onPadPoll = { now -> mapper.poll(now).also { acts -> acts.forEach { model.act(it, fromPad = true) } }.isNotEmpty() }

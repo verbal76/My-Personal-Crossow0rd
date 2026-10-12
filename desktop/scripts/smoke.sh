@@ -2,7 +2,7 @@
 # Launch smoke test of a PACKAGED build (the unpacked app-image / tarball), not the dev jar.
 #   desktop/scripts/smoke.sh <path-to-launcher> [shots-dir]
 # Needs a display: on a headless Linux box it re-runs itself under xvfb-run at 1280x800 (the Deck's screen).
-# Phases: full -> partial -> resume (the last two share a data dir to prove save-on-close + restore after restart).
+# Phases: full -> modes (Team + Vindictive) -> partial -> resume (the last two share a data dir to prove save-on-close + restore after restart).
 set -euo pipefail
 LAUNCHER="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 SHOTS="${2:-$(pwd)/smoke-shots}"; mkdir -p "$SHOTS"
@@ -22,6 +22,8 @@ run() { # phase extra-args...
 }
 mkdir -p "$WORK/data"
 run full --size=1280x800
+rm -rf "$WORK/data"; mkdir -p "$WORK/data"
+run modes --size=1280x800
 rm -rf "$WORK/data"; mkdir -p "$WORK/data"
 run partial --skip-splash
 run resume --skip-splash
