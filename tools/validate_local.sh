@@ -11,6 +11,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 GRADLE="${GRADLE:-$(command -v gradle || echo /opt/gradle/bin/gradle)}"
 (cd tools/core-jvm && "$GRADLE" test -q "$@")
+# every core test class declared in source ran, none skipped (same check CI runs for all classes)
+python3 tools/verify_test_results.py --core-only --results tools/core-jvm/build/test-results/test
+# passing and deliberately failing cases for the release-source gate, manifest check and test verifier
+python3 tools/test_release_source.py
 python3 tools/branch_audit.py
 python3 - <<'PY'
 import yaml, glob, re, sys

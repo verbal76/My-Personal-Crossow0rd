@@ -47,19 +47,16 @@ jobs:
           # number; the commit count is only the local-build fallback.
           fetch-depth: 0
 
-      # One authoritative history: a delivered build must come from the authoritative
-      # line (AUTHORITATIVE_BRANCH), never from a stray or outdated branch.
-      - name: Verify the source is on the authoritative line
+      # Release-critical source verification (blocking): the checked-out commit must equal the
+      # recorded SHA, a build-v<N> tag must peel to exactly that commit and match VERSION, and the
+      # commit must be reachable from the authoritative line. Reviewed historical branches are
+      # NOT part of this gate. See tools/verify_release_source.py.
+      - name: Verify release source (tag, SHA and authoritative line)
         if: env.BUILD_APK == 'true'
-        run: |
-          AUTH=$(tr -d '[:space:]' < AUTHORITATIVE_BRANCH)
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$AUTH"; then
-            echo "::error::$GITHUB_SHA is not on the authoritative branch '$AUTH'. Refusing to build a delivered artifact from an unrelated or outdated line."
-            exit 1
-          fi
-          echo "source $GITHUB_SHA is on $AUTH"
+        run: python3 tools/verify_release_source.py
 
-      - name: Branch accountability audit (warns, never blocks)
+      # Historical branch inventory: informational only, never blocks a release.
+      - name: Branch accountability audit (informational)
         continue-on-error: true
         run: python3 tools/branch_audit.py
 
@@ -79,22 +76,10 @@ jobs:
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
 
-      # CI must not report success by silently skipping the required tests.
-      - name: Verify the unit tests really ran
-        env:
-          MIN_TESTS: '150'
-        run: |
-          python3 - <<'PY'
-          import glob, os, xml.etree.ElementTree as ET
-          total = skipped = 0
-          for f in glob.glob('app/build/test-results/**/*.xml', recursive=True):
-              r = ET.parse(f).getroot()
-              total += int(r.get('tests', 0)); skipped += int(r.get('skipped', 0))
-          need = int(os.environ['MIN_TESTS'])
-          print(f'unit tests executed: {total} (skipped {skipped}), required at least {need}')
-          if total < need or skipped:
-              raise SystemExit('::error::required tests were skipped or missing')
-          PY
+      # CI must not report success by silently skipping tests: every test class declared in
+      # app/src/test must have run with exactly its declared test count, none skipped or failed.
+      - name: Verify every declared test suite ran
+        run: python3 tools/verify_test_results.py
 
       - name: Build debug APK
         if: env.BUILD_APK == 'true'
@@ -155,7 +140,9 @@ jobs:
         if: env.BUILD_APK == 'true'
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
-        run: python3 tools/make_release_manifest.py "${{ steps.apk.outputs.name }}" release-manifest.json
+        run: |
+          python3 tools/make_release_manifest.py "${{ steps.apk.outputs.name }}" release-manifest.json
+          python3 tools/verify_release_source.py --manifest release-manifest.json --apk "${{ steps.apk.outputs.name }}"
 
       - name: Upload APK artifact
         if: env.BUILD_APK == 'true'

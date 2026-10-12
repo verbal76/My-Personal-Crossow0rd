@@ -57,8 +57,8 @@ to v9. The root-level copies on `main` stay as they are.
 - `app/src/test/.../ExampleUnitTest.kt`: Android Studio template placeholder, intentionally removed.
 
 ## Open items needing the owner
-1. `main` (the default branch) is 52 commits behind the product. Fast-forwarding it to the
-   authoritative line, or merging PR #1, is a protected-branch action and is held until the
-   owner approves after device testing.
+1. `main` (the default branch) is 52 commits behind the product. Synchronizing it (fast-forward to
+   the authoritative line, or merging PR #1) is an owner-controlled decision to be made after
+   device testing and release qualification. It is not done automatically.
 2. Old agent worktrees under `.claude/worktrees/` can be removed whenever the owner likes;
    nothing in them is unmerged.

@@ -14,6 +14,7 @@ No semantic versions, no codenames (`b9`, `modernized`, `candidate`, `final`) in
 - v7: first build with this convention. v8: Hot Attic Games studio splash. v9: game splash art, new launcher icon. v10: 25 categorized backgrounds, category picker, tile depth.
 
 ## Provenance and source rules
-- A delivered build only runs from a commit on the authoritative branch (`AUTHORITATIVE_BRANCH`); CI fails otherwise.
-- Each build writes `release-manifest.json` (commit, ref, version, platform, toolchain, timestamp, artifact SHA-256), attached to the Release and the Actions artifact. A coordinated multi-platform release lists one commit for all platform artifacts.
-- `tools/branch_audit.py` keeps unmerged work visible; see `docs/BRANCH_LEDGER.md`.
+- **Blocking release-source gate** (`tools/verify_release_source.py`): the checked-out commit equals the recorded SHA; a `build-v<N>` tag peels to exactly that commit and matches `VERSION`; the tagged commit (not the branch tip) is reachable from `origin/<AUTHORITATIVE_BRANCH>`; the manifest agrees with the source and the artifact. Reviewed historical branches do not affect it.
+- **Manifest:** each build writes `release-manifest.json` (commit, ref, version, platform, toolchain, timestamp, artifact SHA-256), attached to the Release and the Actions artifact. A coordinated multi-platform release lists one commit for all platform artifacts.
+- **Tests:** CI verifies every test class declared in `app/src/test` ran with its declared count, none skipped or failed (`tools/verify_test_results.py`); currently 21 classes / 160 tests, of which 17 classes / 148 tests are the pure-Kotlin core suite that `tools/validate_local.sh` runs locally.
+- **Branch inventory** (`tools/branch_audit.py`, `docs/BRANCH_LEDGER.md`) is informational. `main` is behind the product; syncing it is an owner decision after device testing and release qualification.
