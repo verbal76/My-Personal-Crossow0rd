@@ -91,7 +91,9 @@ jobs:
           [ "$(tr -d '[:space:]' < VERSION)" = "$BUILD_NUMBER" ] || { echo "::error::build_number does not match VERSION at source_sha"; exit 1; }
           python3 tools/verify_release_source.py
       - name: Release policy checks (workflows, verifier, gate, manifests)
-        run: python3 tools/test_release_source.py
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 tools/test_release_source.py
       - name: Refuse to reuse a build number or replace a release
         if: inputs.destination == 'github_releases'
         env:
