@@ -174,6 +174,11 @@ class GamePanel(private val model: AppModel) : JPanel() {
         centered(g, "My Personal Crossword", width / 2, y + (58 * u).toInt())
         g.font = font(g, 18 * u); g.color = Color(200, 205, 220)
         centered(g, "Score ${game.let { model.store.score }}   ·   ${Assets.versionName}", width / 2, y + (92 * u).toInt())
+        if (model.notice.isNotEmpty()) {      // set-aside / recovered save: say so, never hide it
+            g.font = font(g, 15 * u); g.color = Color(255, 205, 110)
+            val line = clip(g, model.notice, w - (32 * u).toInt())
+            centered(g, line, width / 2, y + h + (22 * u).toInt())
+        }
         val hits = ArrayList<Rect>()
         items.forEachIndexed { i, item ->
             val r = Rect(x + (24 * u).toInt(), y + (112 * u).toInt() + i * rowH, w - (48 * u).toInt(), rowH - (8 * u).toInt())

@@ -44,6 +44,8 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
     /** Which prompt family to draw: the manual choice, or the device used last (mouse counts as keyboard). */
     val promptInput: String get() = when (store.prompts) { "controller" -> "pad"; "keyboard" -> "keyboard"; else -> lastInput }
 
+    /** One-time message about a recovered or set-aside file, shown on the menu until play starts. */
+    val notice: String get() = store.notice
     val savedSessions: List<PuzzleSession> get() = store.savedSessions()
     val menuItems: List<MenuItem> get() =
         MenuItem.values().filter { it != MenuItem.CONTINUE || savedSessions.isNotEmpty() }
@@ -123,7 +125,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
     /** Index of [item] in the current menu (for mouse hit-testing). */
     fun focusMenu(i: Int) { menuIndex = i.coerceIn(0, menuItems.size - 1) }
 
-    private fun enterPuzzle() { keyboardOpen = false; go(Screen.PUZZLE) }
+    private fun enterPuzzle() { keyboardOpen = false; store.clearNotice(); go(Screen.PUZZLE) }
 
     private fun puzzleAct(a: Action) {
         if (keyboardOpen) { oskAct(a); return }

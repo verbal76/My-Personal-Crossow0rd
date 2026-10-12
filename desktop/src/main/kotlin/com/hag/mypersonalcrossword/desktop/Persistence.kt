@@ -20,10 +20,25 @@ class ProfileStore(val dir: File) {
     private val savesDir    = File(dir, "saves")
     private val props       = Properties()
 
+    /** Plain-language messages about anything recovered or set aside (shown once on the menu). */
+    var notice: String = ""; private set
+
     init {
         savesDir.mkdirs()
-        if (profileFile.exists()) runCatching { profileFile.inputStream().use { props.load(it) } }
+        if (profileFile.exists()) {
+            val ok = runCatching { profileFile.inputStream().use { props.load(it) } }.isSuccess
+            if (!ok) { props.clear(); quarantine(profileFile)?.let { addNotice("Your profile file could not be read; a copy was kept in ${it.parentFile.name}.") } }
+        }
     }
+
+    fun clearNotice() { notice = "" }
+    private fun addNotice(msg: String) { notice = if (notice.isEmpty()) msg else "$notice  $msg" }
+
+    /** Moves an unreadable file to `<dir>/corrupt/<name>.<time>` instead of deleting it. Returns the new file. */
+    private fun quarantine(f: File): File? = runCatching {
+        val dest = File(File(dir, "corrupt").also { it.mkdirs() }, "${f.name}.${System.currentTimeMillis()}")
+        Files.move(f.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING); dest
+    }.getOrNull()
 
     var score: Int
         get() = props.getProperty("score")?.toIntOrNull() ?: 0
@@ -63,21 +78,45 @@ class ProfileStore(val dir: File) {
     private fun slotFile(slotId: String) =
         File(savesDir, slotId.replace(Regex("[^A-Za-z0-9+_.-]"), "~") + ".save")
 
+    private fun bakFile(slotId: String) = File(savesDir, slotFile(slotId).name + ".bak")
+
+    private fun decodeFile(f: File): PuzzleSession? =
+        runCatching { SessionCodec.decode(f.readText(Charsets.UTF_8)) }.getOrNull()?.takeIf { it.words.isNotEmpty() }
+
+    /** Writes the save atomically. The previous GOOD save is kept as `.bak` so one bad write can never cost progress. */
     fun saveSession(s: PuzzleSession) {
-        atomicWrite(slotFile(s.slot.id)) { it.write(SessionCodec.encode(s).toByteArray(Charsets.UTF_8)) }
+        val f = slotFile(s.slot.id)
+        if (f.isFile && decodeFile(f) != null) runCatching { Files.copy(f.toPath(), bakFile(s.slot.id).toPath(), StandardCopyOption.REPLACE_EXISTING) }
+        atomicWrite(f) { it.write(SessionCodec.encode(s).toByteArray(Charsets.UTF_8)) }
     }
 
-    fun loadSession(slotId: String): PuzzleSession? =
-        slotFile(slotId).takeIf { it.isFile }?.let { f -> runCatching { SessionCodec.decode(f.readText(Charsets.UTF_8)) }.getOrNull() }
+    /**
+     * Loads a save. A file that cannot be decoded is NEVER silently dropped: it is moved to `corrupt/`,
+     * the `.bak` of the previous good save is tried next, and the player gets a notice either way.
+     */
+    fun loadSession(slotId: String): PuzzleSession? = loadFile(slotFile(slotId))
 
-    fun clearSession(slotId: String) { slotFile(slotId).delete() }
+    private fun loadFile(f: File): PuzzleSession? {
+        if (!f.isFile) return null
+        decodeFile(f)?.let { return it }
+        val kept = quarantine(f)
+        val bak = File(f.path + ".bak")
+        decodeFile(bak)?.let { good ->
+            runCatching { Files.copy(bak.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING) }
+            addNotice("A saved puzzle was damaged; the previous save was restored.")
+            return good
+        }
+        addNotice("A saved puzzle could not be read" + (kept?.let { "; a copy was kept in ${it.parentFile.name}." } ?: "."))
+        return null
+    }
 
-    /** Every readable save, newest first. Unreadable files are ignored, never thrown on. */
+    fun clearSession(slotId: String) { slotFile(slotId).delete(); bakFile(slotId).delete() }
+
+    /** Every readable save, newest first. Unreadable ones are quarantined (with a notice), not ignored or deleted. */
     fun savedSessions(): List<PuzzleSession> =
         (savesDir.listFiles { f -> f.name.endsWith(".save") } ?: emptyArray())
             .sortedByDescending { it.lastModified() }
-            .mapNotNull { f -> runCatching { SessionCodec.decode(f.readText(Charsets.UTF_8)) }.getOrNull() }
-            .filter { it.words.isNotEmpty() }
+            .mapNotNull { f -> loadFile(f) }
 
     fun hasSave(slot: SaveSlot) = loadSession(slot.id) != null
 
