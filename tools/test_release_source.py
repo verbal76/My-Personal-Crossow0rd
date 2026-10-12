@@ -116,6 +116,35 @@ class Manifest(unittest.TestCase):
     def test_fail_wrong_ref(self): self.m['source']['ref'] = 'main'; self.assertTrue(any('ref' in b for b in self.run_check(self.m)))
     def test_fail_artifact_missing(self): self.m['artifacts'] = []; self.assertTrue(any('does not list' in b for b in self.run_check(self.m)))
 
+class VerifierScan(unittest.TestCase):
+    PKG = 'package a.b\n'
+    def test_counts_plain_and_fully_qualified_annotations(self):
+        src = self.PKG + 'class X {\n  @Test fun a() {}\n  @org.junit.Test fun b() {}\n  @Test(timeout = 5) fun c() {}\n}\n'
+        self.assertEqual(T.scan_source(src), {'a.b.X': 3})
+    def test_fully_qualified_only_file_is_not_silently_omitted(self):
+        self.assertEqual(T.scan_source(self.PKG + 'class Y {\n  @org.junit.Test fun a() {}\n}\n'), {'a.b.Y': 1})
+    def test_each_top_level_class_gets_its_own_count(self):
+        src = self.PKG + 'class A {\n @Test fun a() {}\n}\nclass B {\n @Test fun b() {}\n @Test fun c() {}\n}\n'
+        self.assertEqual(T.scan_source(src), {'a.b.A': 1, 'a.b.B': 2})
+    def test_nested_helper_classes_do_not_split_the_count(self):
+        src = self.PKG + 'class A {\n  class Helper\n  @Test fun a() {}\n}\n'
+        self.assertEqual(T.scan_source(src), {'a.b.A': 1})
+    def test_unsupported_annotation_form_fails_loudly(self):
+        for ann in ('@kotlin.test.Test', '@org.junit.jupiter.api.Test'):
+            with self.assertRaises(SystemExit): T.scan_source(self.PKG + f'class Z {{\n  {ann} fun a() {{}}\n}}\n')
+    def test_ignore_is_rejected_in_both_spellings(self):
+        for ig in ('@Ignore', '@org.junit.Ignore'):
+            with self.assertRaises(SystemExit): T.scan_source(self.PKG + f'class Z {{\n {ig}\n @Test fun a() {{}}\n}}\n')
+    def test_helper_files_without_tests_are_not_suites(self):
+        self.assertEqual(T.scan_source(self.PKG + 'object Support { fun x() {} }\n'), {})
+    def test_real_repository_inventory_includes_every_test_file(self):
+        inv = T.expected(core_only=False, desktop=False)
+        self.assertGreater(len(inv), 15)
+        import glob
+        for f in glob.glob(os.path.join(HERE, '..', 'app/src/test/**/*.kt'), recursive=True):
+            src = open(f, encoding='utf-8').read()
+            self.assertEqual(sum(T.scan_source(src, f).values()), len(T.TEST_ANNOTATION.findall(src)), f)
+
 class TestInventory(unittest.TestCase):
     def results(self, classes):
         d = tempfile.mkdtemp()
