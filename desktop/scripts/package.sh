@@ -25,13 +25,13 @@ case "$PLATFORM" in
     jpackage "${COMMON[@]}" --icon packaging/icon.png
     ROOT="build/jpackage/$APP"
     cp packaging/linux/steam-launch.sh packaging/linux/MyPersonalCrossword.desktop packaging/icon.png "$ROOT/"
-    cp packaging/linux/README-STEAM.txt "$ROOT/README.txt"; cp ../docs/THIRD_PARTY_ASSETS.md "$ROOT/"
+    cp packaging/linux/README-STEAM.txt "$ROOT/README.txt"; cp ../docs/THIRD_PARTY_ASSETS.md "$ROOT/"; cp -r packaging/licenses "$ROOT/licenses"
     chmod +x "$ROOT/steam-launch.sh"
     OUT="dist/My Personal Crossword Build $VERSION Linux.tar.gz"
     tar -C build/jpackage -czf "$OUT" "$APP" ;;
   windows)
     jpackage "${COMMON[@]}" --icon packaging/icon.ico
-    cp ../docs/THIRD_PARTY_ASSETS.md "build/jpackage/$APP/"
+    cp ../docs/THIRD_PARTY_ASSETS.md "build/jpackage/$APP/"; cp -r packaging/licenses "build/jpackage/$APP/licenses"
     OUT="dist/My Personal Crossword Build $VERSION EXE.zip"
     (cd build/jpackage && powershell -NoProfile -Command "Compress-Archive -Path $APP -DestinationPath ../../$OUT -Force" 2>/dev/null) \
       || (cd build/jpackage && zip -qr "../../$OUT" "$APP") ;;
