@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes release-manifest.json: one record tying a release to its exact source and artifacts.
 
-    make_release_manifest.py <apk> [out.json]
+    make_release_manifest.py <artifact> [out.json] [--platform android|windows|linux]
 
 Every platform artifact of a coordinated release lists the SAME source commit here.
 """
@@ -20,8 +20,33 @@ def catalog():
         if m: out[m.group(1)] = m.group(2)
     return out
 
+def jdk():
+    try:   # `java -version` prints to stderr
+        r = subprocess.run(['java', '-version'], capture_output=True, text=True)
+        return next(l for l in (r.stderr or r.stdout).splitlines() if not l.startswith('Picked up')).strip()
+    except Exception: return 'see CI log'
+
+def desktop_manifest(m, platform_name, artifact):
+    """Desktop artifacts: same source/provenance block, desktop toolchain and signing facts."""
+    dsrc = open(os.path.join(ROOT, 'desktop', 'build.gradle.kts')).read()
+    m['build'].pop('android_version_code', None)
+    m['build']['configuration'] = 'release (jpackage app-image)'
+    m['build']['signing'] = 'unsigned (no code-signing certificate); Windows SmartScreen will warn until one is added'
+    m['toolchain'] = {
+        'gradle': m['toolchain']['gradle'], 'kotlin': re.search(r'kotlin\("jvm"\) version "([^"]+)"', dsrc).group(1),
+        'ui': 'Java Swing / Java2D (JDK only, no Compose)', 'jdk': jdk(), 'packager': 'jpackage (bundled runtime)',
+        'runner_os': os.environ.get('RUNNER_OS', platform.system()),
+    }
+    m['artifacts'][0]['platform'] = platform_name
+    m['platforms_supported'] = [platform_name]
+    m['verification'] = {'unit_tested': True, 'packaged_launch_tested': os.environ.get('LAUNCH_TESTED', 'false') == 'true',
+                         'physically_tested_on_steam_deck': False, 'steam_deck_verified': False}
+    return m
+
 def main():
-    apk = sys.argv[1]; out = sys.argv[2] if len(sys.argv) > 2 else 'release-manifest.json'
+    args = [a for a in sys.argv[1:] if not a.startswith('--platform=')]
+    plat = next((a.split('=', 1)[1] for a in sys.argv[1:] if a.startswith('--platform=')), 'android')
+    apk = args[0]; out = args[1] if len(args) > 1 else 'release-manifest.json'
     sha = os.environ.get('BUILD_SOURCE_SHA') or sh('git', 'rev-parse', 'HEAD')
     ver = open(os.path.join(ROOT, 'VERSION')).read().strip()
     wrapper = open(os.path.join(ROOT, 'gradle', 'wrapper', 'gradle-wrapper.properties')).read()
@@ -51,6 +76,7 @@ def main():
         'artifacts': [{'platform': 'android', 'file': os.path.basename(apk), 'sha256': h, 'bytes': os.path.getsize(apk)}],
         'platforms_supported': ['android'],
     }
+    if plat != 'android': m = desktop_manifest(m, plat, apk)
     json.dump(m, open(out, 'w'), indent=2); print(json.dumps(m, indent=2))
 
 if __name__ == '__main__':

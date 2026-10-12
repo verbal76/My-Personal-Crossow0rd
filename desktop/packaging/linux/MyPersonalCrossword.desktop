@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=My Personal Crossword
+Comment=Crossword puzzles by Hot Attic Games
+Exec=steam-launch.sh
+Icon=icon
+Categories=Game;LogicGame;
+Terminal=false

@@ -40,6 +40,9 @@ GitHub-hosted Actions minutes are shared across the owner's projects and the mon
 
 **Cloud sessions:** Claude Code on the web may block `dl.google.com`, which serves the Android SDK, AGP and AndroidX. In that case the Android build only runs in CI. The pure-Kotlin `core` package and its tests compile locally on a plain JVM: run `tools/validate_local.sh` (project in `tools/core-jvm`, source sets pointing at `app/src/main/java/.../core` and `app/src/test/java/.../core`, `crossword.assets` set for you). Maven Central occasionally rate-limits (HTTP 429); retry after a few seconds.
 
+## Desktop (Windows / Linux / Steam Deck)
+`desktop/` is a separate Gradle build (Swing UI) that compiles the SAME `core` sources; Android is unchanged. Scope, controls, saves, packaging, CI and the verification labels are in `docs/DESKTOP.md`. Local: `./gradlew -p desktop test`, `desktop/scripts/package.sh linux`, `desktop/scripts/smoke.sh <launcher>`. `.github/workflows/desktop.yml` is manual-only. Never claim Windows or Steam Deck verification without real runs.
+
 ## Package / layout
 
 The Kotlin package is **`com.hag.mypersonalcrossword`**, but the source folders are still `com/example/mypersonalcrossword/`. Kotlin allows the mismatch; don't "fix" one side without the other.

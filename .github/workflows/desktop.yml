@@ -1,0 +1,114 @@
+name: "Desktop build (manual only - Windows and Linux/Steam Deck)"
+
+# Budget policy (CLAUDE.md): GitHub-hosted minutes are scarce, and Windows minutes cost double.
+# This workflow NEVER runs on pushes, pull requests or tags. Start it by hand (Run workflow) and
+# tick only the platforms you need. It builds artifacts and uploads them for review; it does not
+# create a Release, publish to Steam, or touch signing.
+#
+# One coordinated build = ONE immutable SHA: every job checks out github.sha (the commit the run
+# was started on), runs the same release-source gate, and writes a provenance manifest naming that
+# SHA. The gate requires the commit to be on the authoritative line (AUTHORITATIVE_BRANCH), so the
+# owner must approve the desktop work onto that line first; it is not bypassed here.
+on:
+  workflow_dispatch:
+    inputs:
+      build_linux:
+        description: 'Package + launch-test the Linux x86-64 (Steam / Steam Deck) build'
+        type: boolean
+        default: true
+      build_windows:
+        description: 'Package + launch-test the Windows x64 build (Windows minutes cost 2x)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BUILD_SOURCE_SHA: ${{ github.sha }}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      # Only the ticked platforms become package jobs (a job-level `if` can't read the matrix).
+      - id: m
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          inc = []
+          if "${{ inputs.build_linux }}" == "true":
+              inc.append({"platform": "linux", "os": "ubuntu-latest", "launcher": "MyPersonalCrossword/steam-launch.sh", "ext": "tar.gz"})
+          if "${{ inputs.build_windows }}" == "true":
+              inc.append({"platform": "windows", "os": "windows-latest", "launcher": "MyPersonalCrossword/MyPersonalCrossword.exe", "ext": "zip"})
+          print("matrix=" + json.dumps({"include": inc}, separators=(",", ":")))
+          PY
+      - uses: actions/checkout@v4
+        with: { ref: '${{ github.sha }}', fetch-depth: 0 }
+      - name: Verify release source (SHA and authoritative line)
+        run: python3 tools/verify_release_source.py
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Desktop + shared core unit tests
+        run: ./gradlew -p desktop test --no-daemon
+      - name: Verify every declared suite ran
+        run: python3 tools/verify_test_results.py --desktop
+
+  package:
+    needs: tests
+    if: ${{ needs.tests.outputs.matrix != '{"include":[]}' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.tests.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ github.sha }}', fetch-depth: 0 }
+      - name: Verify release source (SHA and authoritative line)
+        shell: bash
+        run: python3 tools/verify_release_source.py
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Xvfb (Linux launch test needs a display)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+      - name: Package
+        shell: bash
+        run: desktop/scripts/package.sh ${{ matrix.platform }}
+      - name: Unpack the packaged artifact (what a player would get)
+        shell: bash
+        run: |
+          mkdir -p unpacked && cd unpacked
+          if [ "${{ matrix.ext }}" = zip ]; then 7z x -y ../desktop/dist/*.zip >/dev/null || unzip -q ../desktop/dist/*.zip
+          else tar -xzf ../desktop/dist/*.tar.gz; fi
+      - name: Launch test of the packaged build (real window; full play-through, save, restart, resume)
+        id: smoke
+        shell: bash
+        run: desktop/scripts/smoke.sh "unpacked/${{ matrix.launcher }}" "$PWD/smoke-shots"
+      - name: Provenance manifest
+        if: always() && hashFiles('desktop/dist/*') != ''
+        shell: bash
+        env:
+          LAUNCH_TESTED: ${{ steps.smoke.outcome == 'success' && 'true' || 'false' }}
+        run: |
+          ART=$(ls desktop/dist/* | head -1)
+          python3 tools/make_release_manifest.py "$ART" "desktop/dist/release-manifest-${{ matrix.platform }}.json" --platform=${{ matrix.platform }}
+          python3 tools/verify_release_source.py --manifest "desktop/dist/release-manifest-${{ matrix.platform }}.json" --apk "$ART"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MyPersonalCrossword-${{ matrix.platform }}-${{ github.sha }}
+          path: |
+            desktop/dist/*
+            smoke-shots/*
+          retention-days: 14
