@@ -12,3 +12,8 @@ No semantic versions, no codenames (`b9`, `modernized`, `candidate`, `final`) in
 
 ## Build log (public version: what changed)
 - v7: first build with this convention. v8: Hot Attic Games studio splash. v9: game splash art, new launcher icon. v10: 25 categorized backgrounds, category picker, tile depth.
+
+## Provenance and source rules
+- A delivered build only runs from a commit on the authoritative branch (`AUTHORITATIVE_BRANCH`); CI fails otherwise.
+- Each build writes `release-manifest.json` (commit, ref, version, platform, toolchain, timestamp, artifact SHA-256), attached to the Release and the Actions artifact. A coordinated multi-platform release lists one commit for all platform artifacts.
+- `tools/branch_audit.py` keeps unmerged work visible; see `docs/BRANCH_LEDGER.md`.

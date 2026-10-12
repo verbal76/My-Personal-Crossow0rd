@@ -47,6 +47,22 @@ jobs:
           # number; the commit count is only the local-build fallback.
           fetch-depth: 0
 
+      # One authoritative history: a delivered build must come from the authoritative
+      # line (AUTHORITATIVE_BRANCH), never from a stray or outdated branch.
+      - name: Verify the source is on the authoritative line
+        if: env.BUILD_APK == 'true'
+        run: |
+          AUTH=$(tr -d '[:space:]' < AUTHORITATIVE_BRANCH)
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$AUTH"; then
+            echo "::error::$GITHUB_SHA is not on the authoritative branch '$AUTH'. Refusing to build a delivered artifact from an unrelated or outdated line."
+            exit 1
+          fi
+          echo "source $GITHUB_SHA is on $AUTH"
+
+      - name: Branch accountability audit (warns, never blocks)
+        continue-on-error: true
+        run: python3 tools/branch_audit.py
+
       # AGP 9 / Gradle 9 require JDK 17+ to run the build.
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -62,6 +78,23 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
+
+      # CI must not report success by silently skipping the required tests.
+      - name: Verify the unit tests really ran
+        env:
+          MIN_TESTS: '150'
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+          total = skipped = 0
+          for f in glob.glob('app/build/test-results/**/*.xml', recursive=True):
+              r = ET.parse(f).getroot()
+              total += int(r.get('tests', 0)); skipped += int(r.get('skipped', 0))
+          need = int(os.environ['MIN_TESTS'])
+          print(f'unit tests executed: {total} (skipped {skipped}), required at least {need}')
+          if total < need or skipped:
+              raise SystemExit('::error::required tests were skipped or missing')
+          PY
 
       - name: Build debug APK
         if: env.BUILD_APK == 'true'
@@ -117,12 +150,21 @@ jobs:
           "$BT/zipalign" -c -P 16 -v 4 "$APK" > "$RUNNER_TEMP/za.txt" 2>&1 && echo "ZIPALIGN 16 KB: PASS" || { tail -5 "$RUNNER_TEMP/za.txt"; echo "ZIPALIGN 16 KB: FAIL"; exit 1; }
           "$BT/apksigner" verify --print-certs "$APK" | head -3
 
+      # Provenance: one record tying this release to its exact commit, toolchain and artifacts.
+      - name: Write release manifest
+        if: env.BUILD_APK == 'true'
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: python3 tools/make_release_manifest.py "${{ steps.apk.outputs.name }}" release-manifest.json
+
       - name: Upload APK artifact
         if: env.BUILD_APK == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: My-Personal-Crossword-${{ steps.apk.outputs.ver }}-${{ steps.apk.outputs.short }}
-          path: ${{ steps.apk.outputs.name }}
+          path: |
+            ${{ steps.apk.outputs.name }}
+            release-manifest.json
           if-no-files-found: error
           retention-days: 14
 
@@ -157,7 +199,7 @@ jobs:
           - SHA-256: $(cut -d' ' -f1 "${FILE}.sha256")
           EOF
           sed -i 's/^          //' "$RUNNER_TEMP/notes.md"
-          gh release create "$VER" "$FILE" "${FILE}.sha256" \
+          gh release create "$VER" "$FILE" "${FILE}.sha256" release-manifest.json \
             --target "$BUILD_SOURCE_SHA" --title "My Personal Crossword ${VER}" \
             --notes-file "$RUNNER_TEMP/notes.md" --latest
 

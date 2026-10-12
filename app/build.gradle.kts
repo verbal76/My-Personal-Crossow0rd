@@ -35,6 +35,8 @@ val buildNumber: Int = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.let { 
 // commit and CI run stay as engineering metadata. See docs/RELEASES.md.
 val publicVersion: Int = rootProject.file("VERSION").readText().trim().toInt()
 val buildTimeUtc: String = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
+val buildSourceRef: String = System.getenv("GITHUB_REF_NAME")?.ifBlank { null }
+    ?: gitOutput("rev-parse", "--abbrev-ref", "HEAD") ?: "unknown"
 val buildOrigin: String = System.getenv("GITHUB_RUN_NUMBER")?.let { "GitHub Actions run #$it" } ?: "local build"
 
 // ── Release signing ───────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ android {
         versionName = "v$publicVersion"
 
         buildConfigField("String", "PRODUCT_NAME", "\"My Personal Crossword\"")
+        buildConfigField("String", "SOURCE_REF", "\"$buildSourceRef\"")
         buildConfigField("String", "GIT_SHA", "\"$buildSourceSha\"")
         buildConfigField("String", "BUILD_TIME_UTC", "\"$buildTimeUtc\"")
         buildConfigField("String", "BUILD_ORIGIN", "\"$buildOrigin\"")

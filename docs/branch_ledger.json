@@ -1,0 +1,20 @@
+{
+  "authoritative_branch": "claude/native-stack-modernization",
+  "note": "Machine-readable recovery ledger read by tools/branch_audit.py. A branch with commits that are not reachable from the authoritative branch must have an entry here whose `tip` matches its current tip; new commits on it fail the audit until it is re-reviewed. Human summary: docs/BRANCH_LEDGER.md.",
+  "accounted": [
+    {
+      "ref": "origin/claude/review-crossword-repro-5mjbG",
+      "tip": "0960350ef4ec31d532336d706f54cbbab5384249",
+      "audited": "2026-10-12",
+      "classification": "all 10 commits dispositioned (3 ported, 1 superseded, 5 overlap/equivalent, 1 intentionally skipped); nothing left to recover",
+      "disposition": "keep (history); do not merge; do not delete without owner approval"
+    },
+    {
+      "ref": "origin/main",
+      "tip": "f7775d6",
+      "audited": "2026-10-12",
+      "classification": "2 commits are owner asset uploads (logo, app icon, splash); integrated: the files were copied byte-for-byte into branding/ and shipped. Otherwise main is the stale April baseline.",
+      "disposition": "keep; fast-forwarding main to the authoritative branch needs owner approval after device testing"
+    }
+  ]
+}

@@ -288,6 +288,7 @@ object BuildInfo {
         return buildString {
             appendLine("=== MY PERSONAL CROSSWORD DIAGNOSTICS ===")
             details(context).forEach { appendLine("${it.first}: ${it.second}") }
+            appendLine("Source ref: ${BuildConfig.SOURCE_REF}")
             appendLine("Compile SDK: ${BuildConfig.COMPILE_SDK_LABEL}")
             appendLine("Kotlin runtime: ${KotlinVersion.CURRENT}")
             appendLine("Captured at: $stamp")
