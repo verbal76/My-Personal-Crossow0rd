@@ -25,7 +25,7 @@ if [ -z "${SKIP_DESKTOP:-}" ]; then
   python3 tools/verify_test_results.py --desktop
 fi
 # passing and deliberately failing cases for the release-source gate, manifest check and test verifier
-python3 tools/test_release_source.py
+python3 -W ignore tools/test_release_source.py
 if [ -n "${PR_MODE:-}" ]; then
   python3 tools/branch_audit.py || echo "::warning::branch audit reported unaccounted refs; see docs/BRANCH_LEDGER.md"
 else
