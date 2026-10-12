@@ -60,7 +60,7 @@ class Source(unittest.TestCase):
         self.assertTrue(any('does not match VERSION' in b for b in self.check(self.c1, tag='build-v99')))
     def test_fail_not_a_release_tag_name(self):
         git(self.d, 'tag', 'random-tag', self.c1)
-        self.assertTrue(any('not a build-v<N>' in b for b in self.check(self.c1, tag='random-tag')))
+        self.assertTrue(any('not a build-<N>' in b for b in self.check(self.c1, tag='random-tag')))
     def test_fail_missing_authoritative_marker(self):
         os.remove(os.path.join(self.d, 'AUTHORITATIVE_BRANCH')); git(self.d, 'add', '-A'); git(self.d, 'commit', '-q', '-m', 'rm')
         c = git(self.d, 'rev-parse', 'HEAD'); git(self.d, 'update-ref', 'refs/remotes/origin/auth', c)
@@ -68,6 +68,48 @@ class Source(unittest.TestCase):
     def test_branch_ref_without_tag_still_requires_the_line(self):
         self.assertEqual(self.check(self.c2), [])
         self.assertTrue(any('not reachable' in b for b in self.check(self.side)))
+
+class LocalOnlyFeatureBranch(unittest.TestCase):
+    """local_only may build an in-progress ledgered branch; anything that publishes may not."""
+    def setUp(self):
+        self.d = tempfile.mkdtemp(); git(self.d, 'init', '-q', '-b', 'auth')
+        os.makedirs(os.path.join(self.d, 'docs'))
+        self.base = commit(self.d, '10', 'base')
+        git(self.d, 'update-ref', 'refs/remotes/origin/auth', self.base)
+        git(self.d, 'checkout', '-q', '-b', 'feat')
+        self.ledger([{'ref': 'origin/feat', 'active_feature': True}])
+        self.tip = commit(self.d, '11', 'feature')
+        git(self.d, 'update-ref', 'refs/remotes/origin/feat', self.tip)
+    def ledger(self, entries):
+        json.dump({'authoritative_branch': 'auth', 'accounted': entries}, open(os.path.join(self.d, 'docs', 'branch_ledger.json'), 'w'))
+    def check(self, dest, sha=None):
+        sha = sha or self.tip
+        git(self.d, 'checkout', '-q', '--detach', sha)
+        e = {'GITHUB_SHA': sha, 'BUILD_SOURCE_SHA': sha, 'GITHUB_REF': 'refs/heads/feat', 'GITHUB_REF_NAME': 'feat'}
+        if dest: e['DESTINATION'] = dest
+        return V.verify_source(self.d, e)
+    def test_local_only_accepts_a_ledgered_active_feature_commit(self): self.assertEqual(self.check('local_only'), [])
+    def test_publishing_destination_is_strict(self):
+        self.assertTrue(any('not reachable' in b for b in self.check('github_releases')))
+    def test_unset_destination_is_strict(self):
+        self.assertTrue(any('not reachable' in b for b in self.check(None)))
+    def test_local_only_rejects_a_branch_with_no_active_feature_entry(self):
+        git(self.d, 'checkout', '-q', 'feat'); self.ledger([]); git(self.d, 'add', '-A'); git(self.d, 'commit', '-q', '-m', 'unledger')
+        tip = git(self.d, 'rev-parse', 'HEAD'); git(self.d, 'update-ref', 'refs/remotes/origin/feat', tip)
+        self.assertTrue(any('not reachable' in b for b in self.check('local_only', tip)))
+    def test_local_only_rejects_a_branch_that_no_longer_contains_the_authoritative_tip(self):
+        git(self.d, 'checkout', '-q', 'auth'); moved = commit(self.d, '10', 'auth moved')
+        git(self.d, 'update-ref', 'refs/remotes/origin/auth', moved)
+        self.assertTrue(any('not reachable' in b for b in self.check('local_only')))
+    def test_local_only_rejects_a_commit_not_on_the_feature_branch(self):
+        git(self.d, 'checkout', '-q', '-b', 'stray', self.base); stray = commit(self.d, '10', 'stray')
+        self.assertTrue(any('not reachable' in b for b in self.check('local_only', stray)))
+    def test_new_tag_name_is_accepted(self):
+        git(self.d, 'update-ref', 'refs/remotes/origin/auth', self.tip)
+        git(self.d, 'tag', 'build-11', self.tip)
+        git(self.d, 'checkout', '-q', '--detach', self.tip)
+        e = {'GITHUB_SHA': self.tip, 'BUILD_SOURCE_SHA': self.tip, 'GITHUB_REF': 'refs/tags/build-11', 'GITHUB_REF_NAME': 'build-11'}
+        self.assertEqual(V.verify_source(self.d, e), [])
 
 class BranchAudit(unittest.TestCase):
     def setUp(self):
