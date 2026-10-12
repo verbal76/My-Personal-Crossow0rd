@@ -16,7 +16,8 @@ class GamePanel(private val model: AppModel) : JPanel() {
     private var camX = 0; private var camY = 0
     private val clock = Timer(33) { onTick() }
     private var last = System.nanoTime()
-    var onPadPoll: (Long) -> Unit = {}
+    /** Polls the gamepad for held-direction repeats; returns true if it produced an action. */
+    var onPadPoll: (Long) -> Boolean = { false }
 
     // Clue list hit areas, refreshed on every paint.
     private var clueHits: List<Pair<Rect, PlacedWord>> = emptyList()
@@ -48,12 +49,30 @@ class GamePanel(private val model: AppModel) : JPanel() {
         addHierarchyListener { if (isShowing) { clock.start(); requestFocusInWindow() } else clock.stop() }
     }
 
+    private var lastPaintedSecond = -1L
+
+    /**
+     * Event-driven drawing: the 33 ms tick advances the model and polls the gamepad (both cheap) but only
+     * asks for a repaint when something visible can have changed. Idle menus and a paused puzzle therefore
+     * cost almost nothing (the old unconditional 30 fps repaint kept a core busy; see docs/DESKTOP.md).
+     * Input handlers repaint themselves; this covers time-driven changes.
+     */
     private fun onTick() {
         val now = System.nanoTime()
         val ms = ((now - last) / 1_000_000L).coerceIn(0, 500); last = now
+        val before = model.screen
         model.tick(ms)
-        onPadPoll(System.currentTimeMillis())
-        repaint()
+        var padActed = false
+        onPadPoll(System.currentTimeMillis()).also { padActed = it }
+        if (needsRepaint(before, padActed)) repaint()
+    }
+
+    /** True when the picture can differ from the last one drawn without any input event. */
+    private fun needsRepaint(before: Screen, padActed: Boolean): Boolean = when {
+        padActed || model.screen != before -> true
+        model.screen == Screen.STUDIO_SPLASH || model.screen == Screen.GAME_SPLASH -> true      // fade animation
+        model.screen == Screen.PUZZLE -> (game.session?.elapsedSeconds ?: -1L).let { s -> (s != lastPaintedSecond).also { lastPaintedSecond = s } }
+        else -> false
     }
 
     // ── Mouse / touch ────────────────────────────────────────────────────────
@@ -165,7 +184,7 @@ class GamePanel(private val model: AppModel) : JPanel() {
 
     private fun menu(g: Graphics2D) {
         val u = ui()
-        val w = (560 * u).toInt(); val rowH = (62 * u).toInt()
+        val w = (620 * u).toInt(); val rowH = (62 * u).toInt()
         val items = model.menuItems
         val h = (140 * u).toInt() + items.size * rowH
         val x = (width - w) / 2; val y = max((height - h) / 2, (10 * u).toInt())

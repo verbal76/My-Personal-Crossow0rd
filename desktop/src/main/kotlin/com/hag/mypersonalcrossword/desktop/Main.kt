@@ -39,7 +39,7 @@ class DesktopApp(val options: Options, private val onExit: (Int) -> Unit = { exi
     private val reader = JoystickReader(
         { e ->
             val now = System.currentTimeMillis()
-            SwingUtilities.invokeLater { mapper.onEvent(e, now).forEach { model.act(it, fromPad = true) } }
+            SwingUtilities.invokeLater { mapper.onEvent(e, now).forEach { model.act(it, fromPad = true) }; panel.repaint() }
         },
         { SwingUtilities.invokeLater { mapper.reset() } })
     @Volatile private var closing = false
@@ -54,7 +54,7 @@ class DesktopApp(val options: Options, private val onExit: (Int) -> Unit = { exi
             override fun windowDeactivated(e: WindowEvent) { runCatching { game.save() } }
         })
         panel.preferredSize = Dimension(options.width, options.height)
-        panel.onPadPoll = { now -> mapper.poll(now).forEach { model.act(it, fromPad = true) } }
+        panel.onPadPoll = { now -> mapper.poll(now).also { acts -> acts.forEach { model.act(it, fromPad = true) } }.isNotEmpty() }
         frame.contentPane.add(panel)
         frame.pack()
         frame.minimumSize = Dimension(640, 400)

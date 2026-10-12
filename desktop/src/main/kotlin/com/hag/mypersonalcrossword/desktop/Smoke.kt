@@ -29,7 +29,7 @@ class Smoke(private val app: DesktopApp, private val o: Options) {
     private val game get() = app.game
     @Volatile private var uncaught: Throwable? = null
 
-    private fun <T> onEdt(f: () -> T): T { var r: Any? = null; SwingUtilities.invokeAndWait { r = f() }; @Suppress("UNCHECKED_CAST") return r as T }
+    private fun <T> onEdt(f: () -> T): T { var r: Any? = null; SwingUtilities.invokeAndWait { r = f(); app.panel.repaint() }; @Suppress("UNCHECKED_CAST") return r as T }
     private fun check(name: String, ok: Boolean, detail: String = "") { checks += name to ok; if (!ok) problems += "$name $detail" }
     private fun pause(ms: Long) = Thread.sleep(ms)
     private fun screen() = onEdt { model.screen }
