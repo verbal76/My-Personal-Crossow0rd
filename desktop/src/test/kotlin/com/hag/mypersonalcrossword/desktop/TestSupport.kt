@@ -10,8 +10,9 @@ object T {
     fun dir(): File = Files.createTempDirectory("mpc-test").toFile().also { it.deleteOnExit() }
     fun controller(store: ProfileStore = ProfileStore(dir()), seed: Int = 7, now: Long = 1_790_000_000_000L) =
         GameController(store, entries, { Random(seed) }, { now })
-    class FakeHost : Host { var fullscreen = 0; var quit = 0
-        override fun toggleFullscreen() { fullscreen++ }; override fun quit() { quit++ } }
+    class FakeHost(var startFullscreen: Boolean = false) : Host { var fullscreen = 0; var quit = 0
+        override var isFullscreen = startFullscreen
+        override fun toggleFullscreen() { fullscreen++; isFullscreen = !isFullscreen }; override fun quit() { quit++ } }
     fun model(store: ProfileStore = ProfileStore(dir()), host: FakeHost = FakeHost()) =
         AppModel(store, controller(store), host)
 

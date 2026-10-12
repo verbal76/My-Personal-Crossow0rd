@@ -69,6 +69,36 @@ class Source(unittest.TestCase):
         self.assertEqual(self.check(self.c2), [])
         self.assertTrue(any('not reachable' in b for b in self.check(self.side)))
 
+class BranchAudit(unittest.TestCase):
+    def setUp(self):
+        import branch_audit as B; self.B = B
+        self.d = tempfile.mkdtemp(); git(self.d, 'init', '-q', '-b', 'auth')
+        open(os.path.join(self.d, '.git', 'info', 'exclude'), 'a').write('docs/\n')   # the ledger stays a working-tree file
+        commit(self.d, '10', 'one')
+        os.makedirs(os.path.join(self.d, 'docs'))
+        self.write_ledger([])
+        git(self.d, 'checkout', '-q', '-b', 'feature')
+        commit(self.d, '10', 'feature work')
+        git(self.d, 'checkout', '-q', 'auth')
+    def write_ledger(self, entries):
+        json.dump({'authoritative_branch': 'auth', 'note': '', 'accounted': entries}, open(os.path.join(self.d, 'docs', 'branch_ledger.json'), 'w'))
+    def test_unledgered_branch_fails(self):
+        self.assertTrue(any('UNACCOUNTED' in p for p in self.B.audit(self.d)[0]))
+    def test_active_feature_branch_passes_without_a_pinned_tip(self):
+        self.write_ledger([{'ref': 'feature', 'active_feature': True}])
+        self.assertEqual(self.B.audit(self.d)[0], [])
+        git(self.d, 'checkout', '-q', 'feature'); commit(self.d, '10', 'more work'); git(self.d, 'checkout', '-q', 'auth')
+        self.assertEqual(self.B.audit(self.d)[0], [])          # new commits do not need a ledger edit
+    def test_active_feature_branch_that_diverges_fails(self):
+        self.write_ledger([{'ref': 'feature', 'active_feature': True}])
+        commit(self.d, '10', 'auth moved on')                  # authoritative branch gets a commit feature lacks
+        self.assertTrue(any('DIVERGED' in p for p in self.B.audit(self.d)[0]))
+    def test_pinned_entry_still_fails_when_the_tip_moves(self):
+        tip = git(self.d, 'rev-parse', 'feature')
+        self.write_ledger([{'ref': 'feature', 'tip': tip}]); self.assertEqual(self.B.audit(self.d)[0], [])
+        git(self.d, 'checkout', '-q', 'feature'); commit(self.d, '10', 'moved'); git(self.d, 'checkout', '-q', 'auth')
+        self.assertTrue(any('CHANGED' in p for p in self.B.audit(self.d)[0]))
+
 class Manifest(unittest.TestCase):
     def setUp(self):
         self.d = tempfile.mkdtemp(); git(self.d, 'init', '-q', '-b', 'auth'); self.c = commit(self.d, '10')

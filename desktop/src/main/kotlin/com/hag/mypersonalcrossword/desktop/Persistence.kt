@@ -45,6 +45,11 @@ class ProfileStore(val dir: File) {
         get() = props.getProperty("background").orEmpty()
         set(v) { props.setProperty("background", v); flush() }
 
+    /** Prompt glyph style: "auto" (follow the last device used), "controller" or "keyboard". */
+    var prompts: String
+        get() = props.getProperty("prompts") ?: "auto"
+        set(v) { props.setProperty("prompts", v); flush() }
+
     var category: String
         get() = props.getProperty("category") ?: "MIXED"
         set(v) { props.setProperty("category", v); flush() }

@@ -79,6 +79,9 @@ class GamepadMapper(private val repeatDelayMs: Long = 350, private val repeatMs:
         return emptyList()
     }
 
+    /** Forget held directions and axis state (device unplugged / reader restarted). */
+    fun reset() { axes.clear(); held = null }
+
     /** Call regularly (e.g. every 16 ms) to produce auto-repeat while a direction is held. */
     fun poll(nowMs: Long): List<Action> {
         val h = held ?: return emptyList()
@@ -100,6 +103,7 @@ class GamepadMapper(private val repeatDelayMs: Long = 350, private val repeatMs:
 
 /** Reads joystick events from every /dev/input/js* that exists (re-scanned, so hot-plugging works). */
 class JoystickReader(private val onEvent: (JsEvent) -> Unit,
+                     private val onDisconnect: () -> Unit = {},
                      private val devices: () -> List<File> = { defaultDevices() }) {
     @Volatile private var running = false
     private var thread: Thread? = null
@@ -112,6 +116,7 @@ class JoystickReader(private val onEvent: (JsEvent) -> Unit,
                 val dev = devices().firstOrNull { it.canRead() }
                 if (dev == null) { sleep(2000); continue }
                 runCatching { read(dev) }
+                onDisconnect()          // a held direction must not keep repeating after an unplug
                 sleep(1000)
             }
         }, "gamepad-reader").apply { isDaemon = true; start() }

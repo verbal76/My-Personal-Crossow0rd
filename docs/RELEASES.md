@@ -18,3 +18,10 @@ No semantic versions, no codenames (`b9`, `modernized`, `candidate`, `final`) in
 - **Manifest:** each build writes `release-manifest.json` (commit, ref, version, platform, toolchain, timestamp, artifact SHA-256), attached to the Release and the Actions artifact. A coordinated multi-platform release lists one commit for all platform artifacts.
 - **Tests:** CI verifies every test class declared in `app/src/test` ran with its declared count, none skipped or failed (`tools/verify_test_results.py`); currently 21 classes / 160 tests, of which 17 classes / 148 tests are the pure-Kotlin core suite that `tools/validate_local.sh` runs locally.
 - **Branch inventory** (`tools/branch_audit.py`, `docs/BRANCH_LEDGER.md`) is informational. `main` is behind the product; syncing it is an owner decision after device testing and release qualification.
+
+## Desktop artifacts and the studio naming standard
+The studio standard names files `Game Title Build NN APK.apk` / `... EXE.zip` / `... Linux.tar.gz`. Desktop packages already use it
+(`My Personal Crossword Build <N> Linux.tar.gz`, `... EXE.zip`, plus `build-manifest-<platform>.json` and `checksums-<platform>.sha256`).
+Android and its existing Releases keep the owner-directed `v<N>` identity (`My-Personal-Crossword-v<N>.apk`, release/tag `v<N>`); changing that
+is an owner decision (see the overnight report). `desktop.yml` attaches desktop files to the existing `v<N>` release only when asked
+(`destination=github_releases`); it never creates a release.

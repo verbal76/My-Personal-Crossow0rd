@@ -61,10 +61,20 @@ class InputDevicesTest {
         val f = File.createTempFile("jsdev", ".bin"); f.deleteOnExit()
         f.writeBytes(JsEvent.encode(1, 1, Pad.A) + JsEvent.encode(0, 1, Pad.A) + JsEvent.encode(-32767, 2, Pad.AXIS_HAT_Y))
         val got = ArrayList<JsEvent>()
-        val r = JoystickReader({ got += it }, { emptyList() }); 
+        var dropped = 0
+        val r = JoystickReader({ got += it }, { dropped++ }, { emptyList() })
         val rf = JoystickReader::class.java.getDeclaredField("running").also { it.isAccessible = true }; rf.setBoolean(r, true)
         r.read(f)
         assertEquals(3, got.size); assertEquals(Pad.AXIS_HAT_Y, got[2].number)
+    }
+
+    @Test fun unplugWhileHoldingStopsRepeatAndForgetsAxes() {
+        val m = GamepadMapper(350, 90)
+        m.onEvent(ev(32767, 2, Pad.AXIS_HAT_X), 0)
+        assertEquals(listOf(Action.RIGHT), m.poll(400))
+        m.reset()
+        assertTrue("no phantom repeat after the pad disappears", m.poll(10_000).isEmpty())
+        assertEquals("a fresh press works again", listOf(Action.RIGHT), m.onEvent(ev(32767, 2, Pad.AXIS_HAT_X), 20_000))
     }
 
     @Test fun keyboardMapping() {

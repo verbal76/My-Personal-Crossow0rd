@@ -6,6 +6,7 @@ enum class Screen { STUDIO_SPLASH, GAME_SPLASH, MENU, PUZZLE, PAUSE, RESULTS }
 
 /** Things only the window can do. */
 interface Host {
+    val isFullscreen: Boolean
     fun toggleFullscreen()
     fun quit()
 }
@@ -21,6 +22,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
     var keyboardOpen = false; private set
     var menuIndex = 0; private set
     var pauseIndex = 0; private set
+    private var autosaveMs = 0L
     var screenMillis = 0L; private set      // time on the current screen (splashes)
     /** Which input family was used last, so the UI can show matching hints (keys vs. pad). */
     var lastInput = "keyboard"; private set
@@ -37,8 +39,11 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
 
     enum class MenuItem(val label: String) {
         CONTINUE("Continue"), DAILY("Daily Puzzle"), CATEGORY("Category"), DIFFICULTY("Difficulty"),
-        START("Start Puzzle"), BACKGROUND("Background"), FULLSCREEN("Fullscreen"), QUIT("Quit")
+        START("Start Puzzle"), BACKGROUND("Background"), PROMPTS("Button prompts"), FULLSCREEN("Fullscreen"), QUIT("Quit")
     }
+    /** Which prompt family to draw: the manual choice, or the device used last (mouse counts as keyboard). */
+    val promptInput: String get() = when (store.prompts) { "controller" -> "pad"; "keyboard" -> "keyboard"; else -> lastInput }
+
     val savedSessions: List<PuzzleSession> get() = store.savedSessions()
     val menuItems: List<MenuItem> get() =
         MenuItem.values().filter { it != MenuItem.CONTINUE || savedSessions.isNotEmpty() }
@@ -51,7 +56,12 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
         when (screen) {
             Screen.STUDIO_SPLASH -> if (screenMillis >= STUDIO_MS) go(Screen.GAME_SPLASH)
             Screen.GAME_SPLASH   -> if (screenMillis >= GAME_MS) go(Screen.MENU)
-            Screen.PUZZLE        -> game.advance(ms)
+            Screen.PUZZLE        -> {
+                game.advance(ms)
+                // Crash / suspend / power-loss insurance, like Android's save on pause.
+                autosaveMs += ms
+                if (autosaveMs >= AUTOSAVE_MS) { autosaveMs = 0; game.save() }
+            }
             else -> {}
         }
     }
@@ -66,7 +76,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
     }
 
     fun act(a: Action, fromPad: Boolean = false) {
-        lastInput = if (fromPad) "pad" else lastInput
+        lastInput = if (fromPad) "pad" else "keyboard"
         if (a == Action.FULLSCREEN) { toggleFullscreen(); return }
         when (screen) {
             Screen.STUDIO_SPLASH, Screen.GAME_SPLASH -> if (a == Action.CONFIRM || a == Action.CANCEL) go(if (screen == Screen.STUDIO_SPLASH) Screen.GAME_SPLASH else Screen.MENU)
@@ -88,6 +98,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
                 when (items[menuIndex]) {
                     MenuItem.CATEGORY   -> { categoryIndex = Math.floorMod(categoryIndex + d, game.categories.size); store.category = category }
                     MenuItem.DIFFICULTY -> { difficultyIndex = Math.floorMod(difficultyIndex + d, difficulties.size); store.difficulty = difficulty.name }
+                    MenuItem.PROMPTS    -> { store.prompts = PROMPT_STYLES[Math.floorMod(PROMPT_STYLES.indexOf(store.prompts) + d, PROMPT_STYLES.size)] }
                     MenuItem.BACKGROUND -> { backgroundIndex = Math.floorMod(backgroundIndex + d, backgrounds.size); store.background = background.file }
                     else -> {}
                 }
@@ -105,7 +116,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
             MenuItem.START      -> if (game.startPuzzle(category, difficulty)) enterPuzzle()
             MenuItem.FULLSCREEN -> toggleFullscreen()
             MenuItem.QUIT       -> quit()
-            MenuItem.CATEGORY, MenuItem.DIFFICULTY, MenuItem.BACKGROUND -> act(Action.RIGHT)
+            MenuItem.CATEGORY, MenuItem.DIFFICULTY, MenuItem.BACKGROUND, MenuItem.PROMPTS -> act(Action.RIGHT)
         }
     }
 
@@ -183,7 +194,11 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
 
     fun setKeyboardOpen(open: Boolean) { keyboardOpen = open }
 
-    fun toggleFullscreen() { store.fullscreen = !store.fullscreen; host.toggleFullscreen() }
+    /** Mouse or touch was used: prompts go back to the keyboard/mouse style. */
+    fun noteMouse() { lastInput = "mouse" }
+
+    /** Toggles the window, then stores what the window actually is (not what we assumed). */
+    fun toggleFullscreen() { host.toggleFullscreen(); store.fullscreen = host.isFullscreen }
 
     /** Clean shutdown: the puzzle in progress is saved, then the host closes. */
     fun quit() { game.save(); host.quit() }
@@ -191,5 +206,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
     companion object {
         const val STUDIO_MS = 1800L
         const val GAME_MS = 2200L
+        const val AUTOSAVE_MS = 20_000L
+        val PROMPT_STYLES = listOf("auto", "controller", "keyboard")
     }
 }

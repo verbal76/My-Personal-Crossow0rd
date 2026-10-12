@@ -70,7 +70,7 @@ tasks.jar {
 
 tasks.test {
     systemProperty("crossword.assets", "$appSrc/main/assets")
-    systemProperty("java.awt.headless", "false")
+    systemProperty("java.awt.headless", "true")
     maxHeapSize = "2g"
     testLogging { events("failed"); exceptionFormat = TestExceptionFormat.FULL }
     afterSuite(KotlinClosure2<TestDescriptor, TestResult, Unit>({ d, r ->

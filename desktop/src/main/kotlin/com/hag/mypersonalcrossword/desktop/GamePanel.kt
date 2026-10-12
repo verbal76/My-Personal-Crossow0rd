@@ -66,13 +66,14 @@ class GamePanel(private val model: AppModel) : JPanel() {
                 val r = menuHits[i]
                 val item = model.menuItems[i]
                 // Tap the left/right third of an option row to step it back/forward; elsewhere activates.
-                if (item in listOf(AppModel.MenuItem.CATEGORY, AppModel.MenuItem.DIFFICULTY, AppModel.MenuItem.BACKGROUND)) {
+                if (item in listOf(AppModel.MenuItem.CATEGORY, AppModel.MenuItem.DIFFICULTY, AppModel.MenuItem.BACKGROUND, AppModel.MenuItem.PROMPTS)) {
                     model.act(if (x < r.x + r.w / 3) Action.LEFT else Action.RIGHT)
                 } else model.activate(item)
             }
             Screen.PAUSE -> pauseHits.indexOfFirst { it.contains(x, y) }.takeIf { it >= 0 }?.let { model.act(Action.DOWN); while (model.pauseIndex != it) model.act(Action.DOWN); model.act(Action.CONFIRM) }
             Screen.PUZZLE -> puzzleClick(x, y)
         }
+        model.noteMouse()
         repaint()
     }
 
@@ -188,6 +189,7 @@ class GamePanel(private val model: AppModel) : JPanel() {
                 AppModel.MenuItem.CATEGORY -> "◀  ${model.category}  ▶"
                 AppModel.MenuItem.DIFFICULTY -> "◀  ${model.difficulty.label}  ▶"
                 AppModel.MenuItem.BACKGROUND -> "◀  ${model.background.title}  ▶"
+                AppModel.MenuItem.PROMPTS -> "◀  ${model.store.prompts.replaceFirstChar { it.uppercase() }}  ▶"
                 AppModel.MenuItem.FULLSCREEN -> if (model.store.fullscreen) "On" else "Off"
                 AppModel.MenuItem.DAILY -> if (game.dailyDoneToday) "done today" else game.dailyKeyToday
                 AppModel.MenuItem.CONTINUE -> model.savedSessions.firstOrNull()?.let { "${it.category} · ${it.difficulty.label}" } ?: ""
@@ -196,12 +198,26 @@ class GamePanel(private val model: AppModel) : JPanel() {
             if (value.isNotEmpty()) { g.font = font(g, 22 * u); g.drawString(value, r.right - g.fontMetrics.stringWidth(value) - (20 * u).toInt(), base) }
         }
         menuHits = hits
-        hintBar(g, if (model.lastInput == "pad") "D-pad: move   A: select   ◀ ▶: change" else "Arrows: move   Enter: select   ◀ ▶: change   F11: fullscreen")
+        promptBar(g)
     }
 
-    private fun hintBar(g: Graphics2D, text: String) {
-        val u = ui(); g.font = font(g, 17 * u); g.color = Color(220, 225, 240)
-        centered(g, text, width / 2, height - (16 * u).toInt())
+    /** Glyph legend along the bottom; follows whichever device was used last. */
+    private fun promptBar(g: Graphics2D) {
+        val u = ui()
+        val prompts = PromptBar.forState(model.screen, model.promptInput, model.keyboardOpen)
+        if (prompts.isEmpty()) return
+        val icon = (30 * u).toInt(); val gap = (22 * u).toInt(); val small = (6 * u).toInt()
+        g.font = font(g, 18 * u)
+        val fm = g.fontMetrics
+        fun gw(name: String) = Glyphs.image(name)?.let { (icon * it.width.toFloat() / it.height).toInt() } ?: icon
+        val widths = prompts.map { p -> p.glyphs.sumOf { gw(it) + small } + fm.stringWidth(p.label) }
+        var x = (width - (widths.sum() + gap * (prompts.size - 1))) / 2
+        val y = height - icon - (8 * u).toInt()
+        for ((i, p) in prompts.withIndex()) {
+            for (name in p.glyphs) { val w = gw(name); Glyphs.image(name)?.let { g.drawImage(it, x, y, w, icon, null) }; x += w + small }
+            g.color = Color(235, 238, 248); g.drawString(p.label, x, y + (icon + fm.ascent - fm.descent) / 2)
+            x += fm.stringWidth(p.label) + gap
+        }
     }
 
     private fun puzzle(g: Graphics2D) {
@@ -253,7 +269,7 @@ class GamePanel(private val model: AppModel) : JPanel() {
             g.fillRect(px + 1, py + 1, cell - 2, cell - 2)
             g.color = Color(40, 44, 60); g.stroke = BasicStroke(max(1f, 1.5f * u)); g.drawRect(px + 1, py + 1, cell - 2, cell - 2)
             numbers[c]?.let { n ->
-                g.font = font(g, max(cell * 0.28f, 11f * u)); g.color = Color(30, 34, 50)
+                g.font = font(g, max(cell * 0.28f, 12f * u)); g.color = Color(30, 34, 50)
                 g.drawString(n.toString(), px + (4 * u).toInt(), py + g.fontMetrics.ascent + (2 * u).toInt())
             }
             game.inputs[c]?.let { ch ->
@@ -275,8 +291,7 @@ class GamePanel(private val model: AppModel) : JPanel() {
             g.font = font(g, 18 * u); g.color = Color(255, 255, 255, 235)
             g.drawString(game.message, lay.board.x + 4, lay.header.bottom + (4 * u).toInt() + g.fontMetrics.ascent)
         }
-        if (!model.keyboardOpen) hintBar(g, if (model.lastInput == "pad") "A: keyboard   X: flip   Y: hint   LB/RB: clue   Start: menu"
-                                              else "Type letters   Arrows/click: move   Space: flip   Tab: next clue   F1: hint   Esc: menu")
+        promptBar(g)
     }
 
     private fun cluePanel(g: Graphics2D, lay: PuzzleLayout, b: Board): List<Pair<Rect, PlacedWord>> {

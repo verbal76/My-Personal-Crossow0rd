@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Builds the distributable for the OS it runs on (jpackage bundles its own Java runtime, so the
 # player installs nothing). Run from anywhere:  desktop/scripts/package.sh [linux|windows]
-#   linux   -> dist/MyPersonalCrossword-linux-x86_64-v<N>.tar.gz   (Steam / Steam Deck layout)
-#   windows -> dist/MyPersonalCrossword-windows-x64-v<N>.zip       (app-image: MyPersonalCrossword.exe)
+# Names follow the studio standard ("Game Title Build NN Linux.tar.gz" / "... EXE.zip"), N from VERSION.
+#   linux   -> dist/My Personal Crossword Build <N> Linux.tar.gz  (+ checksums-linux.sha256; Steam / Steam Deck layout)
+#   windows -> dist/My Personal Crossword Build <N> EXE.zip       (+ checksums-windows.sha256; app-image: MyPersonalCrossword.exe)
 # jpackage cannot cross-compile, so each target must be built on its own OS (see desktop.yml).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -24,15 +25,17 @@ case "$PLATFORM" in
     jpackage "${COMMON[@]}" --icon packaging/icon.png
     ROOT="build/jpackage/$APP"
     cp packaging/linux/steam-launch.sh packaging/linux/MyPersonalCrossword.desktop packaging/icon.png "$ROOT/"
-    cp packaging/linux/README-STEAM.txt "$ROOT/README.txt"
+    cp packaging/linux/README-STEAM.txt "$ROOT/README.txt"; cp ../docs/THIRD_PARTY_ASSETS.md "$ROOT/"
     chmod +x "$ROOT/steam-launch.sh"
-    OUT="dist/$APP-linux-x86_64-v$VERSION.tar.gz"
+    OUT="dist/My Personal Crossword Build $VERSION Linux.tar.gz"
     tar -C build/jpackage -czf "$OUT" "$APP" ;;
   windows)
     jpackage "${COMMON[@]}" --icon packaging/icon.ico
-    OUT="dist/$APP-windows-x64-v$VERSION.zip"
+    cp ../docs/THIRD_PARTY_ASSETS.md "build/jpackage/$APP/"
+    OUT="dist/My Personal Crossword Build $VERSION EXE.zip"
     (cd build/jpackage && powershell -NoProfile -Command "Compress-Archive -Path $APP -DestinationPath ../../$OUT -Force" 2>/dev/null) \
       || (cd build/jpackage && zip -qr "../../$OUT" "$APP") ;;
   *) echo "unsupported platform: $PLATFORM" >&2; exit 2 ;;
 esac
+(cd dist && sha256sum "$(basename "$OUT")" > "checksums-$PLATFORM.sha256")   # checksum next to the artifact
 echo "$OUT"

@@ -93,6 +93,44 @@ class AppModelTest {
         m.act(Action.FULLSCREEN); assertFalse(ProfileStore(store.dir).fullscreen)
     }
 
+    @Test fun fullscreenPreferenceFollowsTheRealWindowNotAnAssumption() {
+        val store = ProfileStore(T.dir()); store.fullscreen = false
+        val host = T.FakeHost(startFullscreen = true)     // window was launched with --fullscreen
+        val m = T.model(store, host)
+        m.act(Action.FULLSCREEN)                           // leaves fullscreen
+        assertFalse(host.isFullscreen); assertFalse(ProfileStore(store.dir).fullscreen)
+        m.act(Action.FULLSCREEN); assertTrue(ProfileStore(store.dir).fullscreen)
+    }
+
+    @Test fun promptStyleFollowsTheLastDeviceUsed() {
+        val m = T.model(); toMenu(m); focus(m, AppModel.MenuItem.START); m.act(Action.CONFIRM, fromPad = true)
+        assertEquals("pad", m.lastInput)
+        m.act(Action.RIGHT); assertEquals("keyboard", m.lastInput)
+        m.noteMouse(); assertEquals("mouse", m.lastInput)
+        // Enter on a keyboard after using the pad flips direction instead of opening the on-screen keyboard
+        m.act(Action.CONFIRM, fromPad = true); m.act(Action.CANCEL, fromPad = true)
+        m.act(Action.CONFIRM); assertFalse(m.keyboardOpen)
+    }
+
+    @Test fun puzzleAutosavesWhilePlayingAndOnlyThen() {
+        val store = ProfileStore(T.dir()); val m = T.model(store); toMenu(m)
+        focus(m, AppModel.MenuItem.START); m.act(Action.CONFIRM); m.letter('A')
+        assertEquals(0, store.savedSessions().size)
+        m.tick(AppModel.AUTOSAVE_MS); assertEquals("autosaved", 1, store.savedSessions().size)
+    }
+
+    @Test fun manualPromptStyleOverridesAutoDetectionAndPersists() {
+        val store = ProfileStore(T.dir()); val m = T.model(store); toMenu(m)
+        m.act(Action.RIGHT, fromPad = true)                       // pad used last
+        assertEquals("pad", m.promptInput)
+        focus(m, AppModel.MenuItem.PROMPTS); m.act(Action.RIGHT)  // auto -> controller
+        assertEquals("controller", store.prompts); m.act(Action.RIGHT)  // -> keyboard
+        assertEquals("keyboard", m.promptInput)
+        m.act(Action.LEFT, fromPad = true); m.act(Action.LEFT, fromPad = true)  // controller -> auto, pad used: follows device
+        assertEquals("pad", m.promptInput)
+        assertEquals("auto", ProfileStore(store.dir).prompts)
+    }
+
     @Test fun lettersIgnoredOutsidePuzzle() { val m = T.model(); toMenu(m); m.letter('A'); assertNull(m.game.session) }
 
     @Test fun puzzleClockOnlyRunsDuringPlay() {

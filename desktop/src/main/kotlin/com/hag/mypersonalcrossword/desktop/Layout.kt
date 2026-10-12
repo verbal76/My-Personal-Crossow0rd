@@ -32,10 +32,11 @@ data class PuzzleLayout(
             val pad = (16 * ui).toInt()
             val headerH = (56 * ui).toInt()
             val header = Rect(0, 0, w, headerH)
+            val promptH = (46 * ui).toInt()                      // glyph legend strip along the bottom
             val kbH = if (keyboardOpen) (210 * ui).toInt() else 0
-            val kb = if (keyboardOpen) Rect(pad, h - kbH - pad, w - 2 * pad, kbH) else null
+            val kb = if (keyboardOpen) Rect(pad, h - promptH - kbH, w - 2 * pad, kbH) else null
             val bodyTop = headerH + pad
-            val bodyBottom = h - pad - (if (keyboardOpen) kbH + pad else 0)
+            val bodyBottom = h - promptH - (if (keyboardOpen) kbH + pad else 0)
             val clueW = (w * 0.32f).toInt().coerceAtLeast((300 * ui).toInt())
             val board = Rect(pad, bodyTop, w - clueW - 3 * pad, max(bodyBottom - bodyTop, 1))
             val clues = Rect(board.right + pad, bodyTop, clueW, board.h)

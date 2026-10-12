@@ -1,35 +1,47 @@
 name: "Desktop build (manual only - Windows and Linux/Steam Deck)"
 
 # Budget policy (CLAUDE.md): GitHub-hosted minutes are scarce, and Windows minutes cost double.
-# This workflow NEVER runs on pushes, pull requests or tags. Start it by hand (Run workflow) and
-# tick only the platforms you need. It builds artifacts and uploads them for review; it does not
-# create a Release, publish to Steam, or touch signing.
+# This workflow NEVER runs on pushes, pull requests or tags. Start it by hand (Run workflow).
 #
-# One coordinated build = ONE immutable SHA: every job checks out github.sha (the commit the run
-# was started on), runs the same release-source gate, and writes a provenance manifest naming that
-# SHA. The gate requires the commit to be on the authoritative line (AUTHORITATIVE_BRANCH), so the
-# owner must approve the desktop work onto that line first; it is not bypassed here.
+# One coordinated build = ONE immutable SHA (`source_sha`) and ONE build number (`build_number`,
+# which must equal the VERSION file at that commit). Every job checks out that exact commit, runs the
+# release-source gate, and the provenance manifest names that SHA.
+#
+# destination:
+#   local_only       (default) artifacts are uploaded to this run only (14 days). Nothing is published.
+#   github_releases  after every selected platform passed, ATTACH the packages to the EXISTING release
+#                    v<build_number> (the one the Android build creates). It never creates a release and
+#                    never overwrites an asset. Steam, OTA and Google Play are never touched here.
 on:
   workflow_dispatch:
     inputs:
-      build_linux:
-        description: 'Package + launch-test the Linux x86-64 (Steam / Steam Deck) build'
-        type: boolean
-        default: true
-      build_windows:
-        description: 'Package + launch-test the Windows x64 build (Windows minutes cost 2x)'
-        type: boolean
-        default: false
+      platform:
+        description: 'Which desktop target(s) to build (Android is built by build.yml)'
+        type: choice
+        options: [linux, windows, all-desktop]
+        default: linux
+      source_sha:
+        description: 'Exact approved commit SHA (40 hex chars)'
+        type: string
+        required: true
+      build_number:
+        description: 'Coordinated build number (must equal VERSION at source_sha)'
+        type: string
+        required: true
+      destination:
+        type: choice
+        options: [local_only, github_releases]
+        default: local_only
 
 concurrency:
-  group: desktop-${{ github.ref }}
+  group: desktop-${{ inputs.source_sha }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 env:
-  BUILD_SOURCE_SHA: ${{ github.sha }}
+  BUILD_SOURCE_SHA: ${{ inputs.source_sha }}
 
 jobs:
   tests:
@@ -38,22 +50,32 @@ jobs:
     outputs:
       matrix: ${{ steps.m.outputs.matrix }}
     steps:
-      # Only the ticked platforms become package jobs (a job-level `if` can't read the matrix).
-      - id: m
+      - name: Validate inputs
+        id: m
+        env:
+          PLATFORM: ${{ inputs.platform }}
         run: |
+          [[ "${{ inputs.source_sha }}" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::source_sha must be a full 40-character commit SHA"; exit 1; }
+          [[ "${{ inputs.build_number }}" =~ ^[1-9][0-9]*$ ]] || { echo "::error::build_number must be a positive integer"; exit 1; }
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
+          import json, os
+          p = os.environ["PLATFORM"]
           inc = []
-          if "${{ inputs.build_linux }}" == "true":
+          if p in ("linux", "all-desktop"):
               inc.append({"platform": "linux", "os": "ubuntu-latest", "launcher": "MyPersonalCrossword/steam-launch.sh", "ext": "tar.gz"})
-          if "${{ inputs.build_windows }}" == "true":
+          if p in ("windows", "all-desktop"):
               inc.append({"platform": "windows", "os": "windows-latest", "launcher": "MyPersonalCrossword/MyPersonalCrossword.exe", "ext": "zip"})
           print("matrix=" + json.dumps({"include": inc}, separators=(",", ":")))
           PY
       - uses: actions/checkout@v4
-        with: { ref: '${{ github.sha }}', fetch-depth: 0 }
-      - name: Verify release source (SHA and authoritative line)
-        run: python3 tools/verify_release_source.py
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0 }
+      - name: Verify release source (exact SHA, build number, authoritative line)
+        env:
+          GITHUB_SHA: ${{ inputs.source_sha }}
+        run: |
+          [ "$(git rev-parse HEAD)" = "${{ inputs.source_sha }}" ] || { echo "::error::checked-out HEAD is not source_sha"; exit 1; }
+          [ "$(tr -d '[:space:]' < VERSION)" = "${{ inputs.build_number }}" ] || { echo "::error::build_number does not match VERSION at source_sha"; exit 1; }
+          python3 tools/verify_release_source.py
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '21' }
       - uses: gradle/actions/setup-gradle@v4
@@ -64,7 +86,6 @@ jobs:
 
   package:
     needs: tests
-    if: ${{ needs.tests.outputs.matrix != '{"include":[]}' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.tests.outputs.matrix) }}
@@ -72,10 +93,14 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-        with: { ref: '${{ github.sha }}', fetch-depth: 0 }
-      - name: Verify release source (SHA and authoritative line)
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0 }
+      - name: Verify release source (exact SHA, build number, authoritative line)
         shell: bash
-        run: python3 tools/verify_release_source.py
+        env:
+          GITHUB_SHA: ${{ inputs.source_sha }}
+        run: |
+          [ "$(git rev-parse HEAD)" = "${{ inputs.source_sha }}" ] || { echo "::error::checked-out HEAD is not source_sha"; exit 1; }
+          python3 tools/verify_release_source.py
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '21' }
       - uses: gradle/actions/setup-gradle@v4
@@ -96,19 +121,46 @@ jobs:
         shell: bash
         run: desktop/scripts/smoke.sh "unpacked/${{ matrix.launcher }}" "$PWD/smoke-shots"
       - name: Provenance manifest
-        if: always() && hashFiles('desktop/dist/*') != ''
+        if: always() && (hashFiles('desktop/dist/*.tar.gz') != '' || hashFiles('desktop/dist/*.zip') != '')
         shell: bash
         env:
           LAUNCH_TESTED: ${{ steps.smoke.outcome == 'success' && 'true' || 'false' }}
+          GITHUB_SHA: ${{ inputs.source_sha }}
         run: |
-          ART=$(ls desktop/dist/* | head -1)
-          python3 tools/make_release_manifest.py "$ART" "desktop/dist/release-manifest-${{ matrix.platform }}.json" --platform=${{ matrix.platform }}
-          python3 tools/verify_release_source.py --manifest "desktop/dist/release-manifest-${{ matrix.platform }}.json" --apk "$ART"
+          ART=$(ls desktop/dist/*.tar.gz desktop/dist/*.zip 2>/dev/null | head -1)
+          python3 tools/make_release_manifest.py "$ART" "desktop/dist/build-manifest-${{ matrix.platform }}.json" --platform=${{ matrix.platform }}
+          python3 tools/verify_release_source.py --manifest "desktop/dist/build-manifest-${{ matrix.platform }}.json" --apk "$ART"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: MyPersonalCrossword-${{ matrix.platform }}-${{ github.sha }}
+          name: MyPersonalCrossword-${{ matrix.platform }}-${{ inputs.source_sha }}
           path: |
             desktop/dist/*
             smoke-shots/*
           retention-days: 14
+
+  # Only after EVERY selected platform packaged and passed its launch test. Attach-only: the release
+  # must already exist, and an existing asset is never replaced (no --clobber).
+  publish:
+    needs: [tests, package]
+    if: ${{ inputs.destination == 'github_releases' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: MyPersonalCrossword-*-${{ inputs.source_sha }}
+          merge-multiple: true
+          path: dist
+      - name: Attach to the existing release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ inputs.build_number }}"
+          gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null || { echo "::error::release $TAG does not exist; this workflow never creates releases"; exit 1; }
+          shopt -s nullglob
+          FILES=(dist/*.tar.gz dist/*.zip dist/build-manifest-*.json dist/checksums-*.sha256)
+          [ ${#FILES[@]} -gt 0 ] || { echo "::error::nothing to attach"; exit 1; }
+          gh release upload "$TAG" "${FILES[@]}" --repo "${{ github.repository }}"

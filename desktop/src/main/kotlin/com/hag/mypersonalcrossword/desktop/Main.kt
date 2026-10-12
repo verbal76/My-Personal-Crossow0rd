@@ -36,17 +36,23 @@ class DesktopApp(val options: Options, private val onExit: (Int) -> Unit = { exi
     val panel = GamePanel(model)
     val frame = JFrame("My Personal Crossword")
     private val mapper = GamepadMapper()
-    private val reader = JoystickReader({ e ->
-        val now = System.currentTimeMillis()
-        SwingUtilities.invokeLater { mapper.onEvent(e, now).forEach { model.act(it, fromPad = true) } }
-    })
+    private val reader = JoystickReader(
+        { e ->
+            val now = System.currentTimeMillis()
+            SwingUtilities.invokeLater { mapper.onEvent(e, now).forEach { model.act(it, fromPad = true) } }
+        },
+        { SwingUtilities.invokeLater { mapper.reset() } })
     @Volatile private var closing = false
     var fullscreen = false; private set
+    override val isFullscreen: Boolean get() = fullscreen
 
     init {
         Assets.icon?.let { frame.iconImage = it }
         frame.defaultCloseOperation = JFrame.DO_NOTHING_ON_CLOSE
-        frame.addWindowListener(object : WindowAdapter() { override fun windowClosing(e: WindowEvent) = quit() })
+        frame.addWindowListener(object : WindowAdapter() { override fun windowClosing(e: WindowEvent) = quit()
+            // Focus loss (Alt+Tab, Steam overlay, suspend) is a good moment to save.
+            override fun windowDeactivated(e: WindowEvent) { runCatching { game.save() } }
+        })
         panel.preferredSize = Dimension(options.width, options.height)
         panel.onPadPoll = { now -> mapper.poll(now).forEach { model.act(it, fromPad = true) } }
         frame.contentPane.add(panel)
@@ -101,6 +107,10 @@ class DesktopApp(val options: Options, private val onExit: (Int) -> Unit = { exi
 
 fun main(args: Array<String>) {
     val opts = Options.parse(args)
+    // A packaged Windows GUI launcher has no console: keep a crash log next to the saves.
+    Thread.setDefaultUncaughtExceptionHandler { _, t ->
+        runCatching { opts.dataDir.mkdirs(); File(opts.dataDir, "crash.log").appendText("${java.time.Instant.now()} $t\n${t.stackTraceToString()}\n") }
+    }
     System.setProperty("awt.useSystemAAFontSettings", "on")
     System.setProperty("swing.aatext", "true")
     SwingUtilities.invokeLater {
