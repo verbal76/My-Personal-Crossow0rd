@@ -27,3 +27,9 @@ release.keystore
 # local core validation (tools/validate_local.sh)
 tools/core-jvm/.gradle/
 tools/core-jvm/build/
+
+# Desktop build outputs
+desktop/dist/
+desktop/smoke-shots/
+__pycache__/
+*.pyc

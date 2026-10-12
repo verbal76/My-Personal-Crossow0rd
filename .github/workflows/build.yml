@@ -1,111 +1,174 @@
-name: Build (manual or build-tag only)
+name: Build (manual only - Android, Windows, Linux)
 
-# GitHub-hosted minutes are scarce (see "GitHub Actions budget policy" in CLAUDE.md), so this
-# workflow does NOT run on ordinary pushes or pull requests. It runs only when asked:
-#   * push a tag named build-*   -> tests + lint + APK + GitHub Release (a delivered build)
-#       git tag build-v11 && git push origin build-v11
-#   * Run workflow (workflow_dispatch) -> tests + lint; tick "build_apk" for an APK and
-#     "publish_release" to also create the Release.
+# THE one authoritative build entry point. Nothing here runs on a push, merge, tag or pull request:
+# GitHub-hosted minutes are scarce (CLAUDE.md budget policy) and publishing is a separate decision.
+# Start it explicitly (API/gh dispatch with ref = the branch that contains the approved SHA).
+#
+#   platform     android | windows | linux | all      (all = the three, built from ONE commit)
+#   source_sha   the exact approved 40-char commit; every job checks out exactly this
+#   build_number the studio build number; must equal VERSION at source_sha
+#   destination  local_only (default)  artifacts stay in this run (14 days); nothing is published
+#                github_releases       after EVERY selected platform passed, create the release
+#                                      "My Personal Crossword Build NN" (tag build-NN at source_sha).
+#                                      Never replaces an existing release or tag.
+# Steam, Google Play and OTA are never touched. See docs/RELEASES.md.
 on:
-  push:
-    tags: ['build-*']
   workflow_dispatch:
     inputs:
-      build_apk:
-        description: 'Also build and inspect the debug APK'
-        type: boolean
-        default: false
-      publish_release:
-        description: 'Create the GitHub Release for the VERSION file (needs build_apk)'
-        type: boolean
-        default: false
+      platform:
+        type: choice
+        options: [android, windows, linux, all]
+        default: linux
+      source_sha:
+        description: 'Exact approved commit SHA (40 hex chars)'
+        type: string
+        required: true
+      build_number:
+        description: 'Studio build number (must equal VERSION at source_sha)'
+        type: string
+        required: true
+      destination:
+        type: choice
+        options: [local_only, github_releases]
+        default: local_only
 
 concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
+  group: build-${{ inputs.source_sha }}
+  cancel-in-progress: false      # never cancel a run that may be mid-publish
 
 permissions:
-  contents: write   # lets the release step create the GitHub Release
+  contents: read
+
+env:
+  BUILD_SOURCE_SHA: ${{ inputs.source_sha }}
+  DESTINATION: ${{ inputs.destination }}
+  BUILD_NUMBER: ${{ inputs.build_number }}
 
 jobs:
-  build:
+  # ── 1. Validate the request and the source. Cheap; nothing is built. ──────────────────────
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 10
+    outputs:
+      android: ${{ steps.p.outputs.android }}
+      has_desktop: ${{ steps.p.outputs.has_desktop }}
+      matrix: ${{ steps.p.outputs.matrix }}
+      platforms: ${{ steps.p.outputs.platforms }}
+    steps:
+      - name: Validate inputs and select platforms
+        id: p
+        env:
+          PLATFORM: ${{ inputs.platform }}
+          SHA: ${{ inputs.source_sha }}
+        run: |
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::source_sha must be a full 40-character commit SHA"; exit 1; }
+          [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "::error::build_number must be a positive integer"; exit 1; }
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          p = os.environ["PLATFORM"]
+          sel = {"android": ["android"], "linux": ["linux"], "windows": ["windows"], "all": ["android", "linux", "windows"]}[p]
+          inc = []
+          if "linux" in sel:
+              inc.append({"platform": "linux", "os": "ubuntu-latest", "launcher": "MyPersonalCrossword/steam-launch.sh", "ext": "tar.gz"})
+          if "windows" in sel:
+              inc.append({"platform": "windows", "os": "windows-latest", "launcher": "MyPersonalCrossword/MyPersonalCrossword.exe", "ext": "zip"})
+          has = bool(inc)
+          if not inc:   # a matrix may not be empty; the desktop job is skipped by its `if` anyway
+              inc.append({"platform": "none", "os": "ubuntu-latest", "launcher": "", "ext": ""})
+          print("android=" + str("android" in sel).lower())
+          print("has_desktop=" + str(has).lower())
+          print("matrix=" + json.dumps({"include": inc}, separators=(",", ":")))
+          print("platforms=" + ",".join(sel))
+          PY
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0 }
+      - name: Verify exact source, build number and lineage
+        env:
+          GITHUB_SHA: ${{ inputs.source_sha }}
+        run: |
+          [ "$(git rev-parse HEAD)" = "${{ inputs.source_sha }}" ] || { echo "::error::checked-out HEAD is not source_sha"; exit 1; }
+          [ -z "$(git status --porcelain)" ] || { echo "::error::working tree is not clean"; exit 1; }
+          [ "$(tr -d '[:space:]' < VERSION)" = "$BUILD_NUMBER" ] || { echo "::error::build_number does not match VERSION at source_sha"; exit 1; }
+          python3 tools/verify_release_source.py
+      - name: Release policy checks (workflows, verifier, gate, manifests)
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 tools/test_release_source.py
+      - name: Refuse to reuse a build number or replace a release
+        if: inputs.destination == 'github_releases'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          N="$BUILD_NUMBER"
+          for t in "build-$N" "build-v$N" "v$N"; do
+            if git rev-parse -q --verify "refs/tags/$t" >/dev/null; then echo "::error::tag $t already exists; a build number is never reused"; exit 1; fi
+            if gh release view "$t" --repo "${{ github.repository }}" >/dev/null 2>&1; then echo "::error::release $t already exists"; exit 1; fi
+          done
+
+  # ── 2. Shared core + desktop tests (only when a desktop platform is selected). ────────────
+  desktop-tests:
+    needs: plan
+    if: needs.plan.outputs.has_desktop == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Shared core + desktop unit tests
+        run: ./gradlew -p desktop test --no-daemon
+      - name: Verify every declared suite ran
+        run: python3 tools/verify_test_results.py --desktop
+
+  # ── 3a. Android (existing steps and signing identity, unchanged; now one job of the build). ─
+  android:
+    needs: plan
+    if: needs.plan.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
     env:
-      BUILD_SOURCE_SHA: ${{ github.sha }}
-      # A tag build always builds and publishes; a manual run does so only if asked.
-      BUILD_APK: ${{ startsWith(github.ref, 'refs/tags/build-') || inputs.build_apk == true }}
-      PUBLISH_RELEASE: ${{ startsWith(github.ref, 'refs/tags/build-') || (inputs.build_apk == true && inputs.publish_release == true) }}
-      # Secrets can't be tested in `if:`, so expose only whether one exists.
-      # The release steps below run only when the owner has added a release key.
+      # Secrets can't be tested in `if:`, so expose only whether one exists. Only the signed-release
+      # steps below receive the secret values.
       HAS_RELEASE_KEY: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # Full history. CI's build number (versionCode) is 1000 + the run
-          # number; the commit count is only the local-build fallback.
-          fetch-depth: 0
-
-      # Release-critical source verification (blocking): the checked-out commit must equal the
-      # recorded SHA, a build-v<N> tag must peel to exactly that commit and match VERSION, and the
-      # commit must be reachable from the authoritative line. Reviewed historical branches are
-      # NOT part of this gate. See tools/verify_release_source.py.
-      - name: Verify release source (tag, SHA and authoritative line)
-        if: env.BUILD_APK == 'true'
-        run: python3 tools/verify_release_source.py
-
-      # Historical branch inventory: informational only, never blocks a release.
-      - name: Branch accountability audit (informational)
-        continue-on-error: true
-        run: python3 tools/branch_audit.py
-
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0 }
+      - name: Verify exact source and lineage
+        env:
+          GITHUB_SHA: ${{ inputs.source_sha }}
+        run: |
+          [ "$(git rev-parse HEAD)" = "${{ inputs.source_sha }}" ] || { echo "::error::checked-out HEAD is not source_sha"; exit 1; }
+          python3 tools/verify_release_source.py
       # AGP 9 / Gradle 9 require JDK 17+ to run the build.
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
-
       # CI must not report success by silently skipping tests: every test class declared in
       # app/src/test must have run with exactly its declared test count, none skipped or failed.
       - name: Verify every declared test suite ran
         run: python3 tools/verify_test_results.py
-
       - name: Build debug APK
-        if: env.BUILD_APK == 'true'
         run: ./gradlew assembleDebug --no-daemon
-
-      - name: Name APK after its source commit
-        if: env.BUILD_APK == 'true'
+      - name: Name APK (studio standard)
         id: apk
         run: |
-          SHORT=${BUILD_SOURCE_SHA::7}
-          VER="v$(tr -d '[:space:]' < VERSION)"
-          NAME="My-Personal-Crossword-${VER}.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$NAME"
-          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          N="$BUILD_NUMBER"
+          NAME="My Personal Crossword Build ${N} APK.apk"
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/$NAME"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "short=$SHORT" >> "$GITHUB_OUTPUT"
           echo "APK: $NAME"
-          sha256sum "$NAME"
-
-      # ── Inspect the APK actually built (Tartaria lesson: targetSdk 36 does not
-      # prove 16 KB compliance; read the artifact itself). ───────────────────
+          sha256sum "dist/$NAME"
+      # Read the artifact itself: targetSdk 36 does not prove 16 KB compliance.
       - name: Inspect built APK (identity, permissions, native libs, 16 KB)
-        if: env.BUILD_APK == 'true'
         continue-on-error: true
         run: |
-          APK="${{ steps.apk.outputs.name }}"
+          APK="dist/${{ steps.apk.outputs.name }}"
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           echo "build-tools: $(basename "$BT")"
           echo "=== gradle distribution sha256 (pin this in gradle-wrapper.properties) ==="
@@ -134,118 +197,192 @@ jobs:
           echo "=== zipalign -c -P 16 (packaging) ==="
           "$BT/zipalign" -c -P 16 -v 4 "$APK" > "$RUNNER_TEMP/za.txt" 2>&1 && echo "ZIPALIGN 16 KB: PASS" || { tail -5 "$RUNNER_TEMP/za.txt"; echo "ZIPALIGN 16 KB: FAIL"; exit 1; }
           "$BT/apksigner" verify --print-certs "$APK" | head -3
-
-      # Provenance: one record tying this release to its exact commit, toolchain and artifacts.
-      - name: Write release manifest
-        if: env.BUILD_APK == 'true'
+      - name: Provenance manifest
         env:
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ inputs.source_sha }}
         run: |
-          python3 tools/make_release_manifest.py "${{ steps.apk.outputs.name }}" release-manifest.json
-          python3 tools/verify_release_source.py --manifest release-manifest.json --apk "${{ steps.apk.outputs.name }}"
-
-      - name: Upload APK artifact
-        if: env.BUILD_APK == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: My-Personal-Crossword-${{ steps.apk.outputs.ver }}-${{ steps.apk.outputs.short }}
-          path: |
-            ${{ steps.apk.outputs.name }}
-            release-manifest.json
-          if-no-files-found: error
-          retention-days: 14
-
-      # ── Public release: one GitHub Release per public version ────────────
-      # The version lives in the VERSION file. A release is created once per
-      # version, from this exact APK (no rebuild, no renaming), marked Latest.
-      # To deliver a new playable build: bump VERSION, push, then push a build-* tag.
-      # See docs/RELEASES.md.
-      - name: Publish GitHub Release (once per version)
-        if: env.PUBLISH_RELEASE == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VER="${{ steps.apk.outputs.ver }}"
-          FILE="${{ steps.apk.outputs.name }}"
-          if gh release view "$VER" >/dev/null 2>&1; then
-            echo "Release $VER already exists; leaving it untouched. Bump VERSION to deliver a new build."
-            exit 0
-          fi
-          sha256sum "$FILE" > "${FILE}.sha256"
-          cat > "$RUNNER_TEMP/notes.md" <<EOF
-          # My Personal Crossword ${VER}
-
-          **Android:** \`${FILE}\`
-          Install it over your existing app (do not uninstall first). This is a debug-signed test build, not a Play release.
-
-          ## Technical details
-          - Source commit: ${BUILD_SOURCE_SHA}
-          - Android versionCode: ${{ github.run_number }} (+1000)
-          - Package: com.hag.mypersonalcrossword
-          - CI run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          - SHA-256: $(cut -d' ' -f1 "${FILE}.sha256")
-          EOF
-          sed -i 's/^          //' "$RUNNER_TEMP/notes.md"
-          gh release create "$VER" "$FILE" "${FILE}.sha256" release-manifest.json \
-            --target "$BUILD_SOURCE_SHA" --title "My Personal Crossword ${VER}" \
-            --notes-file "$RUNNER_TEMP/notes.md" --latest
-
+          python3 tools/make_release_manifest.py "dist/${{ steps.apk.outputs.name }}" dist/build-manifest-android.json --platform=android
+          python3 tools/verify_release_source.py --manifest dist/build-manifest-android.json --apk "dist/${{ steps.apk.outputs.name }}"
       - name: Lint
         run: ./gradlew lintDebug --no-daemon
-
+      - name: Upload APK + manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-${{ inputs.build_number }}-android-${{ inputs.source_sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload test and lint reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: reports
+          name: reports-android
           path: |
             app/build/reports/tests/
             app/build/reports/lint-results-debug.*
           if-no-files-found: ignore
           retention-days: 14
-
-      # ── Signed release APK (only once a release key exists) ──────────────
-      # See docs/EXTERNAL_ACTIONS.md "Create a release signing key". Without the
-      # RELEASE_KEYSTORE_BASE64 secret these steps are skipped and the debug
-      # pipeline above is unchanged.
+      # ── Signed release APK (only once a release key exists; see docs/EXTERNAL_ACTIONS.md) ──
+      # The secrets exist only in these steps, in this job, and are never reachable from a PR.
       - name: Decode release keystore
-        if: env.HAS_RELEASE_KEY == 'true' && env.BUILD_APK == 'true'
+        if: env.HAS_RELEASE_KEY == 'true'
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
-
       - name: Build signed release APK
-        if: env.HAS_RELEASE_KEY == 'true' && env.BUILD_APK == 'true'
+        if: env.HAS_RELEASE_KEY == 'true'
         env:
           RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
-
-      - name: Name release APK after its source commit
-        if: env.HAS_RELEASE_KEY == 'true' && env.BUILD_APK == 'true'
+      - name: Name release APK
+        if: env.HAS_RELEASE_KEY == 'true'
         id: release_apk
         run: |
-          SHORT=${BUILD_SOURCE_SHA::7}
-          NAME="MyPersonalCrossword-${SHORT}-release.apk"
-          # app-release.apk only exists if signing was applied (an unsigned
-          # build is app-release-unsigned.apk), so this fails loudly otherwise.
+          NAME="My Personal Crossword Build ${BUILD_NUMBER} signed release APK.apk"
+          # app-release.apk only exists if signing was applied (an unsigned build is
+          # app-release-unsigned.apk), so this fails loudly otherwise.
           cp app/build/outputs/apk/release/app-release.apk "$NAME"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "short=$SHORT" >> "$GITHUB_OUTPUT"
-          echo "APK: $NAME"
           sha256sum "$NAME"
-
-      - name: Upload release APK artifact
-        if: env.HAS_RELEASE_KEY == 'true' && env.BUILD_APK == 'true'
+      - name: Upload signed release APK (run artifact only; never attached to a release)
+        if: env.HAS_RELEASE_KEY == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk-${{ steps.release_apk.outputs.short }}
+          name: signed-release-apk-${{ inputs.build_number }}-${{ inputs.source_sha }}
           path: ${{ steps.release_apk.outputs.name }}
           if-no-files-found: error
           retention-days: 14
-
       - name: Remove release keystore
-        if: always() && env.HAS_RELEASE_KEY == 'true' && env.BUILD_APK == 'true'
+        if: always() && env.HAS_RELEASE_KEY == 'true'
         run: rm -f "$RUNNER_TEMP/release.jks"
+
+  # ── 3b. Windows / Linux desktop packages (no secrets of any kind). ────────────────────────
+  desktop:
+    needs: [plan, desktop-tests]
+    if: needs.plan.outputs.has_desktop == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0 }
+      - name: Verify exact source and lineage
+        shell: bash
+        env:
+          GITHUB_SHA: ${{ inputs.source_sha }}
+        run: |
+          [ "$(git rev-parse HEAD)" = "${{ inputs.source_sha }}" ] || { echo "::error::checked-out HEAD is not source_sha"; exit 1; }
+          python3 tools/verify_release_source.py
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Xvfb (Linux launch test needs a display)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+      - name: Package
+        shell: bash
+        run: desktop/scripts/package.sh ${{ matrix.platform }}
+      - name: Unpack the packaged artifact (what a player would get)
+        shell: bash
+        run: |
+          mkdir -p unpacked && cd unpacked
+          if [ "${{ matrix.ext }}" = zip ]; then 7z x -y ../desktop/dist/*.zip >/dev/null || unzip -q ../desktop/dist/*.zip
+          else tar -xzf ../desktop/dist/*.tar.gz; fi
+      - name: Launch test of the packaged build (real window; full play-through, save, restart, resume)
+        id: smoke
+        shell: bash
+        run: desktop/scripts/smoke.sh "unpacked/${{ matrix.launcher }}" "$PWD/smoke-shots"
+      - name: Provenance manifest
+        if: always() && (hashFiles('desktop/dist/*.tar.gz') != '' || hashFiles('desktop/dist/*.zip') != '')
+        shell: bash
+        env:
+          LAUNCH_TESTED: ${{ steps.smoke.outcome == 'success' && 'true' || 'false' }}
+          GITHUB_SHA: ${{ inputs.source_sha }}
+        run: |
+          ART=$(ls desktop/dist/*.tar.gz desktop/dist/*.zip 2>/dev/null | head -1)
+          python3 tools/make_release_manifest.py "$ART" "desktop/dist/build-manifest-${{ matrix.platform }}.json" --platform=${{ matrix.platform }}
+          python3 tools/verify_release_source.py --manifest "desktop/dist/build-manifest-${{ matrix.platform }}.json" --apk "$ART"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Build-${{ inputs.build_number }}-${{ matrix.platform }}-${{ inputs.source_sha }}
+          path: |
+            desktop/dist/*.tar.gz
+            desktop/dist/*.zip
+            desktop/dist/build-manifest-*.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload launch-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-test-${{ matrix.platform }}-${{ inputs.source_sha }}
+          path: smoke-shots/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ── 4. Publish: only on request, only after EVERY selected platform passed. ───────────────
+  publish:
+    needs: [plan, desktop-tests, android, desktop]
+    if: ${{ always() && inputs.destination == 'github_releases' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Require every selected platform to have succeeded (no partial release)
+        env:
+          PLATFORMS: ${{ needs.plan.outputs.platforms }}
+          PLAN: ${{ needs.plan.result }}
+          ANDROID: ${{ needs.android.result }}
+          DESKTOP: ${{ needs.desktop.result }}
+          DTESTS: ${{ needs.desktop-tests.result }}
+        run: |
+          [ "$PLAN" = success ] || { echo "::error::plan did not succeed"; exit 1; }
+          case ",$PLATFORMS," in *,android,*) [ "$ANDROID" = success ] || { echo "::error::android did not succeed ($ANDROID)"; exit 1; };; esac
+          case ",$PLATFORMS," in *,linux,*|*,windows,*) [ "$DESKTOP" = success ] && [ "$DTESTS" = success ] || { echo "::error::desktop did not fully succeed ($DESKTOP/$DTESTS)"; exit 1; };; esac
+      - uses: actions/checkout@v4
+        with: { ref: '${{ inputs.source_sha }}', fetch-depth: 0 }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Build-${{ inputs.build_number }}-*-${{ inputs.source_sha }}
+          merge-multiple: true
+          path: dist
+      - name: Verify the set, merge manifests, write checksums
+        env:
+          PLATFORMS: ${{ needs.plan.outputs.platforms }}
+          GITHUB_SHA: ${{ inputs.source_sha }}
+        run: |
+          python3 tools/merge_build_manifest.py --dir dist --expect "$PLATFORMS"
+          (cd dist && sha256sum -c checksums.sha256)
+          mkdir -p parts && mv dist/build-manifest-*.json parts/     # per-platform manifests stay out of the release
+          python3 tools/verify_release_source.py
+          ls -l dist
+      - name: Create the release (never replaces an existing one)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          N="$BUILD_NUMBER"; SHA="${{ inputs.source_sha }}"; REPO="${{ github.repository }}"
+          for t in "build-$N" "build-v$N" "v$N"; do
+            if git ls-remote --exit-code --tags origin "refs/tags/$t" >/dev/null 2>&1 || gh release view "$t" --repo "$REPO" >/dev/null 2>&1; then
+              echo "::error::$t already exists; refusing to publish"; exit 1
+            fi
+          done
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          # My Personal Crossword Build ${N}
+
+          Platforms in this build: ${{ needs.plan.outputs.platforms }}. Every file below was built from the single commit ${SHA}.
+
+          - Android: debug-signed test build (same signing identity as earlier builds); install over the existing app.
+          - Windows / Linux: unsigned desktop builds with a bundled Java runtime. Not Steam Deck Verified; real-hardware testing is pending.
+          - \`build-manifest.json\` records source, toolchain, timestamps and hashes; \`checksums.sha256\` lists SHA-256 for every file.
+          - CI run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+          cd dist
+          gh release create "build-$N" ./* --repo "$REPO" --target "$SHA" \
+            --title "My Personal Crossword Build $N" --notes-file "$RUNNER_TEMP/notes.md"

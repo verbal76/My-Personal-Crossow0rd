@@ -6,6 +6,9 @@ It checks the ACTUAL checked-out and tagged commit (not the tip of any branch):
   2. if the ref is a tag: the tag peels to exactly HEAD, and a `build-v<N>` tag matches the
      VERSION file at that commit (a tag cannot ship a different version);
   3. HEAD is reachable from the approved authoritative line (origin/<AUTHORITATIVE_BRANCH>).
+     Exception, local_only builds ONLY (env DESTINATION=local_only): nothing is published, so HEAD may instead be
+     reachable from an in-progress branch that docs/branch_ledger.json (at HEAD) marks active_feature AND that still
+     contains the authoritative tip. Any destination that publishes (github_releases, or unset) is strict.
 Reviewed historical branches are deliberately NOT considered here (see branch_audit.py).
 
     verify_release_source.py                       # source checks
@@ -31,8 +34,8 @@ def verify_source(repo, env):
         rc, peeled = git(repo, 'rev-parse', '--verify', '-q', f'refs/tags/{name}^{{commit}}')
         if rc or not peeled: bad.append(f'tag {name} does not exist in the checkout')
         elif peeled != head: bad.append(f'tag {name} points at {peeled[:12]} but the checked-out source is {head[:12]}')
-        m = re.fullmatch(r'build-v(\d+)', name)
-        if not m: bad.append(f'tag {name} is not a build-v<N> release tag')
+        m = re.fullmatch(r'build-v?(\d+)', name)
+        if not m: bad.append(f'tag {name} is not a build-<N> (or legacy build-v<N>) release tag')
         else:
             rc, ver = git(repo, 'show', f'{head}:VERSION')
             if rc or ver.strip() != m.group(1): bad.append(f'tag {name} does not match VERSION ({ver.strip() or "unreadable"}) at that commit')
@@ -43,8 +46,26 @@ def verify_source(repo, env):
         rc, _ = git(repo, 'rev-parse', '--verify', '-q', f'refs/remotes/origin/{auth}')
         if rc: bad.append(f'authoritative branch origin/{auth} is not available to verify against')
         elif git(repo, 'merge-base', '--is-ancestor', head, f'refs/remotes/origin/{auth}')[0] != 0:
-            bad.append(f'commit {head[:12]} is not reachable from the authoritative line origin/{auth}')
+            on_feature = env.get('DESTINATION') == 'local_only' and active_feature_branch(repo, head, auth)
+            if on_feature: print(f'note: local_only build from active feature branch {on_feature}; this commit cannot be published')
+            else: bad.append(f'commit {head[:12]} is not reachable from the authoritative line origin/{auth}')
     return bad
+
+def active_feature_branch(repo, head, auth):
+    """Name of a ledgered active_feature branch that contains HEAD and still descends from the authoritative tip, else None."""
+    rc, raw = git(repo, 'show', f'{head}:docs/branch_ledger.json')
+    if rc: return None
+    try: entries = json.loads(raw).get('accounted', [])
+    except ValueError: return None
+    for e in entries:
+        ref = e.get('ref', '')
+        if not e.get('active_feature') or not ref.startswith('origin/'): continue
+        full = f'refs/remotes/{ref}'
+        if git(repo, 'rev-parse', '--verify', '-q', full)[0]: continue
+        if git(repo, 'merge-base', '--is-ancestor', head, full)[0] == 0 and \
+           git(repo, 'merge-base', '--is-ancestor', f'refs/remotes/origin/{auth}', full)[0] == 0:
+            return ref
+    return None
 
 def verify_manifest(repo, env, manifest, apk):
     bad = []; m = json.load(open(manifest))
@@ -53,7 +74,10 @@ def verify_manifest(repo, env, manifest, apk):
     if m['source']['commit'] != head: bad.append(f"manifest commit {m['source']['commit'][:12]} != source {head[:12]}")
     if env.get('GITHUB_REF_NAME') and m['source']['ref'] != env['GITHUB_REF_NAME']: bad.append('manifest ref does not match the build ref')
     if m['public_version'] != f'v{ver}': bad.append(f"manifest version {m['public_version']} != VERSION v{ver}")
-    if m['source'].get('on_authoritative_line') is not True: bad.append('manifest does not assert the authoritative line')
+    if m['source'].get('on_authoritative_line') is not True:
+        # A local_only validation build of a ledgered active feature branch is honest about it; it can never be published.
+        if not (env.get('DESTINATION') == 'local_only' and str(m['source'].get('lineage', '')).startswith('active_feature:')):
+            bad.append('manifest does not assert the authoritative line')
     art = [x for x in m['artifacts'] if x['file'] == os.path.basename(apk)]
     if not art: bad.append('manifest does not list the built artifact')
     else:

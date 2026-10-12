@@ -1,0 +1,9 @@
+Controller and keyboard prompt glyphs (subset of 20 images).
+Pack: "Input Prompts" by JulioCacko (published 2023-06-30, updated 2025-02-03; also on itch.io and FAB).
+Supplied by the owner as "Source.zip" on 2026-10-12 (XGamepad/Default and Keyboard_Mouse/Dark sets).
+Files renamed only; pixels unmodified.
+License: Creative Commons Zero v1.0 Universal (CC0 1.0). The publisher's listing page states "Free to use in
+any project, commercial or non-commercial. No attribution required (but appreciated)"; its code license is MIT.
+Evidence: a screenshot of that listing page supplied by the owner. The archive itself contains no license file,
+and the page was not fetched independently from this environment. Credit given anyway as a courtesy.
+The Xbox Start/Menu glyph is not in the pack; the game draws a plain substitute in code (Glyphs.kt).

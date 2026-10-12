@@ -1,6 +1,6 @@
 {
   "authoritative_branch": "claude/native-stack-modernization",
-  "note": "Machine-readable recovery ledger read by tools/branch_audit.py. A branch with commits that are not reachable from the authoritative branch must have an entry here whose `tip` matches its current tip; new commits on it fail the audit until it is re-reviewed. Human summary: docs/BRANCH_LEDGER.md.",
+  "note": "Machine-readable recovery ledger read by tools/branch_audit.py. A branch with commits that are not reachable from the authoritative branch must have an entry here whose `tip` matches its current tip; new commits on it fail the audit until it is re-reviewed. Human summary: docs/BRANCH_LEDGER.md. Entries with active_feature=true are in-progress branches that must keep descending from the authoritative branch; their tip is not pinned.",
   "accounted": [
     {
       "ref": "origin/claude/review-crossword-repro-5mjbG",
@@ -15,6 +15,20 @@
       "audited": "2026-10-12",
       "classification": "2 commits are owner asset uploads (logo, app icon, splash); integrated: the files were copied byte-for-byte into branding/ and shipped. Otherwise main is the stale April baseline.",
       "disposition": "keep; fast-forwarding main to the authoritative branch needs owner approval after device testing"
+    },
+    {
+      "ref": "claude/desktop-multiplatform",
+      "active_feature": true,
+      "audited": "2026-10-12",
+      "classification": "Active feature branch: desktop (Windows/Linux/Steam Deck) front end over the shared core, descends from the authoritative branch, Android untouched.",
+      "disposition": "owner decides when to fast-forward the authoritative branch to it; do not merge into main"
+    },
+    {
+      "ref": "origin/claude/desktop-multiplatform",
+      "active_feature": true,
+      "audited": "2026-10-12",
+      "classification": "Active feature branch: desktop (Windows/Linux/Steam Deck) front end over the shared core, descends from the authoritative branch, Android untouched.",
+      "disposition": "owner decides when to fast-forward the authoritative branch to it; do not merge into main"
     }
   ]
 }
