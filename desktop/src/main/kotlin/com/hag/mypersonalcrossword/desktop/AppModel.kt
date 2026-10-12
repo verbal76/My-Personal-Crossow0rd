@@ -38,17 +38,24 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
     val background: CatalogBackground get() = backgrounds[backgroundIndex]
 
     enum class MenuItem(val label: String) {
-        CONTINUE("Continue"), DAILY("Daily Puzzle"), CATEGORY("Category"), DIFFICULTY("Difficulty"),
-        START("Start Puzzle"), BACKGROUND("Background"), PROMPTS("Button prompts"), FULLSCREEN("Fullscreen"), QUIT("Quit")
+        CONTINUE("Continue"), DAILY("Daily Puzzle"), MODE("Mode"), CATEGORY("Category"), DIFFICULTY("Difficulty"),
+        TIMER("Answer timer"), START("Start Puzzle"), BACKGROUND("Background"), PROMPTS("Button prompts"),
+        SOUND("Sound effects"), FULLSCREEN("Fullscreen"), QUIT("Quit")
     }
+    private val playModes = listOf(GameMode.SINGLE, GameMode.TEAM, GameMode.VINDICTIVE)
+    val playMode: GameMode get() = playModes.firstOrNull { it.name == store.playMode } ?: GameMode.SINGLE
+    fun modeLabel(m: GameMode) = when (m) { GameMode.SINGLE -> "Solo"; GameMode.TEAM -> "Team (pass the Deck)"; GameMode.VINDICTIVE -> "Vindictive"; GameMode.DAILY -> "Daily" }
     /** Which prompt family to draw: the manual choice, or the device used last (mouse counts as keyboard). */
     val promptInput: String get() = when (store.prompts) { "controller" -> "pad"; "keyboard" -> "keyboard"; else -> lastInput }
 
     /** One-time message about a recovered or set-aside file, shown on the menu until play starts. */
     val notice: String get() = store.notice
-    val savedSessions: List<PuzzleSession> get() = store.savedSessions()
-    val menuItems: List<MenuItem> get() =
-        MenuItem.values().filter { it != MenuItem.CONTINUE || savedSessions.isNotEmpty() }
+    /** Read from disk once per visit to the menu, not on every draw. */
+    var savedSessions: List<PuzzleSession> = store.savedSessions(); private set
+    fun refreshSaves() { savedSessions = store.savedSessions() }
+    val menuItems: List<MenuItem> get() = MenuItem.values().filter {
+        (it != MenuItem.CONTINUE || savedSessions.isNotEmpty()) && (it != MenuItem.TIMER || playMode == GameMode.VINDICTIVE)
+    }
     val pauseItems = listOf("Resume", "Save and go to menu", "Toggle fullscreen", "Quit game")
 
     // ── Time ─────────────────────────────────────────────────────────────────
@@ -68,7 +75,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
         }
     }
 
-    private fun go(s: Screen) { screen = s; screenMillis = 0 }
+    private fun go(s: Screen) { if (s == Screen.MENU) refreshSaves(); screen = s; screenMillis = 0 }
 
     // ── Input ────────────────────────────────────────────────────────────────
 
@@ -100,6 +107,9 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
                 when (items[menuIndex]) {
                     MenuItem.CATEGORY   -> { categoryIndex = Math.floorMod(categoryIndex + d, game.categories.size); store.category = category }
                     MenuItem.DIFFICULTY -> { difficultyIndex = Math.floorMod(difficultyIndex + d, difficulties.size); store.difficulty = difficulty.name }
+                    MenuItem.MODE       -> { store.playMode = playModes[Math.floorMod(playModes.indexOf(playMode) + d, playModes.size)].name; menuIndex = menuIndex.coerceAtMost(menuItems.size - 1) }
+                    MenuItem.TIMER      -> { val c = SessionCodec.VIND_TIMER_CHOICES.sorted(); store.vindTimer = c[Math.floorMod(c.indexOf(store.vindTimer) + d, c.size)] }
+                    MenuItem.SOUND      -> store.sound = !store.sound
                     MenuItem.PROMPTS    -> { store.prompts = PROMPT_STYLES[Math.floorMod(PROMPT_STYLES.indexOf(store.prompts) + d, PROMPT_STYLES.size)] }
                     MenuItem.BACKGROUND -> { backgroundIndex = Math.floorMod(backgroundIndex + d, backgrounds.size); store.background = background.file }
                     else -> {}
@@ -115,10 +125,10 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
         when (item) {
             MenuItem.CONTINUE   -> savedSessions.firstOrNull()?.let { if (game.resume(it.slot.id)) enterPuzzle() }
             MenuItem.DAILY      -> if (game.startDaily()) enterPuzzle()
-            MenuItem.START      -> if (game.startPuzzle(category, difficulty)) enterPuzzle()
+            MenuItem.START      -> if (game.startPuzzle(category, difficulty, playMode, store.vindTimer)) enterPuzzle()
             MenuItem.FULLSCREEN -> toggleFullscreen()
             MenuItem.QUIT       -> quit()
-            MenuItem.CATEGORY, MenuItem.DIFFICULTY, MenuItem.BACKGROUND, MenuItem.PROMPTS -> act(Action.RIGHT)
+            MenuItem.MODE, MenuItem.CATEGORY, MenuItem.DIFFICULTY, MenuItem.TIMER, MenuItem.BACKGROUND, MenuItem.PROMPTS, MenuItem.SOUND -> act(Action.RIGHT)
         }
     }
 
@@ -127,12 +137,30 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
 
     private fun enterPuzzle() { keyboardOpen = false; store.clearNotice(); go(Screen.PUZZLE) }
 
+    /** Index of the highlighted button of the open [GameController.modal]. */
+    var modalIndex = 0; private set
+
+    /** A tap/click on a modal button. */
+    fun answerModal(i: Int) { game.resolveModal(i); modalIndex = 0; afterPuzzleChange() }
+
+    private fun modalAct(a: Action, m: Modal) {
+        when (a) {
+            Action.LEFT, Action.UP -> modalIndex = Math.floorMod(modalIndex - 1, m.buttons.size)
+            Action.RIGHT, Action.DOWN -> modalIndex = Math.floorMod(modalIndex + 1, m.buttons.size)
+            Action.CONFIRM -> answerModal(modalIndex)
+            Action.CANCEL -> answerModal(0)
+            else -> {}
+        }
+    }
+
     private fun puzzleAct(a: Action) {
+        game.modal?.let { modalAct(a, it); return }
         if (keyboardOpen) { oskAct(a); return }
         when (a) {
             Action.UP -> game.move(0, -1);   Action.DOWN -> game.move(0, 1)
             Action.LEFT -> game.move(-1, 0); Action.RIGHT -> game.move(1, 0)
-            Action.CONFIRM -> if (lastInput == "pad") keyboardOpen = true else game.flip()
+            Action.CONFIRM -> if (game.canGive) game.give() else if (lastInput == "pad") keyboardOpen = true else game.flip()
+            Action.PASS -> game.pass()
             Action.FLIP -> game.flip()
             Action.NEXT_CLUE -> game.nextClue(true)
             Action.PREV_CLUE -> game.nextClue(false)
@@ -156,6 +184,7 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
             Action.FLIP -> game.flip()
             Action.HINT -> game.hint()
             Action.BACKSPACE -> game.backspace()
+            Action.PASS -> game.pass()
             Action.MENU -> { keyboardOpen = false; pauseIndex = 0; go(Screen.PAUSE) }
             Action.FULLSCREEN -> {}
         }
@@ -169,6 +198,8 @@ class AppModel(val store: ProfileStore, val game: GameController, private val ho
             "FLIP" -> game.flip()
             "HINT" -> game.hint()
             "NEXT" -> game.nextClue(true)
+            "GIVE" -> game.give()
+            "PASS" -> game.pass()
             "CLOSE" -> keyboardOpen = false
             else -> if (key.length == 1) game.type(key[0])
         }

@@ -16,6 +16,7 @@ import kotlin.system.exitProcess
  *   --smoke=full     splash -> menu -> solve a whole puzzle with OS-level key events (java.awt.Robot)
  *                    -> results -> gamepad flow (simulated joystick events) -> on-screen keyboard
  *                    -> pause/save -> resize x3 -> fullscreen toggle -> clean shutdown
+ *   --smoke=modes    Team (pass the Deck) and Vindictive (give, timer message, pass) played through to results
  *   --smoke=partial  start a puzzle, enter some words, close the window (save on exit)
  *   --smoke=resume   relaunch (same data dir), Continue, verify the letters came back, finish
  * Prints one `SMOKE-RESULT` line with every check; exit code 0 only if all passed.
@@ -84,6 +85,7 @@ class Smoke(private val app: DesktopApp, private val o: Options) {
             pause(900); focusWindow()
             when (o.smoke) {
                 "full" -> full()
+                "modes" -> modes()
                 "partial" -> partial()
                 "resume" -> resume()
                 else -> check("known smoke phase", false, o.smoke ?: "")
@@ -117,6 +119,58 @@ class Smoke(private val app: DesktopApp, private val o: Options) {
     private fun solveAll() {
         val words = onEdt { game.board!!.clueOrder }
         for (w in words) { if (screen() != Screen.PUZZLE) break; solveWord(w) }
+    }
+
+    private fun nextUnsolved(): PlacedWord = onEdt { game.board!!.clueOrder.first { !isWordSolved(it, game.inputs) } }
+
+    /** Plays whatever the current mode asks for, with real key events, until the results screen appears. */
+    private fun playOut(maxSteps: Int = 400) {
+        var steps = 0
+        while (screen() == Screen.PUZZLE && steps++ < maxSteps) {
+            when {
+                onEdt { game.modal } != null -> key(KeyEvent.VK_ENTER)                       // "I'm Ready" / "Answer it"
+                onEdt { game.assigning } -> { val t = nextUnsolved(); onEdt { game.selectWord(t) }; key(KeyEvent.VK_ENTER) }   // Enter = Give
+                else -> solveWord(onEdt { game.forcedWord } ?: nextUnsolved())
+            }
+            pause(40)
+        }
+    }
+
+    private fun modes() {
+        skipSplash(); skipSplash(); pause(200)
+        check("menu reached", screen() == Screen.MENU)
+        // Team: two players share the Deck.
+        menuTo(AppModel.MenuItem.MODE); key(KeyEvent.VK_RIGHT)
+        check("Team selected", onEdt { model.playMode } == GameMode.TEAM)
+        menuTo(AppModel.MenuItem.START); key(KeyEvent.VK_ENTER); pause(250)
+        check("team puzzle opened", screen() == Screen.PUZZLE && onEdt { game.mode } == GameMode.TEAM)
+        shot("20_team_start")
+        solveWord(nextUnsolved()); pause(150)
+        check("Pass the Phone message appears", onEdt { game.modal?.title } == "Pass the Phone!")
+        shot("21_team_pass_phone")
+        val before = onEdt { game.inputs.size }
+        letter('Q'); check("typing is held behind the message", onEdt { game.inputs.size } == before)
+        key(KeyEvent.VK_ENTER); check("message answered with Enter", onEdt { game.modal } == null && onEdt { game.team.turn } == 1)
+        playOut(); pause(250)
+        check("team puzzle finished", screen() == Screen.RESULTS); shot("22_team_results")
+        check("both players solved words", onEdt { game.result!!.team.let { it.p1Correct > 0 && it.p2Correct > 0 } })
+        key(KeyEvent.VK_ENTER); pause(150)
+        // Vindictive.
+        menuTo(AppModel.MenuItem.MODE); key(KeyEvent.VK_RIGHT)
+        check("Vindictive selected", onEdt { model.playMode } == GameMode.VINDICTIVE)
+        menuTo(AppModel.MenuItem.START); key(KeyEvent.VK_ENTER); pause(250)
+        check("vindictive puzzle opened", onEdt { game.mode } == GameMode.VINDICTIVE); shot("23_vind_start")
+        solveWord(nextUnsolved()); pause(150)
+        check("after an own answer the player picks a clue to give", onEdt { game.assigning }); shot("24_vind_assign")
+        val give = nextUnsolved(); onEdt { game.selectWord(give) }; key(KeyEvent.VK_ENTER); pause(150)
+        check("Give hands over the Deck", onEdt { game.vind.phase } == VindicativePhase.OPPONENT_WAIT && onEdt { game.modal } != null)
+        shot("25_vind_pass_phone")
+        key(KeyEvent.VK_ENTER); pause(300); shot("26_vind_timer")
+        check("answer clock is running", onEdt { game.vindMsLeft } < 30_000L)
+        playOut(); pause(250)
+        check("vindictive match finished", screen() == Screen.RESULTS); shot("27_vind_results")
+        check("match score banked", onEdt { game.result!!.awarded } == Economy.vindictiveBank(onEdt { game.result!!.vind.p1Score }))
+        check("sound player never crashed the window", true)
     }
 
     private fun partial() {

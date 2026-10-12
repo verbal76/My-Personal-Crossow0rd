@@ -12,6 +12,10 @@ import kotlin.math.min
 
 /** The single drawing surface. All screens are painted with Java2D; input is routed into [AppModel]. */
 class GamePanel(private val model: AppModel) : JPanel() {
+    private companion object {
+        val OPTION_ROWS = setOf(AppModel.MenuItem.MODE, AppModel.MenuItem.CATEGORY, AppModel.MenuItem.DIFFICULTY, AppModel.MenuItem.TIMER,
+            AppModel.MenuItem.BACKGROUND, AppModel.MenuItem.PROMPTS, AppModel.MenuItem.SOUND)
+    }
     private val game = model.game
     private var camX = 0; private var camY = 0
     private val clock = Timer(33) { onTick() }
@@ -21,7 +25,9 @@ class GamePanel(private val model: AppModel) : JPanel() {
 
     // Clue list hit areas, refreshed on every paint.
     private var clueHits: List<Pair<Rect, PlacedWord>> = emptyList()
-    private var menuHits: List<Rect> = emptyList()
+    private var menuHits: List<Pair<Rect, Int>> = emptyList()
+    private var modalHits: List<Rect> = emptyList()
+    private var actionHit: Rect? = null
     private var pauseHits: List<Rect> = emptyList()
     private var lastLayout: PuzzleLayout? = null
 
@@ -50,6 +56,8 @@ class GamePanel(private val model: AppModel) : JPanel() {
     }
 
     private var lastPaintedSecond = -1L
+    private var lastVindSecond = -1L
+    private var lastModal: Modal? = null
 
     /**
      * Event-driven drawing: the 33 ms tick advances the model and polls the gamepad (both cheap) but only
@@ -71,7 +79,14 @@ class GamePanel(private val model: AppModel) : JPanel() {
     private fun needsRepaint(before: Screen, padActed: Boolean): Boolean = when {
         padActed || model.screen != before -> true
         model.screen == Screen.STUDIO_SPLASH || model.screen == Screen.GAME_SPLASH -> true      // fade animation
-        model.screen == Screen.PUZZLE -> (game.session?.elapsedSeconds ?: -1L).let { s -> (s != lastPaintedSecond).also { lastPaintedSecond = s } }
+        model.screen == Screen.PUZZLE -> {
+            val sec = game.session?.elapsedSeconds ?: -1L
+            val vsec = if (game.forcedWord != null) (game.vindMsLeft + 999) / 1000 else -1L
+            val modalNow = game.modal
+            val changed = sec != lastPaintedSecond || vsec != lastVindSecond || modalNow !== lastModal
+            lastPaintedSecond = sec; lastVindSecond = vsec; lastModal = modalNow
+            changed
+        }
         else -> false
     }
 
@@ -80,12 +95,11 @@ class GamePanel(private val model: AppModel) : JPanel() {
     fun click(x: Int, y: Int) {
         when (model.screen) {
             Screen.STUDIO_SPLASH, Screen.GAME_SPLASH, Screen.RESULTS -> model.act(Action.CONFIRM)
-            Screen.MENU -> menuHits.indexOfFirst { it.contains(x, y) }.takeIf { it >= 0 }?.let { i ->
+            Screen.MENU -> menuHits.firstOrNull { it.first.contains(x, y) }?.let { (r, i) ->
                 model.focusMenu(i)
-                val r = menuHits[i]
                 val item = model.menuItems[i]
                 // Tap the left/right third of an option row to step it back/forward; elsewhere activates.
-                if (item in listOf(AppModel.MenuItem.CATEGORY, AppModel.MenuItem.DIFFICULTY, AppModel.MenuItem.BACKGROUND, AppModel.MenuItem.PROMPTS)) {
+                if (item in OPTION_ROWS) {
                     model.act(if (x < r.x + r.w / 3) Action.LEFT else Action.RIGHT)
                 } else model.activate(item)
             }
@@ -99,6 +113,7 @@ class GamePanel(private val model: AppModel) : JPanel() {
     private fun puzzleClick(x: Int, y: Int) {
         val lay = lastLayout ?: return
         val b = game.board ?: return
+        if (game.modal != null) { modalHits.indexOfFirst { it.contains(x, y) }.takeIf { it >= 0 }?.let { model.answerModal(it) }; return }
         if (lay.keyboard != null && lay.keyboard.contains(x, y)) {
             model.keyboard.hit(lay.keyboard, x, y)?.let { (r, c) -> model.keyboard.set(r, c); model.pressKey(model.keyboard.key()) }
             return
@@ -112,6 +127,7 @@ class GamePanel(private val model: AppModel) : JPanel() {
             }
             return
         }
+        actionHit?.let { if (it.contains(x, y)) { if (game.canGive) game.give() else game.pass(); return } }
         clueHits.firstOrNull { it.first.contains(x, y) }?.let { game.selectWord(it.second); return }
         if (lay.board.contains(x, y)) {
             val cx = camX + (x - boardOrigin(lay, b).first) / lay.cell
@@ -182,53 +198,68 @@ class GamePanel(private val model: AppModel) : JPanel() {
         g.drawString(s, cx - g.fontMetrics.stringWidth(s) / 2, baseline)
     }
 
+    private var menuOffset = 0
+
     private fun menu(g: Graphics2D) {
         val u = ui()
-        val w = (620 * u).toInt(); val rowH = (62 * u).toInt()
+        val w = (640 * u).toInt(); val rowH = (56 * u).toInt()
         val items = model.menuItems
-        val h = (140 * u).toInt() + items.size * rowH
-        val x = (width - w) / 2; val y = max((height - h) / 2, (10 * u).toInt())
+        val top = (112 * u).toInt()
+        val maxRows = max(((height - (46 * u).toInt() - 2 * (10 * u).toInt() - top - (16 * u).toInt()) / rowH), 3)
+        val visible = min(items.size, maxRows)
+        menuOffset = PuzzleLayout.camera(model.menuIndex, items.size, visible, menuOffset)      // scroll to keep the focus on screen
+        val h = top + visible * rowH + (16 * u).toInt()
+        val x = (width - w) / 2; val y = max((height - (46 * u).toInt() - h) / 2, (10 * u).toInt())
         panel(g, Rect(x, y, w, h), 190)
         g.color = Color.WHITE; g.font = font(g, 40 * u, true)
         centered(g, "My Personal Crossword", width / 2, y + (58 * u).toInt())
         g.font = font(g, 18 * u); g.color = Color(200, 205, 220)
-        centered(g, "Score ${game.let { model.store.score }}   ·   ${Assets.versionName}", width / 2, y + (92 * u).toInt())
+        centered(g, "Score ${model.store.score}   ·   ${Assets.versionName}", width / 2, y + (92 * u).toInt())
         if (model.notice.isNotEmpty()) {      // set-aside / recovered save: say so, never hide it
             g.font = font(g, 15 * u); g.color = Color(255, 205, 110)
-            val line = clip(g, model.notice, w - (32 * u).toInt())
-            centered(g, line, width / 2, y + h + (22 * u).toInt())
+            centered(g, clip(g, model.notice, width - (32 * u).toInt()), width / 2, y + h + (20 * u).toInt())
         }
-        val hits = ArrayList<Rect>()
-        items.forEachIndexed { i, item ->
-            val r = Rect(x + (24 * u).toInt(), y + (112 * u).toInt() + i * rowH, w - (48 * u).toInt(), rowH - (8 * u).toInt())
-            hits += r
+        val hits = ArrayList<Pair<Rect, Int>>()
+        for (i in menuOffset until menuOffset + visible) {
+            val item = items[i]
+            val r = Rect(x + (24 * u).toInt(), y + top + (i - menuOffset) * rowH, w - (48 * u).toInt(), rowH - (8 * u).toInt())
+            hits += r to i
             val focus = i == model.menuIndex
             g.color = if (focus) Color(88, 101, 242) else Color(255, 255, 255, 28)
             g.fill(RoundRectangle2D.Float(r.x.toFloat(), r.y.toFloat(), r.w.toFloat(), r.h.toFloat(), 14f * u, 14f * u))
             if (focus) { g.color = Color.WHITE; g.stroke = BasicStroke(3f * u); g.draw(RoundRectangle2D.Float(r.x.toFloat(), r.y.toFloat(), r.w.toFloat(), r.h.toFloat(), 14f * u, 14f * u)) }
-            g.color = Color.WHITE; g.font = font(g, 26 * u, true)
+            g.color = Color.WHITE; g.font = font(g, 25 * u, true)
             val base = r.y + r.h / 2 + (9 * u).toInt()
             g.drawString(item.label, r.x + (20 * u).toInt(), base)
             val value = when (item) {
+                AppModel.MenuItem.MODE -> "◀  ${model.modeLabel(model.playMode)}  ▶"
                 AppModel.MenuItem.CATEGORY -> "◀  ${model.category}  ▶"
                 AppModel.MenuItem.DIFFICULTY -> "◀  ${model.difficulty.label}  ▶"
+                AppModel.MenuItem.TIMER -> "◀  ${model.store.vindTimer} s  ▶"
                 AppModel.MenuItem.BACKGROUND -> "◀  ${model.background.title}  ▶"
                 AppModel.MenuItem.PROMPTS -> "◀  ${model.store.prompts.replaceFirstChar { it.uppercase() }}  ▶"
+                AppModel.MenuItem.SOUND -> if (model.store.sound) "On" else "Off"
                 AppModel.MenuItem.FULLSCREEN -> if (model.store.fullscreen) "On" else "Off"
                 AppModel.MenuItem.DAILY -> if (game.dailyDoneToday) "done today" else game.dailyKeyToday
-                AppModel.MenuItem.CONTINUE -> model.savedSessions.firstOrNull()?.let { "${it.category} · ${it.difficulty.label}" } ?: ""
+                AppModel.MenuItem.CONTINUE -> model.savedSessions.firstOrNull()?.let { "${modeShort(it.mode)}${it.category} · ${it.difficulty.label}" } ?: ""
                 else -> ""
             }
-            if (value.isNotEmpty()) { g.font = font(g, 22 * u); g.drawString(value, r.right - g.fontMetrics.stringWidth(value) - (20 * u).toInt(), base) }
+            if (value.isNotEmpty()) { g.font = font(g, 21 * u); g.drawString(value, r.right - g.fontMetrics.stringWidth(value) - (20 * u).toInt(), base) }
         }
+        g.color = Color(255, 255, 255, 150); g.font = font(g, 16 * u)
+        if (menuOffset > 0) centered(g, "▲", x + w / 2, y + top - (4 * u).toInt())
+        if (menuOffset + visible < items.size) centered(g, "▼", x + w / 2, y + h - (2 * u).toInt())
         menuHits = hits
         promptBar(g)
     }
 
+    private fun modeShort(m: GameMode) = when (m) { GameMode.TEAM -> "Team · "; GameMode.VINDICTIVE -> "Vindictive · "; else -> "" }
+
     /** Glyph legend along the bottom; follows whichever device was used last. */
     private fun promptBar(g: Graphics2D) {
         val u = ui()
-        val prompts = PromptBar.forState(model.screen, model.promptInput, model.keyboardOpen)
+        val hint = when { game.modal != null -> PuzzleHint.MODAL; game.canGive -> PuzzleHint.GIVE; game.canPass -> PuzzleHint.PASS_OPEN; else -> PuzzleHint.NONE }
+        val prompts = PromptBar.forState(model.screen, model.promptInput, model.keyboardOpen, hint)
         if (prompts.isEmpty()) return
         val icon = (30 * u).toInt(); val gap = (22 * u).toInt(); val small = (6 * u).toInt()
         g.font = font(g, 18 * u)
@@ -249,7 +280,7 @@ class GamePanel(private val model: AppModel) : JPanel() {
         val s = game.session ?: return
         val cols = b.words.maxOf { if (it.isHorizontal) it.startX + it.word.length else it.startX + 1 }
         val rows = b.words.maxOf { if (it.isHorizontal) it.startY + 1 else it.startY + it.word.length }
-        val lay = PuzzleLayout.compute(width, height, cols, rows, model.keyboardOpen)
+        val lay = PuzzleLayout.compute(width, height, cols, rows, model.keyboardOpen, statusStrip = s.mode == GameMode.TEAM || s.mode == GameMode.VINDICTIVE)
         lastLayout = lay
         val u = lay.ui
         val sel = game.selection
@@ -270,6 +301,19 @@ class GamePanel(private val model: AppModel) : JPanel() {
         g.color = Color(250, 214, 96)
         g.drawString("Hint (F1)", width - (320 * u).toInt(), (36 * u).toInt())
         g.color = Color(180, 190, 255); g.drawString("Menu", width - (130 * u).toInt(), (36 * u).toInt())
+        if (lay.status.h > 0) {                   // Team / Vindictive: whose turn, what to do, the score
+            g.color = Color(40, 44, 90, 235); g.fillRect(0, lay.status.y, lay.status.w, lay.status.h)
+            g.font = font(g, 19 * u, true); g.color = Color(255, 235, 170)
+            val avail = width - (300 * u).toInt()
+            centered(g, clip(g, game.statusLine, avail), width / 2 - (60 * u).toInt(), lay.status.y + (lay.status.h + g.fontMetrics.ascent - g.fontMetrics.descent) / 2)
+            if (game.canGive || game.canPass) {   // the Vindictive action of the moment, as a button you can also click or tap
+                val r = Rect(width - (240 * u).toInt(), lay.status.y + (4 * u).toInt(), (220 * u).toInt(), lay.status.h - (8 * u).toInt())
+                actionHit = r
+                g.color = Color(183, 28, 28); g.fillRoundRect(r.x, r.y, r.w, r.h, 12, 12)
+                g.color = Color.WHITE; g.font = font(g, 18 * u, true)
+                centered(g, if (game.canGive) "Give  (Enter)" else "Pass  (F2)", r.x + r.w / 2, r.y + (r.h + g.fontMetrics.ascent - g.fontMetrics.descent) / 2)
+            } else actionHit = null
+        } else actionHit = null
 
         // Board
         val (ox, oy) = boardOrigin(lay, b)
@@ -312,10 +356,43 @@ class GamePanel(private val model: AppModel) : JPanel() {
 
         if (lay.keyboard != null) osk(g, lay.keyboard)
         if (game.message.isNotEmpty()) {
-            g.font = font(g, 18 * u); g.color = Color(255, 255, 255, 235)
-            g.drawString(game.message, lay.board.x + 4, lay.header.bottom + (4 * u).toInt() + g.fontMetrics.ascent)
+            g.font = font(g, 19 * u); g.color = Color(255, 255, 255, 235)
+            val m = lay.message
+            g.drawString(clip(g, game.message, m.w), m.x, m.y + (m.h + g.fontMetrics.ascent - g.fontMetrics.descent) / 2)
         }
+        modalOverlay(g)
         promptBar(g)
+    }
+
+    /** "Pass the Phone", timeout and welcome-back messages. Everything behind them is held until one is answered. */
+    private fun modalOverlay(g: Graphics2D) {
+        val m = game.modal
+        if (m == null) { modalHits = emptyList(); return }
+        val u = ui()
+        g.color = Color(0, 0, 0, 165); g.fillRect(0, 0, width, height)
+        val w = (760 * u).toInt()
+        g.font = font(g, 24 * u)
+        val lines = m.message.split('\n').flatMap { wrap(g, it, w - (60 * u).toInt()) }
+        val rowH = (30 * u).toInt()
+        val h = (150 * u).toInt() + lines.size * rowH
+        val x = (width - w) / 2; val y = (height - h) / 2 - (20 * u).toInt()
+        panel(g, Rect(x, y, w, h), 240)
+        g.color = Color(250, 214, 96); g.font = font(g, 36 * u, true); centered(g, m.title, width / 2, y + (56 * u).toInt())
+        g.color = Color.WHITE; g.font = font(g, 24 * u)
+        lines.forEachIndexed { i, l -> centered(g, l, width / 2, y + (100 * u).toInt() + i * rowH) }
+        val bw = (200 * u).toInt(); val bh = (52 * u).toInt(); val gap = (20 * u).toInt()
+        val total = m.buttons.size * bw + (m.buttons.size - 1) * gap
+        val hits = ArrayList<Rect>()
+        m.buttons.forEachIndexed { i, label ->
+            val r = Rect((width - total) / 2 + i * (bw + gap), y + h - bh - (22 * u).toInt(), bw, bh)
+            hits += r
+            g.color = if (i == model.modalIndex) Color(88, 101, 242) else Color(255, 255, 255, 40)
+            g.fillRoundRect(r.x, r.y, r.w, r.h, 14, 14)
+            if (i == model.modalIndex) { g.color = Color.WHITE; g.stroke = BasicStroke(3f * u); g.drawRoundRect(r.x, r.y, r.w, r.h, 14, 14) }
+            g.color = Color.WHITE; g.font = font(g, 22 * u, true)
+            centered(g, label, r.x + r.w / 2, r.y + (r.h + g.fontMetrics.ascent - g.fontMetrics.descent) / 2)
+        }
+        modalHits = hits
     }
 
     private fun cluePanel(g: Graphics2D, lay: PuzzleLayout, b: Board): List<Pair<Rect, PlacedWord>> {
@@ -408,18 +485,36 @@ class GamePanel(private val model: AppModel) : JPanel() {
 
     private fun results(g: Graphics2D) {
         val u = ui(); val res = game.result ?: return
-        val w = (620 * u).toInt(); val h = (420 * u).toInt()
+        val lines = ArrayList<String>()
+        val t = res.seconds
+        lines += "Time  %d:%02d".format(t / 60, t % 60)
+        var title = "Puzzle Complete!"
+        when (res.mode) {
+            GameMode.VINDICTIVE -> {
+                val w = VindictiveRules.winner(res.vind)
+                title = if (w == null) "It's a tie!" else "${res.names[w]} wins!"
+                lines += "${res.names[0]}: ${res.vind.p1Score} pts   ${res.names[1]}: ${res.vind.p2Score} pts"
+                lines += "Banked to your score  +${res.awarded}" + if (res.paid) "" else "   (already paid)"
+            }
+            GameMode.TEAM -> {
+                lines += "${res.names[0]}: ${res.team.p1Correct} solved   ${res.names[1]}: ${res.team.p2Correct} solved"
+                TeamRules.mvp(res.team)?.let { lines += "MVP  ${res.names[it]}" }
+                lines += "Hints used  ${res.hints}"
+                lines += "Reward  +${res.reward}   Net  ${res.net}" + if (res.paid) "" else "   (already paid)"
+            }
+            else -> {
+                lines += "Hints used  ${res.hints}"
+                lines += "Reward  +${res.reward}   Net  ${res.net}" + if (res.paid) "" else "   (already paid)"
+            }
+        }
+        lines += "Total score  ${model.store.score}"
+        val w = (700 * u).toInt(); val h = (200 * u).toInt() + lines.size * (44 * u).toInt()
         val x = (width - w) / 2; val y = (height - h) / 2
         panel(g, Rect(x, y, w, h), 215)
-        g.color = Color(250, 214, 96); g.font = font(g, 44 * u, true); centered(g, "Puzzle Complete!", width / 2, y + (72 * u).toInt())
+        g.color = Color(250, 214, 96); g.font = font(g, 44 * u, true); centered(g, title, width / 2, y + (72 * u).toInt())
         g.color = Color.WHITE; g.font = font(g, 26 * u)
-        val t = res.seconds
-        listOf("Time  %d:%02d".format(t / 60, t % 60), "Hints used  ${res.hints}",
-            "Reward  +${res.reward}   Net  ${res.net}" + if (res.paid) "" else "   (already paid)",
-            "Total score  ${model.store.score}").forEachIndexed { i, line ->
-            centered(g, line, width / 2, y + (140 * u).toInt() + i * (44 * u).toInt())
-        }
+        lines.forEachIndexed { i, line -> centered(g, line, width / 2, y + (130 * u).toInt() + i * (44 * u).toInt()) }
         g.font = font(g, 20 * u); g.color = Color(200, 205, 220)
-        centered(g, if (model.lastInput == "pad") "Press A to continue" else "Press Enter or click to continue", width / 2, y + h - (30 * u).toInt())
+        centered(g, if (model.lastInput == "pad") "Press A to continue" else "Press Enter or click to continue", width / 2, y + h - (28 * u).toInt())
     }
 }

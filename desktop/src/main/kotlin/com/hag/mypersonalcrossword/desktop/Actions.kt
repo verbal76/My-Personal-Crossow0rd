@@ -7,7 +7,7 @@ enum class Action {
     UP, DOWN, LEFT, RIGHT,
     CONFIRM, CANCEL,
     NEXT_CLUE, PREV_CLUE, FLIP, HINT,
-    BACKSPACE, MENU, TOGGLE_KEYBOARD, FULLSCREEN
+    BACKSPACE, MENU, TOGGLE_KEYBOARD, FULLSCREEN, PASS
 }
 
 object KeyMap {
@@ -23,6 +23,7 @@ object KeyMap {
         KeyEvent.VK_SPACE -> Action.FLIP
         KeyEvent.VK_BACK_SPACE, KeyEvent.VK_DELETE -> Action.BACKSPACE
         KeyEvent.VK_F1    -> Action.HINT
+        KeyEvent.VK_F2    -> Action.PASS
         KeyEvent.VK_F10   -> Action.MENU
         KeyEvent.VK_F11   -> Action.FULLSCREEN
         else -> null

@@ -40,9 +40,9 @@ class GameControllerTest {
     }
 
     @Test fun finishingWithHintsNetsRewardMinusHints() {
-        val store = ProfileStore(T.dir()); val g = T.controller(store)
+        val store = ProfileStore(T.dir()); store.score = 5; val g = T.controller(store)
         g.startPuzzle("MIXED", Difficulty.MEDIUM); g.hint(); g.hint(); T.solve(g)
-        assertEquals(Economy.pointsForDifficulty(Difficulty.MEDIUM) - 2, store.score)
+        assertEquals(5 + Economy.pointsForDifficulty(Difficulty.MEDIUM) - 2, store.score)
         assertEquals(Economy.netPoints(Difficulty.MEDIUM, false, 2), g.result!!.net)
     }
 
@@ -89,7 +89,7 @@ class GameControllerTest {
     }
 
     @Test fun savedPuzzleResumesWithEverything() {
-        val store = ProfileStore(T.dir()); val a = T.controller(store)
+        val store = ProfileStore(T.dir()); store.score = 3; val a = T.controller(store)
         a.startPuzzle("MIXED", Difficulty.MEDIUM); a.hint(); a.type('Q'); a.advance(65_000); a.unload()
         val b = T.controller(store); assertTrue(b.resume(store.savedSessions().first().slot.id))
         assertEquals(1, b.session!!.hintsUsed); assertEquals(65L, b.session!!.elapsedSeconds)
@@ -122,5 +122,24 @@ class GameControllerTest {
         val cat = T.entries.map { it.category }.distinct().sorted().first()
         val g = T.controller(); assertTrue(g.startPuzzle(cat, Difficulty.EASY))
         assertTrue(g.board!!.words.all { it.category == cat })
+    }
+
+    @Test fun aHintNeedsThePointsToPayForItAndTheScoreNeverGoesNegative() {
+        val store = ProfileStore(T.dir()); val g = T.controller(store)
+        g.startPuzzle("MIXED", Difficulty.HARD)
+        assertEquals(0, store.score); assertFalse("no points, no hint (as on Android)", g.canHint); assertFalse(g.hint())
+        assertEquals(0, g.session!!.hintsUsed)
+        store.score = 1; assertTrue(g.hint()); assertEquals(0, store.score)
+        assertFalse("the score is spent", g.canHint)
+    }
+
+    @Test fun streaksRaiseThePitchAndMilestonesShowAMessage() {
+        val g = T.controller(); val heard = ArrayList<Pair<com.hag.mypersonalcrossword.core.SoundSynth.Effect, Int>>()
+        g.onSound = { e, st -> heard += e to st }
+        g.startPuzzle("MIXED", Difficulty.MEDIUM); T.solve(g)
+        val corrects = heard.filter { it.first == com.hag.mypersonalcrossword.core.SoundSynth.Effect.CORRECT }
+        assertTrue(corrects.size >= 3); assertEquals((0 until corrects.size).toList(), corrects.map { it.second })
+        assertTrue(heard.any { it.first == com.hag.mypersonalcrossword.core.SoundSynth.Effect.CELEBRATION })
+        assertTrue(heard.any { it.first == com.hag.mypersonalcrossword.core.SoundSynth.Effect.KEY })
     }
 }

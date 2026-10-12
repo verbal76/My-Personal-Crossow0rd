@@ -65,6 +65,21 @@ class ProfileStore(val dir: File) {
         get() = props.getProperty("prompts") ?: "auto"
         set(v) { props.setProperty("prompts", v); flush() }
 
+    /** Sound effects on/off (device setting). */
+    var sound: Boolean
+        get() = props.getProperty("sound") != "false"
+        set(v) { props.setProperty("sound", v.toString()); flush() }
+
+    /** Last chosen play mode: SINGLE, TEAM or VINDICTIVE (Daily is always solo). */
+    var playMode: String
+        get() = props.getProperty("playmode") ?: "SINGLE"
+        set(v) { props.setProperty("playmode", v); flush() }
+
+    /** Vindictive answer clock in seconds (15, 30 or 60). */
+    var vindTimer: Int
+        get() = props.getProperty("vindtimer")?.toIntOrNull()?.takeIf { it in SessionCodec.VIND_TIMER_CHOICES } ?: 30
+        set(v) { props.setProperty("vindtimer", v.toString()); flush() }
+
     var category: String
         get() = props.getProperty("category") ?: "MIXED"
         set(v) { props.setProperty("category", v); flush() }

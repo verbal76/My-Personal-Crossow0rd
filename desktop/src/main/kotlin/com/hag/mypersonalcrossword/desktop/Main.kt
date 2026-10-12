@@ -32,6 +32,8 @@ data class Options(
 class DesktopApp(val options: Options, private val onExit: (Int) -> Unit = { exitProcess(it) }) : Host {
     val store = ProfileStore(options.dataDir)
     val game = GameController(store, Assets.wordList())
+    val sound = DesktopSound()
+    init { game.onSound = { effect, streak -> if (store.sound) sound.play(effect, streak) } }
     val model = AppModel(store, game, this)
     val panel = GamePanel(model)
     val frame = JFrame("My Personal Crossword")

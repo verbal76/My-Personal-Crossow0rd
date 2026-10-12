@@ -4,13 +4,30 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LayoutTest {
-    private val sizes = listOf(1280 to 800, 1920 to 1080, 2560 to 1440, 1024 to 640, 800 to 500, 3840 to 2160)
+    private val sizes = listOf(1280 to 800, 1280 to 720, 1920 to 1080, 1920 to 1200, 2560 to 1440, 1024 to 640, 800 to 500, 3840 to 2160)
 
     @Test fun steamDeckReferenceLayoutIsReadable() {
         val l = PuzzleLayout.compute(1280, 800, 15, 15, keyboardOpen = false)
         assertEquals(1f, l.ui, 0.001f)
         assertTrue("cells at least 40px on the Deck", l.cell >= 40)
         assertTrue("clue panel at least 300px", l.clues.w >= 300)
+    }
+
+    @Test fun theStatusStripForTwoPlayerModesFitsAndShrinksTheBoardNotTheClues() {
+        for ((w, h) in sizes) {
+            val plain = PuzzleLayout.compute(w, h, 15, 15, false); val strip = PuzzleLayout.compute(w, h, 15, 15, false, statusStrip = true)
+            assertTrue("$w x $h", strip.status.h > 0 && strip.status.bottom <= strip.board.y && strip.board.bottom <= h)
+            assertEquals(0, plain.status.h); assertTrue(strip.board.h < plain.board.h)
+        }
+        val deck = PuzzleLayout.compute(1280, 800, 15, 15, true, statusStrip = true)
+        assertTrue("Deck + keyboard + status strip still leaves a playable board", deck.board.h >= 250 && deck.cell >= 40)
+    }
+
+    @Test fun sixteenByNineAndSixteenByTenBothGetReadableCells() {
+        for ((w, h) in listOf(1280 to 720, 1280 to 800, 1920 to 1080, 1920 to 1200)) {
+            val l = PuzzleLayout.compute(w, h, 12, 12, false)
+            assertTrue("$w x $h cell ${l.cell}", l.cell >= (40 * l.ui).toInt() && l.clues.w >= (300 * l.ui).toInt())
+        }
     }
 
     @Test fun regionsStayInsideTheWindowAndNeverOverlap() {

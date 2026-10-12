@@ -40,13 +40,29 @@ object Glyphs {
 /** One legend entry: icons followed by a label, e.g. [xbox_a] "Select". */
 data class Prompt(val glyphs: List<String>, val label: String)
 
+/** What the puzzle screen needs to tell the player right now, beyond the usual controls. */
+enum class PuzzleHint { NONE, MODAL, GIVE, PASS_OPEN }
+
 object PromptBar {
     private val DPAD = listOf("xbox_dpad", "xbox_lstick")
     private val ARROWS = listOf("key_up", "key_down", "key_left", "key_right")
 
     /** What to show along the bottom for the current screen and last-used input device. */
-    fun forState(screen: Screen, input: String, keyboardOpen: Boolean): List<Prompt> {
+    fun forState(screen: Screen, input: String, keyboardOpen: Boolean, hint: PuzzleHint = PuzzleHint.NONE): List<Prompt> {
         val pad = input == "pad"
+        if (screen == Screen.PUZZLE && hint == PuzzleHint.MODAL)
+            return if (pad) listOf(Prompt(listOf("xbox_dpad"), "Choose"), Prompt(listOf("xbox_a"), "OK"))
+                   else listOf(Prompt(ARROWS, "Choose"), Prompt(listOf("key_enter"), "OK"))
+        val extra = when {
+            screen != Screen.PUZZLE -> emptyList()
+            hint == PuzzleHint.GIVE -> listOf(Prompt(listOf(if (pad) "xbox_a" else "key_enter"), "Give clue"))
+            hint == PuzzleHint.PASS_OPEN && !pad -> listOf(Prompt(listOf("key_f2"), "Pass"))
+            else -> emptyList()
+        }
+        return extra + base(screen, pad, keyboardOpen)
+    }
+
+    private fun base(screen: Screen, pad: Boolean, keyboardOpen: Boolean): List<Prompt> {
         return when (screen) {
             Screen.MENU -> if (pad) listOf(Prompt(DPAD, "Move / change"), Prompt(listOf("xbox_a"), "Select"))
                 else listOf(Prompt(ARROWS, "Move / change"), Prompt(listOf("key_enter"), "Select"), Prompt(listOf("key_f11"), "Fullscreen"))
@@ -66,6 +82,6 @@ object PromptBar {
     }
 
     fun allGlyphNames(): Set<String> =
-        Screen.values().flatMap { s -> listOf("pad", "keyboard").flatMap { i -> listOf(false, true).flatMap { k -> forState(s, i, k) } } }
+        Screen.values().flatMap { s -> listOf("pad", "keyboard").flatMap { i -> listOf(false, true).flatMap { k -> PuzzleHint.values().flatMap { h -> forState(s, i, k, h) } } } }
             .flatMap { it.glyphs }.toSet()
 }
