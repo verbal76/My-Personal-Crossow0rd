@@ -156,7 +156,118 @@ class Manifest(unittest.TestCase):
     def test_fail_wrong_version(self): self.m['public_version'] = 'v9'; self.assertTrue(any('version' in b for b in self.run_check(self.m)))
     def test_fail_wrong_hash(self): self.m['artifacts'][0]['sha256'] = '0' * 64; self.assertTrue(any('hash' in b for b in self.run_check(self.m)))
     def test_fail_wrong_ref(self): self.m['source']['ref'] = 'main'; self.assertTrue(any('ref' in b for b in self.run_check(self.m)))
+    def test_feature_lineage_manifest_only_passes_for_local_only(self):
+        self.m['source']['on_authoritative_line'] = False; self.m['source']['lineage'] = 'active_feature:origin/x'
+        self.assertTrue(any('authoritative' in b for b in self.run_check(self.m)))
+        self.env['DESTINATION'] = 'local_only'; self.assertEqual(self.run_check(self.m), [])
+        self.env['DESTINATION'] = 'github_releases'; self.assertTrue(any('authoritative' in b for b in self.run_check(self.m)))
     def test_fail_artifact_missing(self): self.m['artifacts'] = []; self.assertTrue(any('does not list' in b for b in self.run_check(self.m)))
+
+import glob, re
+import merge_build_manifest as M
+
+class WorkflowPolicy(unittest.TestCase):
+    """The authorization rules, enforced on the REAL workflow files (release authorization checks)."""
+    WF = os.path.join(HERE, '..', '.github', 'workflows')
+    @classmethod
+    def setUpClass(cls):
+        import yaml
+        cls.files = {os.path.basename(f): (yaml.safe_load(open(f)), open(f).read()) for f in glob.glob(os.path.join(cls.WF, '*.yml'))}
+    @staticmethod
+    def triggers(doc): return doc.get(True) or doc.get('on') or {}
+    def test_workflows_exist(self):
+        self.assertTrue({'build.yml', 'pr-check.yml'} <= set(self.files))
+    def test_only_dispatch_and_pull_request_triggers_exist(self):
+        for name, (doc, _) in self.files.items():
+            trig = set(self.triggers(doc))
+            self.assertTrue(trig <= {'workflow_dispatch', 'pull_request'}, f'{name} has forbidden triggers {trig}')
+            if name != 'pr-check.yml': self.assertEqual(trig, {'workflow_dispatch'}, f'{name} must be manual-only')
+    def test_no_push_tag_schedule_or_chained_triggers_anywhere(self):
+        for name, (_, text) in self.files.items():
+            for bad in ('push:', 'tags:', 'schedule:', 'workflow_run', 'pull_request_target', 'workflow_call'):
+                self.assertNotRegex(text, r'(?m)^\s{0,4}' + re.escape(bad), f'{name} uses {bad}')
+    def test_pr_check_has_no_secrets_no_write_and_publishes_nothing(self):
+        doc, text = self.files['pr-check.yml']
+        self.assertEqual(doc['permissions'], {'contents': 'read'})
+        code = '\n'.join(l for l in text.splitlines() if not l.lstrip().startswith('#'))
+        for forbidden in ('secrets.', 'gh release', 'upload-artifact', 'assembleDebug', 'assembleRelease', 'package.sh', 'jpackage', 'contents: write'):
+            self.assertNotIn(forbidden, code, f'pr-check.yml must not contain {forbidden}')
+        for job in doc['jobs'].values(): self.assertNotIn('permissions', job)
+    def test_publishing_lives_only_in_the_publish_job_behind_the_destination_input(self):
+        doc, text = self.files['build.yml']
+        for jname, job in doc['jobs'].items():
+            body = json.dumps(job)
+            publishes = 'gh release create' in body or 'gh release upload' in body
+            self.assertEqual(publishes, jname == 'publish', f'only publish may create releases (found in {jname})')
+            writes = (job.get('permissions') or {}).get('contents') == 'write'
+            self.assertEqual(writes, jname == 'publish', f'contents: write belongs to publish only ({jname})')
+        self.assertIn("inputs.destination == 'github_releases'", doc['jobs']['publish']['if'])
+        self.assertEqual(doc['permissions'], {'contents': 'read'})
+    def test_publish_requires_every_selected_platform_and_never_clobbers(self):
+        doc, text = self.files['build.yml']
+        self.assertEqual(set(doc['jobs']['publish']['needs']), {'plan', 'desktop-tests', 'android', 'desktop'})
+        self.assertNotIn('--clobber', text)
+        self.assertIn('no partial release', text)
+    def test_signing_secrets_are_confined_to_the_android_job(self):
+        for name, (doc, text) in self.files.items():
+            for jname, job in doc['jobs'].items():
+                body = json.dumps(job)
+                if 'RELEASE_KEYSTORE' in body or 'RELEASE_KEY_' in body:
+                    self.assertIn((name, jname), {('build.yml', 'android'), ('release-aab.yml', 'aab')}, f'{name}:{jname} touches signing secrets')
+    def test_build_workflow_requires_sha_number_and_destination_defaulting_to_local_only(self):
+        inp = self.triggers(self.files['build.yml'][0])['workflow_dispatch']['inputs']
+        self.assertEqual(set(inp), {'platform', 'source_sha', 'build_number', 'destination'})
+        self.assertEqual(inp['destination']['default'], 'local_only')
+        self.assertEqual(set(inp['platform']['options']), {'android', 'windows', 'linux', 'all'})
+        self.assertTrue(inp['source_sha']['required'] and inp['build_number']['required'])
+    def test_every_checkout_in_the_build_workflow_uses_the_input_sha(self):
+        doc, _ = self.files['build.yml']
+        n = 0
+        for job in doc['jobs'].values():
+            for st in job['steps']:
+                if str(st.get('uses', '')).startswith('actions/checkout'):
+                    n += 1; self.assertIn('inputs.source_sha', st['with']['ref'])
+        self.assertGreaterEqual(n, 5)
+    def test_release_names_follow_the_studio_standard(self):
+        text = self.files['build.yml'][1]
+        self.assertIn('My Personal Crossword Build $N', text)
+        self.assertIn('My Personal Crossword Build ${N} APK.apk', text)
+
+
+class MergeManifests(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.write('android', 'My Personal Crossword Build 11 APK.apk', b'apk')
+        self.write('linux', 'My Personal Crossword Build 11 Linux.tar.gz', b'tgz')
+    def write(self, plat, name, data, commit='a' * 40, number=11, version='v11'):
+        open(os.path.join(self.d, name), 'wb').write(data)
+        json.dump({'product': 'P', 'public_version': version, 'build_number': number, 'release_title': 'T', 'destination': 'local_only',
+                   'source': {'commit': commit, 'lineage': 'authoritative'},
+                   'artifacts': [{'platform': plat, 'file': name, 'sha256': hashlib.sha256(data).hexdigest(), 'bytes': len(data)}]},
+                  open(os.path.join(self.d, f'build-manifest-{plat}.json'), 'w'))
+    def test_consistent_build_merges_and_writes_checksums(self):
+        m, p = M.merge(self.d, ['android', 'linux']); self.assertEqual(p, [])
+        self.assertEqual(m['platforms_supported'], ['android', 'linux'])
+        self.assertEqual(M.main(['--dir', self.d, '--expect', 'android,linux']), 0)
+        lines = open(os.path.join(self.d, 'checksums.sha256')).read().splitlines(); self.assertEqual(len(lines), 2)
+    def test_partial_build_is_refused(self):
+        self.assertTrue(any('missing platform' in x for x in M.merge(self.d, ['android', 'linux', 'windows'])[1]))
+    def test_mixed_source_commits_are_refused(self):
+        self.write('linux', 'My Personal Crossword Build 11 Linux.tar.gz', b'tgz', commit='b' * 40)
+        self.assertTrue(any('source commit' in x for x in M.merge(self.d)[1]))
+    def test_mixed_build_numbers_are_refused(self):
+        self.write('linux', 'My Personal Crossword Build 11 Linux.tar.gz', b'tgz', number=12)
+        self.assertTrue(any('build number' in x for x in M.merge(self.d)[1]))
+    def test_tampered_artifact_is_refused(self):
+        open(os.path.join(self.d, 'My Personal Crossword Build 11 Linux.tar.gz'), 'wb').write(b'other')
+        self.assertTrue(any('SHA-256' in x for x in M.merge(self.d)[1]))
+    def test_missing_artifact_is_refused(self):
+        os.remove(os.path.join(self.d, 'My Personal Crossword Build 11 APK.apk'))
+        self.assertTrue(any('not present' in x for x in M.merge(self.d)[1]))
+    def test_unexpected_platform_is_refused(self):
+        self.assertTrue(any('unexpected' in x for x in M.merge(self.d, ['android'])[1]))
+    def test_no_manifests_is_refused(self):
+        self.assertTrue(M.merge(tempfile.mkdtemp())[1])
 
 class VerifierScan(unittest.TestCase):
     PKG = 'package a.b\n'

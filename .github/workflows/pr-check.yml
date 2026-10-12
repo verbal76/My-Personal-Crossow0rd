@@ -1,0 +1,45 @@
+name: PR checks (lightweight)
+
+# Runs on pull requests only. It builds and publishes NOTHING: no APK, no Windows/Linux package, no
+# release, no artifacts, and it has no access to any secret (it declares read-only permissions and never
+# references secrets.*; tools/test_release_source.py enforces both). Cost: one ubuntu job of a few
+# minutes, cancelled when a newer commit arrives. Doc-only changes skip it.
+#   - shared-core + desktop unit tests (the desktop build compiles the same core sources Android uses)
+#   - every declared test suite must have run (tools/verify_test_results.py, both annotation forms)
+#   - release-source gate, manifest merge, workflow-policy and branch-audit tests
+#   - workflow YAML + VERSION sanity, branch ledger audit (warning only: new branches are reviewed by people)
+# Android compilation/lint/APK need the Android SDK and stay in the manual Build workflow.
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'branding/**'
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the branch audit and source gate read history
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.event.pull_request.head.repo.fork }}
+      - name: Install PyYAML (workflow validation)
+        run: python3 -m pip install --quiet pyyaml
+      - name: Local validation suite (PR mode)
+        env:
+          PR_MODE: '1'
+          GRADLE: ${{ github.workspace }}/gradlew
+        run: tools/validate_local.sh

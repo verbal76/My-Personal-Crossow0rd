@@ -7,6 +7,9 @@ Every platform artifact of a coordinated release lists the SAME source commit he
 """
 import hashlib, json, os, platform, re, subprocess, sys, datetime
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import verify_release_source as V
+
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 
 def sh(*a):
@@ -43,6 +46,13 @@ def desktop_manifest(m, platform_name, artifact):
                          'physically_tested_on_steam_deck': False, 'steam_deck_verified': False}
     return m
 
+def lineage(sha):
+    """'authoritative', 'active_feature:<ref>' (only legitimate for local_only builds) or 'unverified'."""
+    auth = open(os.path.join(ROOT, 'AUTHORITATIVE_BRANCH')).read().strip()
+    if V.git(ROOT, 'merge-base', '--is-ancestor', sha, f'refs/remotes/origin/{auth}')[0] == 0: return 'authoritative'
+    feat = V.active_feature_branch(ROOT, sha, auth)
+    return f'active_feature:{feat}' if feat else 'unverified'
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith('--platform=')]
     plat = next((a.split('=', 1)[1] for a in sys.argv[1:] if a.startswith('--platform=')), 'android')
@@ -53,14 +63,19 @@ def main():
     gradle = re.search(r'gradle-([\d.]+)-bin', wrapper).group(1)
     lib = catalog()
     h = hashlib.sha256(open(apk, 'rb').read()).hexdigest()
+    lin = lineage(sha)
     m = {
         'product': 'My Personal Crossword',
         'public_version': f'v{ver}',
+        'build_number': int(ver),
+        'release_title': f'My Personal Crossword Build {ver}',
+        'destination': os.environ.get('DESTINATION', 'local_only'),
         'source': {
             'commit': sha,
             'ref': os.environ.get('GITHUB_REF_NAME', ''),
             'authoritative_branch': open(os.path.join(ROOT, 'AUTHORITATIVE_BRANCH')).read().strip(),
-            'on_authoritative_line': True,
+            'lineage': lin,
+            'on_authoritative_line': lin == 'authoritative',
         },
         'build': {
             'timestamp_utc': datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),

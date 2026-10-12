@@ -74,7 +74,10 @@ def verify_manifest(repo, env, manifest, apk):
     if m['source']['commit'] != head: bad.append(f"manifest commit {m['source']['commit'][:12]} != source {head[:12]}")
     if env.get('GITHUB_REF_NAME') and m['source']['ref'] != env['GITHUB_REF_NAME']: bad.append('manifest ref does not match the build ref')
     if m['public_version'] != f'v{ver}': bad.append(f"manifest version {m['public_version']} != VERSION v{ver}")
-    if m['source'].get('on_authoritative_line') is not True: bad.append('manifest does not assert the authoritative line')
+    if m['source'].get('on_authoritative_line') is not True:
+        # A local_only validation build of a ledgered active feature branch is honest about it; it can never be published.
+        if not (env.get('DESTINATION') == 'local_only' and str(m['source'].get('lineage', '')).startswith('active_feature:')):
+            bad.append('manifest does not assert the authoritative line')
     art = [x for x in m['artifacts'] if x['file'] == os.path.basename(apk)]
     if not art: bad.append('manifest does not list the built artifact')
     else:
