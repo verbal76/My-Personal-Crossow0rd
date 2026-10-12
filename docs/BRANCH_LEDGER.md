@@ -20,6 +20,7 @@ Audited at `efaa76d`.
 | `worktree-agent-a84bcf8c82fabcbac` (local) | `a1390e2` | 0 | Points at the old `main` base. |
 | `origin/claude/final-polish-pass-AgdnQ` | `adf650f` | 0 | The April line the polish pass started from; fully contained. |
 | `origin/claude/review-crossword-repro-5mjbG` | `0960350` | **10** | Old parallel April line. Fully dispositioned below. |
+| `claude/desktop-multiplatform` (+ origin) | moving | **active** | Desktop (Windows/Linux/Steam Deck) front end, unified build workflow, PR checks, verifier and gate fixes. Descends from the authoritative branch (`active_feature` ledger entry; draft PR #2). Owner decides when to fast-forward the authoritative branch to it. |
 | `origin/main` | `f7775d6` | **2** | Stale April baseline plus two owner asset uploads (integrated, below). Default branch. |
 
 No stashes, no dangling commits, no revert commits anywhere in the history. Release

@@ -10,4 +10,4 @@
   so it must never be updated separately from the code.
 - **Offline:** neither platform makes network calls to check for updates, so nothing can block play.
 - **Publishing separation:** a GitHub Release, an OTA, Steam and Google Play are separate authorizations.
-  `desktop.yml` can only attach to an existing release; it cannot create one.
+  `build.yml` publishes only when asked (`destination=github_releases`) and only after every selected platform passed; no push, tag or merge publishes anything.
